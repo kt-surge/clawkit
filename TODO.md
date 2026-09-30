@@ -44,9 +44,11 @@
 
 ### 下一轮：诊断、处置知识与事件协同
 
-2026-09-30 已完成需求与技术调研；合同、开源取舍、数据设计及退出条件见 [实施合同第 9 节](docs/layered-autonomy-implementation-plan.md#9-下一轮诊断处置知识与事件协同)。新增产品能力尚未实施，按 E0 → E1 → E2 → E3 → E4 推进；E3 飞书卡片与后续告警源可以后置。
+2026-09-30 已完成需求与技术调研；合同、开源取舍、数据设计及退出条件见 [实施合同第 9 节](docs/layered-autonomy-implementation-plan.md#9-下一轮诊断处置知识与事件协同)。持续目标已建立，按 E0 → E1 → E2 → E3 → E4 推进；E3 飞书卡片与后续告警源可以后置。
 
-- **[~] INTELLIGENCE-E0：基线与协议** — 本轮修复两项测试问题：① 干净检出中复现 Fixture 调度竞争，`requested` 表示已开始，终态计数又早于 timeline 投影；改为有界等待完成、停止并排空后验证记录，真实 JDK 调度检查重复 10 次，保留原有断言。② GitHub 失败注解定位 `IsolatedComposeClientTest`，Windows 临时目录短路径与注册规范路径不一致；通过 JVM 启动时设置 8.3 临时目录复现，规范化伪 Docker 夹具路径后 4 项测试通过，日志 `tmp/ci-short-path-repro-20260930.log` / `tmp/ci-short-path-fixed-20260930.log`，实际身份/内容漂移门禁保持。第一项修复后的本地全量 clean verify 和 Runtime baseline compare 均通过，后者 UNCHANGED/0 degraded，日志 `tmp/ci-fix-clean-verify-20260930.log` / `tmp/ci-fix-baseline-compare-20260930.log`；最终 GitHub 结果由该提交的 Actions 记录。CI 自动标注失败测试/构建错误，便于持续排障。下一项是输出预算、原生思考与结构化提交配合，尚未实施，不能把旧冻结失败改为成功。
+- **[x] INTELLIGENCE-E0：基线与协议** — 2026-09-30 完成。先修复 Fixture 调度竞争和 Windows 8.3 临时目录夹具身份问题，保留原有断言；提交 `fe29447` 的 GitHub CI/CodeQL 成功。协议增量：保留供应商 finish_reason，输出截断/过滤/未完成响应不进入工具执行；流式坏参数不再退成 `{}`，拒绝多余 JSON、空身份和损坏片段。Ops 单次输出默认从 1536 调整至 4096，允许显式 512..16384 配置，原生思考采用供应商默认且保留工具轮次 reasoning_content；总运行预算仍为 120 秒/30000 Token/6 请求/12 工具。请求预留计入声明输出、工具描述和推理内容；失败响应按实际 usage 结算，流式错误只结算一次。原始失败/实际用量和分类继续归档，系统交接不计模型成功。
+
+  验证：新增 10 项协议/预算/决定合同检查；全量 `clean verify` 14 个 Reactor SUCCESS，当前模块 169 份 XML 共 1514 项、0 failure/0 error、5 skipped；Runtime baseline compare 为 UNCHANGED/0 degraded。日志 `tmp/intelligence-e0-clean-verify-20260930.log` / `tmp/intelligence-e0-baseline-compare-20260930.log`。小型实际模型冒烟 `tmp/intelligence-e0-live-20260930-01/` 通过：2 请求/5049 actual Token，5 项 test-double 观察，提交启动建议；仅验证模型协议，不计容器恢复或正式率。开发回归失败两次分别为故障输入在同一测试累积触发熔断、测试使用错误事件字段，修正后通过，原日志未删除。旧 P4 分数及全部失败不变。
 - **[ ] INTELLIGENCE-E1：多源证据与诊断** — 有界日志、资源事实、变更导入、可选指标接口、支持/反证/缺口及产品展示。先做依赖故障、变更关联、OOM 与历史错误反例；保持现有权限与动作范围。
 - **[ ] INTELLIGENCE-E2：处置知识与经验反馈** — 案例归档、版本化流程、按需检索、复盘草稿、回放审阅和撤销；知识资格与用户动作授权分开，不自动提权。
 - **[ ] INTELLIGENCE-E3：告警与事件协同** — 一个外部告警源、身份与关联、事件继续处理、通知/审批反馈；飞书卡片单独验收，不以受控传输代替实际送达。

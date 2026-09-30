@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class OpenAIProviderP2Test {
 
@@ -174,5 +175,62 @@ class OpenAIProviderP2Test {
         return "{\"id\":\"x\",\"model\":\"deepseek-v4-flash\",\"choices\":["
             + "{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ok\"},"
             + "\"finish_reason\":\"stop\"}]}";
+    }
+
+    @Test void incompleteResponsesRetainUsageAndNeverReturnTools() {
+        for (String reason : List.of("length", "content_filter", "unexpected")) {
+            responseBody.set("{\"choices\":[{\"message\":{\"role\":\"assistant\",\"tool_calls\":["
+                + "{\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"name\":\"read\",\"arguments\":\"{}\"}}]},"
+                + "\"finish_reason\":\""+reason+"\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20,\"total_tokens\":30}}");
+            assertThatThrownBy(() -> provider.generate(ModelRequest.of(List.of(Message.user("run")),List.of())))
+                .isInstanceOfSatisfying(com.clawkit.provider.LLMException.class, e -> {
+                    assertThat(e.rejectedResponse().usage().totalTokens()).isEqualTo(30);
+                    assertThat(e.rejectedResponse().phase()).isEqualTo(reason.equals("length") ? "OUTPUT_TRUNCATED"
+                        : reason.equals("content_filter") ? "CONTENT_FILTERED" : "INCOMPLETE_COMPLETION");
+                    assertThat(e.rejectedResponse().rawResponse()).contains("call-1");
+                    assertThat(e.toString()).doesNotContain("call-1");
+                });
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"{", "[]", "null", "{} {}"})
+    void streamingArgumentsMustBeOneCompleteObject(String arguments) {
+            responseBody.set(toolStream(arguments,"tool_calls"));
+            assertThatThrownBy(() -> provider.generateStream(ModelRequest.of(List.of(Message.user("run")),List.of()),
+                noCompletionObserver())).isInstanceOfSatisfying(com.clawkit.provider.LLMException.class, e -> {
+                    assertThat(e.rejectedResponse().phase()).isEqualTo("TOOL_ARGUMENTS");
+                    assertThat(e.rejectedResponse().usage().totalTokens()).isEqualTo(30);
+                });
+    }
+    @Test void streamingTruncationIsNotACompletedToolCall() {
+        responseBody.set(toolStream("{}","length"));
+        assertThatThrownBy(() -> provider.generateStream(ModelRequest.of(List.of(Message.user("run")),List.of()),noCompletionObserver()))
+            .isInstanceOfSatisfying(com.clawkit.provider.LLMException.class,
+                e -> assertThat(e.rejectedResponse().phase()).isEqualTo("OUTPUT_TRUNCATED"));
+    }
+    @Test void completionMayHaveNoDeltaAndToolIndexesMayBeSparse() {
+        responseBody.set(toolStream("{}","tool_calls"));
+        var result=provider.generateStream(ModelRequest.of(List.of(Message.user("run")),List.of()),new StreamObserver() {
+            public void onContent(String d) {} public void onToolCallDelta(int i,String id,String n,String d) {}
+            public void onComplete(ModelResponse r) {} public void onError(ProviderError e) { throw new AssertionError(e); }
+        });
+        assertThat(result.finishReason()).isEqualTo(com.clawkit.provider.FinishReason.TOOL_CALLS);
+        assertThat(result.toolCalls()).singleElement().satisfies(t -> assertThat(t.id()).isEqualTo("call-1"));
+    }
+
+    private String toolStream(String arguments,String reason) {
+        var tool=mapper.createObjectNode().put("index",3).put("id","call-1");
+        tool.putObject("function").put("name","read").put("arguments",arguments);
+        return "data: {\"choices\":[{\"delta\":{\"tool_calls\":["+tool+"]}}]}\n\n"
+            + "data: {\"choices\":[{\"finish_reason\":\""+reason+"\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20,\"total_tokens\":30}}\n\n"
+            + "data: [DONE]\n\n";
+    }
+    private static StreamObserver noCompletionObserver() {
+        return new StreamObserver() {
+            public void onContent(String d) {} public void onToolCallDelta(int i,String id,String n,String d) {}
+            public void onComplete(ModelResponse r) { throw new AssertionError("incomplete response completed"); }
+            public void onError(ProviderError e) {}
+        };
     }
 }

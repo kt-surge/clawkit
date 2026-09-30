@@ -217,6 +217,29 @@ class ManagedDecisionTest {
     private OpsDecisionAgent agent(LLMProvider provider, OpsDecisionAgent.Limits limits) {
         return new OpsDecisionAgent(provider, workspace, new CompositeRunRecorder(), CLOCK, limits);
     }
+
+    @Test void truncatedButValidToolPayloadCannotExecuteAndKeepsOriginalUsage() {
+        var provider = new ScriptedProvider(OpsDecision.Disposition.ESCALATE,false,false) {
+            @Override public ModelResponse generate(ModelRequest request) {
+                assertThat(request.parameters().maxTokens()).isEqualTo(4096);
+                var response=super.generate(request);
+                return new ModelResponse(response.content(),response.toolCalls(),FinishReason.LENGTH,response.usage(),response.metadata());
+            }
+        };
+        var reads=new AtomicInteger();
+        var outcome=agent(provider,OpsDecisionAgent.Limits.defaults()).decide(app(),(a,p) -> {
+            reads.incrementAndGet(); return observer(Status.STOPPED).observe(a,p);
+        });
+        assertThat(reads).hasValue(0);
+        assertThat(outcome.origin()).isEqualTo(OpsDecisionAgent.Origin.SYSTEM);
+        assertThat(outcome.failureType()).isEqualTo("MODEL_PROTOCOL_OUTPUT_TRUNCATED");
+        assertThat(outcome.providerExchanges()).singleElement().satisfies(e -> {
+            assertThat(e.usage().totalTokens()).isEqualTo(150);
+            assertThat(e.response().finishReason()).isEqualTo(FinishReason.LENGTH);
+        });
+        assertThatThrownBy(() -> new OpsDecisionAgent.ModelSettings(16_385,ProviderReasoningMode.PROVIDER_DEFAULT))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
     private static ManagedApplication copy(ManagedApplication a, boolean stateless, ManagedApplication.DesiredState desired, Instant maintenance) {
         return new ManagedApplication(a.id(),a.targetId(),a.composeProject(),a.service(),a.version(),stateless,desired,
             maintenance,a.healthUri(),a.businessUri(),a.businessMarker(),a.checkInterval(),a.evidenceTtl());

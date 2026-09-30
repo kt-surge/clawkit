@@ -36,19 +36,18 @@ public class OpenAIResponseParser {
             throw new LLMException("API 返回了空的 Choices");
         }
         OpenAIChoice choice = response.choices().get(0);
+        if (choice == null) throw new LLMException("API response has no choice");
         OpenAIMessage msg = choice.message();
+        if (msg == null) throw new LLMException("API response has no assistant message");
 
         // 工具调用
         if (msg.toolCalls() != null && !msg.toolCalls().isEmpty()) {
             List<ToolCall> toolCalls = new ArrayList<>();
             for (OpenAIToolCall otc : msg.toolCalls()) {
-                JsonNode argsNode;
-                try {
-                    argsNode = objectMapper.readTree(otc.function().arguments());
-                } catch (IOException e) {
-                    throw new LLMException(
-                        "解析工具参数 JSON 失败: " + otc.function().name(), e);
-                }
+                if (otc == null || otc.function() == null || otc.id() == null || otc.id().isBlank()
+                        || otc.function().name() == null || otc.function().name().isBlank())
+                    throw new LLMException("API response has invalid tool identity");
+                JsonNode argsNode = parseToolArguments(otc.function().name(), otc.function().arguments());
                 toolCalls.add(new ToolCall(otc.id(), otc.function().name(), argsNode));
             }
             return Message.assistantWithTools(msg.content(), toolCalls, msg.reasoningContent());
@@ -57,5 +56,17 @@ public class OpenAIResponseParser {
         // 纯文本回复
         return new Message(Role.ASSISTANT, msg.content() != null ? msg.content() : "",
             null, null, msg.reasoningContent());
+    }
+
+    JsonNode parseToolArguments(String name, String arguments) {
+        if (arguments == null) throw new LLMException("Missing tool arguments");
+        try (var parser = objectMapper.createParser(arguments)) {
+            JsonNode value = objectMapper.readTree(parser);
+            if (value == null || !value.isObject() || parser.nextToken() != null)
+                throw new LLMException("Tool arguments must be exactly one JSON object");
+            return value;
+        } catch (IOException e) {
+            throw new LLMException("Invalid tool argument JSON", e);
+        }
     }
 }

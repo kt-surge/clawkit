@@ -39,8 +39,20 @@ public final class OpsDecisionAgent {
     private final Clock clock;
     private final Limits limits;
     private final Guidance guidance;
+    private final ModelSettings modelSettings;
     /** Generic guidance is for matched evaluation; the ordinary product always uses reviewed playbook guidance. */
     public enum Guidance { REVIEWED_PLAYBOOKS, GENERIC }
+
+    /** Output allowance is separate from the total investigation budget, and recorded per request. */
+    public record ModelSettings(int maxOutputTokens, ProviderReasoningMode reasoningMode) {
+        public ModelSettings {
+            if (maxOutputTokens < 512 || maxOutputTokens > 16_384)
+                throw new IllegalArgumentException("output allowance outside supported range");
+            Objects.requireNonNull(reasoningMode);
+        }
+        public static ModelSettings defaults() { return new ModelSettings(4096, ProviderReasoningMode.PROVIDER_DEFAULT); }
+        ModelParameters parameters() { return new ModelParameters(0.0, maxOutputTokens, false, reasoningMode); }
+    }
 
     public record Limits(Duration deadline, long tokens, long providerCalls, long toolCalls) {
         public Limits {
@@ -76,12 +88,17 @@ public final class OpsDecisionAgent {
         this(provider,workspace,recorder,clock,limits,Guidance.REVIEWED_PLAYBOOKS);
     }
     public OpsDecisionAgent(LLMProvider provider, Path workspace, RunRecorder recorder, Clock clock, Limits limits,Guidance guidance) {
+        this(provider,workspace,recorder,clock,limits,guidance,ModelSettings.defaults());
+    }
+    public OpsDecisionAgent(LLMProvider provider, Path workspace, RunRecorder recorder, Clock clock, Limits limits,
+                            Guidance guidance, ModelSettings modelSettings) {
         this.provider = Objects.requireNonNull(provider);
         this.workspace = Objects.requireNonNull(workspace);
         this.recorder = Objects.requireNonNull(recorder);
         this.clock = Objects.requireNonNull(clock);
         this.limits = Objects.requireNonNull(limits);
         this.guidance=Objects.requireNonNull(guidance);
+        this.modelSettings=Objects.requireNonNull(modelSettings);
     }
 
     public Outcome decide(ManagedApplication app, ManagedObserver observer) {
@@ -120,7 +137,7 @@ public final class OpsDecisionAgent {
                 }
             }, ledger));
         var exchanges = new ArrayList<ProviderExchange>();
-        var gateway = new CapturingGateway(new ObservingProviderGateway(provider, recorder), exchanges, clock);
+        var gateway = new CapturingGateway(new ObservingProviderGateway(provider, recorder), exchanges, clock, modelSettings);
         var deps = new AgentRuntimeDependencies(gateway, null, registry, provider.getContextWindow(),
             provider.getEncoding(), recorder, AgentRuntimeDependencies.noopMemoryHooks(),
             AgentRuntimeDependencies.emptySkillRuntime());
@@ -151,8 +168,10 @@ public final class OpsDecisionAgent {
             if (ledger.submitted() != null) ledger.validate(ledger.submitted());
             else failure = "NO_VALID_SUBMISSION";
         } catch (Exception e) { failure = e.getClass().getSimpleName(); }
-        if (failure == null && exchanges.stream().anyMatch(e -> e.failureType() != null))
-            failure = "PROVIDER_FAILURE";
+        // The runtime converts provider errors to a handoff; keep the original protocol category.
+        String providerFailure = exchanges.stream().map(ProviderExchange::failureType)
+            .filter(Objects::nonNull).findFirst().orElse(null);
+        if (providerFailure != null) failure = providerFailure;
         OpsDecision decision = failure == null ? ledger.submitted()
             : OpsDecision.systemEscalation("Decision run did not produce a valid current decision: " + failure);
         return new Outcome(failure == null ? Origin.MODEL : Origin.SYSTEM, decision, ledger.snapshot(),
@@ -222,20 +241,28 @@ public final class OpsDecisionAgent {
         private final ProviderGateway delegate;
         private final List<ProviderExchange> exchanges;
         private final Clock clock;
-        private CapturingGateway(ProviderGateway delegate, List<ProviderExchange> exchanges, Clock clock) {
-            this.delegate = delegate; this.exchanges = exchanges; this.clock = clock;
+        private final ModelSettings settings;
+        private CapturingGateway(ProviderGateway delegate, List<ProviderExchange> exchanges, Clock clock, ModelSettings settings) {
+            this.delegate = delegate; this.exchanges = exchanges; this.clock = clock; this.settings = settings;
         }
         @Override public ModelResponse generate(ModelRequest request, RunScope scope) {
             var bounded = new ModelRequest(request.messages(), request.tools(),
-                new ModelParameters(0.0, 1536, false, ProviderReasoningMode.PROVIDER_DEFAULT), request.control());
+                settings.parameters(), request.control());
             Instant start = clock.instant();
             // ExecutionControl is live runtime state, not serializable evaluation metadata.
             var recordedRequest = new RecordedRequest(List.copyOf(bounded.messages()), List.copyOf(bounded.tools()), bounded.parameters());
             try {
                 ModelResponse response = delegate.generate(bounded, scope);
+                if (response.finishReason() != FinishReason.STOP && response.finishReason() != FinishReason.TOOL_CALLS) {
+                    String phase = response.finishReason() == FinishReason.LENGTH ? "OUTPUT_TRUNCATED"
+                        : response.finishReason() == FinishReason.CONTENT_FILTER ? "CONTENT_FILTERED" : "INCOMPLETE_COMPLETION";
+                    exchanges.add(new ProviderExchange(start, clock.instant(), recordedRequest, response, "MODEL_PROTOCOL_"+phase));
+                    throw new LLMException("Incomplete model completion: "+phase);
+                }
                 exchanges.add(new ProviderExchange(start, clock.instant(), recordedRequest, response, null));
                 return response;
             } catch (RuntimeException e) {
+                if (!exchanges.isEmpty() && exchanges.getLast().request() == recordedRequest) throw e;
                 var rejected=e instanceof LLMException failure ? failure.rejectedResponse() : null;
                 exchanges.add(new ProviderExchange(start, clock.instant(), recordedRequest, null,
                     rejected==null ? e.getClass().getSimpleName() : "MODEL_PROTOCOL_"+rejected.phase(),rejected));

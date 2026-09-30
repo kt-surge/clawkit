@@ -74,9 +74,10 @@ public class OpenAIProvider implements LLMProvider {
 
     /** P0-3：内部 generate 返回类型，metadata 沿返回值传递保证并发安全 */
     private record GenerateResult(Message message, TokenUsage usage,
-                                  ProviderResponseMetadata metadata) {}
+                                  ProviderResponseMetadata metadata, com.clawkit.provider.FinishReason finishReason) {}
 
-    private record StreamResult(Message message, TokenUsage usage, String model, String id) {}
+    private record StreamResult(Message message, TokenUsage usage, String model, String id,
+                                com.clawkit.provider.FinishReason finishReason) {}
 
     public OpenAIProvider(LLMConfig config) {
         this(config, Thread::sleep, System::currentTimeMillis);
@@ -154,9 +155,7 @@ public class OpenAIProvider implements LLMProvider {
         var gr = generateInternal(request.messages(), request.tools(), request.parameters(), request.control());
         var msg = gr.message();
         var toolCalls = msg.toolCalls();
-        var reason = toolCalls != null && !toolCalls.isEmpty()
-            ? com.clawkit.provider.FinishReason.TOOL_CALLS : com.clawkit.provider.FinishReason.STOP;
-        return new ModelResponse(msg.content(), toolCalls, reason,
+        return new ModelResponse(msg.content(), toolCalls, gr.finishReason(),
             gr.usage(), gr.metadata(), msg.reasoningContent());
     }
 
@@ -204,6 +203,10 @@ public class OpenAIProvider implements LLMProvider {
                     sendResult.model(), sendResult.id(), sendResult.retryCount());
             }
 
+            String finishReason = response.choices() == null || response.choices().isEmpty()
+                || response.choices().getFirst() == null ? null : response.choices().getFirst().finishReason();
+            OpenAICompletion.requireComplete(finishReason,
+                new String(sendResult.body(), StandardCharsets.UTF_8), toTokenUsage(response.usage()), sendResult.retryCount());
             Message result;
             try { result=toMessage(response); }
             catch (LLMException e) {
@@ -217,7 +220,8 @@ public class OpenAIProvider implements LLMProvider {
                 result.toolCalls() != null ? " + " + result.toolCalls().size() + " tool calls" : "");
             recordSuccess();
             return new GenerateResult(result, toTokenUsage(response.usage()),
-                new ProviderResponseMetadata(sendResult.model(), sendResult.id(), sendResult.retryCount()));
+                new ProviderResponseMetadata(sendResult.model(), sendResult.id(), sendResult.retryCount()),
+                OpenAICompletion.reason(finishReason));
         } catch (LLMException e) {
             long elapsed = System.currentTimeMillis() - startMs;
             log.warn("[LLM] {} {}ms, {} msgs → FAILED: {}", config.model(), elapsed, messages.size(), e.getMessage());
@@ -246,10 +250,7 @@ public class OpenAIProvider implements LLMProvider {
                 request.parameters(), observer::onContent, observer, request.control());
             Message message = sr.message();
             var toolCalls = message.toolCalls();
-            var reason = toolCalls != null && !toolCalls.isEmpty()
-                ? com.clawkit.provider.FinishReason.TOOL_CALLS
-                : com.clawkit.provider.FinishReason.STOP;
-            ModelResponse response = new ModelResponse(message.content(), toolCalls, reason,
+            ModelResponse response = new ModelResponse(message.content(), toolCalls, sr.finishReason(),
                 sr.usage(), new ProviderResponseMetadata(sr.model(), sr.id(), 0),
                 message.reasoningContent());
             observer.onComplete(response);
@@ -357,8 +358,10 @@ public class OpenAIProvider implements LLMProvider {
 
         StringBuilder contentBuilder = new StringBuilder();
         StringBuilder reasoningBuilder = new StringBuilder();
+        StringBuilder diagnostic = new StringBuilder();
         Map<Integer, ToolCallAccum> toolAccum = new HashMap<>();
         String finishReason = null;
+        boolean malformedChunk = false;
         TokenUsage usage = TokenUsage.EMPTY;
         String responseModel = config.model();
         String responseId = "";
@@ -373,14 +376,22 @@ public class OpenAIProvider implements LLMProvider {
                 if (!line.startsWith("data: ")) continue;
                 String data = line.substring(6);
 
+                // Keep at most the bounded diagnostic prefix plus one
+                // character to preserve the truncation marker. It never enters logs.
+                int remaining = 262145 - diagnostic.length();
+                if (remaining > 0) diagnostic.append(line, 0, Math.min(line.length(), remaining));
+
                 if ("[DONE]".equals(data)) break;
 
                 JsonNode chunk;
                 try {
                     chunk = objectMapper.readTree(data);
                 } catch (IOException e) {
-                    continue; // 跳过无法解析的行
+                    malformedChunk = true;
+                    continue; // Continue collecting diagnostic usage, but never accept the partial message.
                 }
+
+                if (chunk == null || !chunk.isObject()) { malformedChunk = true; continue; }
 
                 if (chunk.hasNonNull("model")) responseModel = chunk.get("model").asText();
                 if (chunk.hasNonNull("id")) responseId = chunk.get("id").asText();
@@ -388,6 +399,10 @@ public class OpenAIProvider implements LLMProvider {
 
                 JsonNode choices = chunk.get("choices");
                 if (choices == null || choices.isEmpty()) continue;
+                if (!choices.isArray() || !choices.get(0).isObject()) { malformedChunk = true; continue; }
+
+                JsonNode frNode = choices.get(0).get("finish_reason");
+                if (frNode != null && !frNode.isNull()) finishReason = frNode.asText();
 
                 JsonNode delta = choices.get(0).get("delta");
                 if (delta == null) continue;
@@ -409,6 +424,9 @@ public class OpenAIProvider implements LLMProvider {
                 JsonNode toolCallsNode = delta.get("tool_calls");
                 if (toolCallsNode != null && toolCallsNode.isArray()) {
                     for (JsonNode tc : toolCallsNode) {
+                        if (!tc.path("index").isIntegralNumber() || tc.path("index").asInt() < 0) {
+                            malformedChunk = true; continue;
+                        }
                         int idx = tc.get("index").asInt();
                         toolAccum.putIfAbsent(idx, new ToolCallAccum());
                         ToolCallAccum acc = toolAccum.get(idx);
@@ -430,39 +448,42 @@ public class OpenAIProvider implements LLMProvider {
                     }
                 }
 
-                // finish_reason
-                JsonNode frNode = choices.get(0).get("finish_reason");
-                if (frNode != null && !frNode.isNull()) {
-                    finishReason = frNode.asText();
-                }
             }
         }
 
+        OpenAICompletion.requireComplete(finishReason, diagnostic.toString(), usage, 0);
+        if (malformedChunk)
+            throw new LLMException("Malformed model stream", null, new ProviderError.Protocol("Malformed model stream"), 0,
+                com.clawkit.provider.RejectedModelResponse.bounded("RESPONSE_JSON", diagnostic.toString(), usage));
         // 组装结果
         if (!toolAccum.isEmpty()) {
             // 工具调用完成
             List<ToolCall> toolCalls = new ArrayList<>();
-            for (int i = 0; i < toolAccum.size(); i++) {
+            for (int i : toolAccum.keySet().stream().sorted().toList()) {
                 ToolCallAccum acc = toolAccum.get(i);
                 JsonNode argsNode;
                 try {
-                    argsNode = objectMapper.readTree(acc.args.toString());
-                } catch (IOException e) {
-                    argsNode = objectMapper.createObjectNode();
+                    argsNode = responseParser.parseToolArguments(acc.name, acc.args.toString());
+                } catch (LLMException e) {
+                    throw new LLMException("Invalid streamed tool arguments", e, new ProviderError.Protocol("Invalid tool arguments"), 0,
+                        com.clawkit.provider.RejectedModelResponse.bounded("TOOL_ARGUMENTS", diagnostic.toString(), usage));
                 }
+                if (acc.id == null || acc.id.isBlank() || acc.name == null || acc.name.isBlank())
+                    throw new LLMException("Missing streamed tool identity", null, new ProviderError.Protocol("Missing tool identity"), 0,
+                        com.clawkit.provider.RejectedModelResponse.bounded("TOOL_ARGUMENTS", diagnostic.toString(), usage));
                 toolCalls.add(new ToolCall(acc.id, acc.name, argsNode));
             }
             String text = !contentBuilder.isEmpty() ? contentBuilder.toString() : null;
             Message message = Message.assistantWithTools(text, toolCalls,
                 !reasoningBuilder.isEmpty() ? reasoningBuilder.toString() : null);
-            return new StreamResult(message, usage, responseModel, responseId);
+            return new StreamResult(message, usage, responseModel, responseId, OpenAICompletion.reason(finishReason));
         }
 
         // 纯文本回复
         Message message = new Message(com.clawkit.tools.schema.Role.ASSISTANT,
             !contentBuilder.isEmpty() ? contentBuilder.toString() : "", null, null,
             !reasoningBuilder.isEmpty() ? reasoningBuilder.toString() : null);
-        return new StreamResult(message, usage, responseModel, responseId);
+        return new StreamResult(message, usage, responseModel, responseId, OpenAICompletion.reason(finishReason));
     }
 
     // === 请求构建 ===

@@ -23,8 +23,60 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ObservingProviderGatewayP2Test {
+
+    @Test void rejectsRequestsThatCannotReserveTheDeclaredOutputAllowance() {
+        var calls=new java.util.concurrent.atomic.AtomicInteger();
+        LLMProvider provider=(messages,tools) -> { calls.incrementAndGet(); return Message.assistant("done"); };
+        var budget=com.clawkit.reliability.BudgetLedger.of(2048);
+        var control=com.clawkit.reliability.CancellationTree.root(null,budget);
+        var request=new ModelRequest(List.of(Message.user("run")),List.of(),
+            new com.clawkit.provider.ModelParameters(null,4096,false),control);
+        var gateway=new ObservingProviderGateway(provider,(p,r,parent,t,at) -> {});
+        var scope=new RunScope("run-budget",null,1,RunPhase.REACT,ExecutionMode.REACT,control);
+        assertThatThrownBy(() -> gateway.generate(request,scope)).isInstanceOf(com.clawkit.tools.control.ExecutionHaltedException.class);
+        assertThat(calls).hasValue(0);
+        assertThat(budget.remaining()).isEqualTo(2048);
+    }
+
+    @Test void settlesRejectedActualUsageOnceForBufferedAndStreamingResponses() {
+        for (boolean streaming : List.of(false,true)) {
+            var usage=new TokenUsage(10,20,30,0,10,0,UsageSource.ACTUAL);
+            var error=new com.clawkit.provider.ProviderError.Protocol("incomplete");
+            var failure=new com.clawkit.provider.LLMException("incomplete",null,error,0,
+                com.clawkit.provider.RejectedModelResponse.bounded("OUTPUT_TRUNCATED","private diagnostic",usage));
+            LLMProvider provider=new LLMProvider() {
+                public Message generate(List<Message> messages,List<ToolDefinition> tools) { throw failure; }
+                public ModelResponse generate(ModelRequest request) { throw failure; }
+                public ModelResponse generateStream(ModelRequest request,com.clawkit.provider.StreamObserver observer) {
+                    observer.onError(error); throw failure;
+                }
+            };
+            var events=new ArrayList<RunEventPayload>();
+            var budget=com.clawkit.reliability.BudgetLedger.of(10_000);
+            var control=com.clawkit.reliability.CancellationTree.root(null,budget);
+            var gateway=new ObservingProviderGateway(provider,(p,r,parent,t,at) -> events.add(p));
+            var request=ModelRequest.of(List.of(Message.user("run")),List.of());
+            var scope=new RunScope("run-rejected",null,1,RunPhase.REACT,ExecutionMode.REACT,control);
+            var observer=new com.clawkit.provider.StreamObserver() {
+                public void onContent(String d) {} public void onToolCallDelta(int i,String id,String n,String d) {}
+                public void onComplete(ModelResponse r) { throw new AssertionError("must fail"); }
+                public void onError(com.clawkit.provider.ProviderError e) {}
+            };
+            assertThatThrownBy(() -> { if(streaming) gateway.generateStream(request,scope,observer); else gateway.generate(request,scope); })
+                .isSameAs(failure);
+            assertThat(budget.remaining()).isEqualTo(9970);
+            var completed=events.stream().filter(ProviderCallCompletedPayload.class::isInstance)
+                .map(ProviderCallCompletedPayload.class::cast).toList();
+            assertThat(completed).singleElement().satisfies(p -> {
+                assertThat(p.failed()).isTrue(); assertThat(p.usageSource()).isEqualTo("ACTUAL");
+                assertThat(p.inputTokens()).isEqualTo(10); assertThat(p.outputTokens()).isEqualTo(20);
+                assertThat(p.errorMessage()).doesNotContain("private diagnostic");
+            });
+        }
+    }
 
     @Test
     void recordsUniqueIdsFingerprintAndActualUsage() {

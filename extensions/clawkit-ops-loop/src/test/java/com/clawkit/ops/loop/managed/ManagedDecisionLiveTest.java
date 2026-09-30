@@ -27,6 +27,8 @@ class ManagedDecisionLiveTest {
         var config = builder.build();
         Path output = Path.of(System.getProperty("clawkit.live.output", "target/managed-decision-live"))
             .toAbsolutePath().normalize();
+        if (Files.exists(output.resolve("outcome.json")) || Files.exists(output.resolve("metadata.json")))
+            throw new IllegalStateException("fresh evidence directory required; previous attempts are immutable");
         Files.createDirectories(output);
         var json = new ObjectMapper().registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
@@ -34,6 +36,7 @@ class ManagedDecisionLiveTest {
         Files.writeString(output.resolve("metadata.json"),json.writerWithDefaultPrettyPrinter().writeValueAsString(
             Map.of("evidenceKind","ACTUAL_MODEL_TEST_DOUBLE_OBSERVATIONS","model",config.model(),
                 "providerRetries",0,"providerCallLimit",6,"toolCallLimit",12,"tokenLimit",30000,
+                "maxOutputTokens",OpsDecisionAgent.ModelSettings.defaults().maxOutputTokens(),
                 "deadlineSeconds",120,"scenario","stopped-stateless-service-proposal","application",ManagedDecisionTest.app())));
         try (var recorder = new FileRunRecorder(output)) {
             var agent = new OpsDecisionAgent(ProviderFactory.create(config),output,recorder,Clock.systemUTC(),OpsDecisionAgent.Limits.defaults());
