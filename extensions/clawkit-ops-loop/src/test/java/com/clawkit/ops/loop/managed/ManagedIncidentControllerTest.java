@@ -57,6 +57,19 @@ class ManagedIncidentControllerTest {
             assertThat(report).contains("test-user").doesNotContain("policyHash");
         }
     }
+    @Test void revokedKnowledgeRejectsQueuedApprovalBeforeRepairAndPreservesHandoff() throws Exception {
+        try(var fixture=new Fixture(ActionPolicy.Mode.ASK)) {
+            var knowledge=ManagedKnowledgeStoreTest.ready(fixture.app,root.resolve("knowledge"));
+            var ref=knowledge.reference("start-guidance",1); fixture.knowledgeReferences=List.of(ref);
+            fixture.controller.configureKnowledge(knowledge); fixture.start(); fixture.controller.tick();
+            String incident=fixture.controller.status().current().id();
+            knowledge.revoke(ref,"human","replay no longer trusted");
+            assertThatThrownBy(() -> fixture.controller.approve(incident,"human")).hasMessageContaining("not currently reviewed");
+            assertThat(fixture.writes).hasValue(0);
+            assertThat(fixture.controller.status().current().state()).isEqualTo(ManagedIncident.State.HANDOFF);
+            assertThat(fixture.events).anyMatch(e -> e.kind().equals("KNOWLEDGE_HANDOFF"));
+        }
+    }
 
     @Test void rejectionSuppressesRepeatFaultUntilIndependentRecovery() throws Exception {
         try (var fixture=new Fixture(ActionPolicy.Mode.ASK)) {
@@ -252,6 +265,7 @@ class ManagedIncidentControllerTest {
         boolean running,healthy,unknown;
         OpsDecision.Disposition disposition=OpsDecision.Disposition.PROPOSE_ACTION;
         List<Probe> investigationProbes=List.of(Probe.LOGS);
+        List<OpsKnowledge.Reference> knowledgeReferences=List.of();
         int recheckSeconds=5;
         java.util.function.Consumer<ManagedIncidentStore.Event> extraListener=event -> {};
         Runnable beforeRead=() -> {};
@@ -268,7 +282,7 @@ class ManagedIncidentControllerTest {
                     disposition==OpsDecision.Disposition.PROPOSE_ACTION ? OpsDecision.Playbook.START_STOPPED_V1 : null,
                     disposition==OpsDecision.Disposition.INVESTIGATE ? investigationProbes : List.of(),
                     disposition==OpsDecision.Disposition.INVESTIGATE || disposition==OpsDecision.Disposition.WAIT ? recheckSeconds : null);
-                return new OpsDecisionAgent.Outcome(OpsDecisionAgent.Origin.MODEL,d,context.baseline(),List.of(),List.of(),"test double",null);
+                return new OpsDecisionAgent.Outcome(OpsDecisionAgent.Origin.MODEL,d,context.baseline(),List.of(),List.of(),"test double",null,null,knowledgeReferences);
             },(a,p) -> {
                 writes.incrementAndGet();
                 if (unknown) return new ManagedFixAdapter.ExecutionReport(EffectCertainty.EFFECT_UNKNOWN,"response lost");

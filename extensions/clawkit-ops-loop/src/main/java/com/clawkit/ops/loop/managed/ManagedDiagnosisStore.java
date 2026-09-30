@@ -11,8 +11,8 @@ public final class ManagedDiagnosisStore {
     public record Record(String applicationId,Instant at,OpsDecisionAgent.Origin origin,OpsDecision decision,
                          DiagnosticReport diagnosis,List<DecisionEvidence> evidence,
                          List<ManagedIncidentController.ProviderUsage> providerUsage,List<String> rejectedSubmissions,
-                         String failureType) {
-        public Record { evidence=List.copyOf(evidence); providerUsage=List.copyOf(providerUsage); rejectedSubmissions=List.copyOf(rejectedSubmissions); }
+                         String failureType,List<OpsKnowledge.Reference> knowledgeReferences) {
+        public Record { evidence=List.copyOf(evidence); providerUsage=List.copyOf(providerUsage); rejectedSubmissions=List.copyOf(rejectedSubmissions); knowledgeReferences=knowledgeReferences==null ? List.of() : List.copyOf(knowledgeReferences); }
     }
     public record Pointer(String filename) {
         public Pointer { if (filename==null || !filename.matches("diagnosis-[a-f0-9-]{36}\\.json")) throw new IllegalArgumentException("invalid diagnosis pointer"); }
@@ -23,7 +23,7 @@ public final class ManagedDiagnosisStore {
     public Path save(ManagedApplication app,OpsDecisionAgent.Outcome outcome,Instant at) throws Exception {
         var record=new Record(app.id(),at,outcome.origin(),outcome.decision(),outcome.diagnosis(),outcome.evidence(),
             outcome.providerExchanges().stream().map(e -> new ManagedIncidentController.ProviderUsage(e.startedAt(),e.completedAt(),e.usage(),e.failureType())).toList(),
-            outcome.rejectedSubmissions(),outcome.failureType());
+            outcome.rejectedSubmissions(),outcome.failureType(),outcome.knowledgeReferences());
         if (ManagedContracts.JSON.writerWithDefaultPrettyPrinter().writeValueAsBytes(record).length>262144)
             throw new IOException("diagnosis record exceeds byte cap; no new pointer published");
         return files.locked(() -> {

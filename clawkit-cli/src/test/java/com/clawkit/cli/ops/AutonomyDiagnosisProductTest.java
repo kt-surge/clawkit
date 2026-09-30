@@ -89,6 +89,22 @@ class AutonomyDiagnosisProductTest {
             assertThat(Files.readString(view.artifact())).doesNotContain("providerExchanges","synthetic-secret-value");
             assertThat(execute(command,"diagnosis","demo").out()).contains("调查结论");
             assertThat(model.calls).hasValue(3); // Inspect does not call the model again.
+            if(scenario.equals("dependency")) {
+                var continuousModel=new ScriptedDiagnosis(scenario);
+                try(var session=service.open("demo",continuousModel,e -> {})) { session.once(); }
+                assertThat(service.status("demo").state()).isEqualTo("HANDOFF");
+                var drafts=service.knowledge("demo").cases();
+                assertThat(drafts).singleElement().satisfies(c -> {
+                    assertThat(c.state()).isEqualTo(com.clawkit.ops.loop.managed.OpsKnowledge.State.DRAFT);
+                    assertThat(c.opsCase().outcome()).isEqualTo(com.clawkit.ops.loop.managed.OpsKnowledge.OutcomeKind.HUMAN_HANDOFF);
+                    assertThat(c.opsCase().proposedDiagnosis()).isNotNull(); assertThat(c.review()).isNull();
+                });
+                String caseId=drafts.getFirst().opsCase().id();
+                assertThat(execute(command,"case-review","demo",caseId,"--confirm-reviewed","--cause","DEPENDENCY_FAILURE","--review-note","reviewed controlled fixture").code()).isZero();
+                assertThat(execute(command,"knowledge-search","demo","--query","DEPENDENCY_FAILURE").out()).contains(caseId);
+                assertThat(continuousModel.calls).hasValue(3); assertThat(writes).hasValue(0);
+                assertThat(service.status("demo").permission()).isEqualTo("ASK");
+            }
         } finally { http.stop(0); }
     }
     private record Result(int code,String out,String error) {}

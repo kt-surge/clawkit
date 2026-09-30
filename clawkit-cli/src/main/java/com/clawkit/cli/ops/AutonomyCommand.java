@@ -2,6 +2,7 @@ package com.clawkit.cli.ops;
 
 import com.clawkit.cli.ApplicationBootstrap;
 import com.clawkit.ops.delivery.managed.ManagedOperationsService;
+import com.clawkit.ops.loop.managed.*;
 import java.io.PrintWriter;
 import java.net.URI;
 import java.nio.file.Path;
@@ -15,6 +16,7 @@ import picocli.CommandLine.Model.CommandSpec;
 @Command(name="autonomy",mixinStandardHelpOptions=true,description={
     "登记和管理隔离 Linux Compose 服务的分层自治闭环。",
     "操作：register, policy, check, diagnose, diagnosis, change-import, metrics, run, status, events, approve, reject, command-result, handoff, notifications, pause, resume, stop。",
+    "知识：postmortem, cases, case-review, case-revoke, knowledge-import, knowledge-list, knowledge-search, knowledge-replay, knowledge-review, knowledge-revoke。",
     "登记默认需审批；policy limited-auto 需要 --confirm-reviewed 和 --review-note。"})
 public final class AutonomyCommand implements Callable<Integer> {
     @Spec CommandSpec spec;
@@ -42,6 +44,9 @@ public final class AutonomyCommand implements Callable<Integer> {
     @Option(names="--details",description="展开原始 Agent 判断和事件细节（默认仅展示标准事实）") boolean details;
     @Option(names="--input",description="人工/CI 变更记录 JSON 文件") Path input;
     @Option(names="--metrics-url",description="已部署的本地 Prometheus 地址，固定查询登记容器的内存历史") URI metricsUrl;
+    @Option(names="--query",description="知识检索症状（最多 200 字符）") String query;
+    @Option(names="--replay-id",description="本地已保存、通过正反例回放的记录 ID") String replayId;
+    @Option(names="--cause",description="人工确认的案例根因类别") DiagnosticReport.Cause confirmedCause;
     @Option(names="--model",description="运行所用模型") String model;
     @Option(names="--base-url",description="模型 API endpoint") String baseUrl;
     @Option(names="--protocol",description="模型协议") String protocol;
@@ -96,6 +101,46 @@ public final class AutonomyCommand implements Callable<Integer> {
                     renderDiagnosis(view,out,details); if (view.failureType()!=null) return 2;
                 }
                 case "diagnosis" -> renderDiagnosis(service.diagnosis(applicationId),out,details);
+                case "knowledge-import" -> {
+                    require(input,"--input（流程版本 JSON）"); var ref=service.importKnowledge(applicationId,input);
+                    out.println("已保存知识草稿："+ref.id()+"@"+ref.version()+"；需正反例回放和人工审阅，不增加动作权限。");
+                }
+                case "knowledge-list" -> {
+                    for(var entry:service.knowledge(applicationId).runbooks()) out.println(entry.runbook().id()+"@"+entry.runbook().version()+"  "+entry.state()+"  "+entry.runbook().title());
+                }
+                case "knowledge-search" -> {
+                    require(query,"--query"); var result=service.searchKnowledge(applicationId,query);
+                    for(var m:result.runbooks()) out.println(m.reference().id()+"@"+m.reference().version()+"  "+m.title()+"  当前条件="+(m.applicable() ? "符合" : "不符合/缺证")+"  "+m.matchReason());
+                    for(var c:result.cases()) out.println("案例："+c.id()+"  人工确认原因="+c.confirmedCause()+"  结果="+c.outcome());
+                    if(result.runbooks().isEmpty() && result.cases().isEmpty()) out.println("没有符合环境、服务、版本及审阅状态的命中。");
+                    out.println("检索是处置参考，当前事实仍需采证；不适用流程不可触发，历史成功不增加授权。");
+                }
+                case "knowledge-replay" -> {
+                    require(input,"--input（回放样本 JSON）"); var store=service.knowledge(applicationId);
+                    var report=store.replay(knowledgeReference(store),ManagedKnowledgeStore.read(input,ManagedKnowledgeStore.ReplayInput.class,262144));
+                    out.println("回放："+report.id()+"  通过="+report.results().stream().filter(OpsKnowledge.ReplayResult::passed).count()+"/"+report.results().size()+"  可审阅="+report.qualified());
+                    out.println("回放只检查固定事实与适用条件，不执行动作，不代表模型准确率。");
+                    if(!report.qualified()) return 2;
+                }
+                case "knowledge-review", "knowledge-revoke" -> {
+                    require(reviewNote,"--review-note"); var store=service.knowledge(applicationId); var ref=knowledgeReference(store);
+                    if(operation.equals("knowledge-review")) {
+                        if(!reviewed) throw new IllegalArgumentException("审阅知识需要 --confirm-reviewed；知识资格与动作授权分别记录。");
+                        require(replayId,"--replay-id"); store.review(ref,replayId,operator(),reviewNote);
+                        out.println("知识版本已审阅；未改变应用权限。");
+                    } else { store.revoke(ref,operator(),reviewNote); out.println("知识版本已撤销；保留版本与审阅记录，待执行建议会重新检查。"); }
+                }
+                case "postmortem" -> { var draft=service.postmortem(applicationId); out.println("复盘草稿："+draft.id()+"  结果="+draft.outcome()+"；根因待人工确认。"); }
+                case "cases" -> {
+                    for(var c:service.knowledge(applicationId).cases()) out.println(c.opsCase().id()+"  "+c.state()+"  "+c.opsCase().outcome()
+                        +"  原因="+(c.review()==null || c.review().confirmedCause()==null ? "待确认" : c.review().confirmedCause()));
+                }
+                case "case-review", "case-revoke" -> {
+                    require(argument,"案例 ID"); require(reviewNote,"--review-note");
+                    if(operation.equals("case-review") && (!reviewed || confirmedCause==null)) throw new IllegalArgumentException("案例审阅需要 --confirm-reviewed 和 --cause，不能直接采用模型根因。");
+                    service.knowledge(applicationId).reviewCase(argument,confirmedCause,operation.equals("case-revoke"),operator(),reviewNote);
+                    out.println(operation.equals("case-revoke") ? "案例已撤销；引用该案例的流程不再生效。" : "案例人工审阅已记录；未增加动作权限。");
+                }
                 case "status", "handoff" -> render(service.status(applicationId),out,details);
                 case "events" -> { for (var event:service.events(applicationId,limit)) render(event,out,details); }
                 case "notifications" -> {
@@ -153,6 +198,11 @@ public final class AutonomyCommand implements Callable<Integer> {
         if (value==null || value instanceof String text && text.isBlank()) throw new IllegalArgumentException("缺少 "+name);
     }
     private static String operator() { return System.getProperty("user.name","local-user"); }
+    private OpsKnowledge.Reference knowledgeReference(ManagedKnowledgeStore store) throws Exception {
+        require(argument,"知识 ID@版本"); String[] parts=argument.split("@",-1);
+        if(parts.length!=2) throw new IllegalArgumentException("知识版本格式为 ID@版本");
+        return store.reference(parts[0],Integer.parseInt(parts[1]));
+    }
     private static String safeError(Exception error) {
         if (error instanceof IllegalArgumentException || error instanceof java.io.IOException)
             return error.getMessage()==null ? error.getClass().getSimpleName() : error.getMessage().replace('\n',' ');

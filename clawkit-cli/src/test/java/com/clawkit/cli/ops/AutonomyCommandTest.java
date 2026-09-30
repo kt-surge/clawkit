@@ -1,6 +1,7 @@
 package com.clawkit.cli.ops;
 
 import com.clawkit.cli.ClawkitApp;
+import com.clawkit.ops.loop.managed.*;
 import com.clawkit.ops.delivery.managed.ManagedOperationsService;
 import java.io.*;
 import java.nio.file.*;
@@ -40,6 +41,53 @@ class AutonomyCommandTest {
             Instant.now(),2,1,root,false,java.util.Map.of("SERVICE","RUNNING","BUSINESS","UNKNOWN")),new PrintWriter(text));
         assertThat(text.toString()).contains("待人工处理","结果未知，禁止重复派发","自动处理已降级").doesNotContain("已独立验证恢复");
         assertThat(text.toString()).contains("服务运行中","业务检查状态未知").doesNotContain("bounded reason");
+    }
+    @Test void knowledgeCommandsDoNotBootstrapModelOrExpandPermissionAndRequireNamedReview() throws Exception {
+        registerLocalConfig();
+        assertThat(execute("knowledge-list","demo").code).isZero();
+        assertThat(execute("knowledge-search","demo","--query","stopped service").output).contains("没有符合环境","不增加授权");
+        var review=execute("knowledge-review","demo","missing@1","--review-note","review");
+        assertThat(review.code).isEqualTo(2);
+        var caseReview=execute("case-review","demo","case-missing","--review-note","review");
+        assertThat(caseReview.error).contains("--confirm-reviewed","--cause");
+        assertThat(execute("status","demo").output).contains("需人工审批");
+        assertThat(execute("postmortem","demo").code).isEqualTo(2);
+    }
+    @Test void importReplayReviewSearchAndRevokeWorkThroughTheProductCommand() throws Exception {
+        registerLocalConfig(); Path registration=root.resolve("demo/registration.json"); String permissionBefore=Files.readString(registration);
+        var app=ManagedKnowledgeStore.read(registration,ManagedRegistrationStore.Registration.class,65536).application();
+        var now=Instant.now().minusSeconds(1);
+        var probe=ManagedObserver.Probe.DEPENDENCIES;
+        var unhealthy=ManagedObserver.Status.UNHEALTHY;
+        var book=new OpsKnowledge.RunbookVersion("dependency-guide",1,OpsKnowledge.Scope.of(app),
+            "Dependency outage","dependency unavailable",new OpsKnowledge.Conditions(
+                java.util.List.of(new OpsKnowledge.ProbeCondition(probe,unhealthy)),java.util.List.of(probe),null,true),
+            java.util.List.of("Current dependency unhealthy"),java.util.List.of("Healthy dependency or stale facts"),java.util.List.of(probe),
+            OpsDecision.Disposition.ESCALATE,null,java.util.List.of("Human dependency recovery then independent business check"),java.util.List.of(),now);
+        var json=new com.fasterxml.jackson.databind.ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+        Path body=root.resolve("book.json"); json.writeValue(body.toFile(),book);
+        assertThat(execute("knowledge-import","demo","--input",body.toString()).code).isZero();
+        assertThat(execute("knowledge-list","demo").output).contains("DRAFT");
+        java.util.function.Function<ManagedObserver.Status,DecisionEvidence> fact=status -> {
+            String id="ev-"+status.name(); var observation=new ManagedObserver.Observation(app.targetId(),app.composeProject(),app.service(),probe,now,status,"fixture",
+                EvidenceEnvelope.Payload.snapshot(EvidenceEnvelope.Source.DOCKER_INSPECT,
+                    EvidenceEnvelope.Quality.COMPLETE,now,"fixture"));
+            return new DecisionEvidence(id,app.id(),app.version(),observation,now.plus(app.evidenceTtl()),
+                new EvidenceEnvelope(id,app.id(),app.version(),app.composeProject(),observation,ManagedKnowledgeStore.contentHash(observation)));
+        };
+        var samples=new ManagedKnowledgeStore.ReplayInput("cli-fixture-v1",java.util.List.of(
+            new OpsKnowledge.ReplaySample("positive",app,now,java.util.List.of(fact.apply(unhealthy)),true),
+            new OpsKnowledge.ReplaySample("negative",app,now,java.util.List.of(fact.apply(ManagedObserver.Status.HEALTHY)),false)));
+        Path input=root.resolve("samples.json"); json.writeValue(input.toFile(),samples);
+        var replay=execute("knowledge-replay","demo","dependency-guide@1","--input",input.toString()); assertThat(replay.code).isZero();
+        var matcher=java.util.regex.Pattern.compile("replay-[a-f0-9-]{36}").matcher(replay.output); assertThat(matcher.find()).isTrue(); String replayId=matcher.group();
+        assertThat(execute("knowledge-review","demo","dependency-guide@1","--review-note","review","--replay-id",replayId).error).contains("--confirm-reviewed");
+        assertThat(execute("knowledge-review","demo","dependency-guide@1","--review-note","review","--replay-id",replayId,"--confirm-reviewed").code).isZero();
+        assertThat(execute("knowledge-search","demo","--query","dependency unavailable").output).contains("dependency-guide@1","不符合/缺证");
+        assertThat(Files.readString(registration)).isEqualTo(permissionBefore);
+        assertThat(execute("knowledge-revoke","demo","dependency-guide@1","--review-note","withdrawn").code).isZero();
+        assertThat(execute("knowledge-search","demo","--query","dependency unavailable").output).contains("没有符合环境");
+        assertThat(Files.readString(registration)).isEqualTo(permissionBefore);
     }
     private Result execute(String... args) {
         var out=new StringWriter(); var error=new StringWriter();

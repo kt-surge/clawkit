@@ -118,6 +118,38 @@ docker --context desktop-linux compose -f .\ops-fixtures\layered-autonomy\compos
 
 每次 Agent 运行默认预算为 120 秒、6 次模型请求、12 次工具调用和 30,000 Token；单次输出上限 4096。登记检查和初始发现按各只读采集器的限制执行。多源诊断默认关闭额外原生思考，将假设、证据和不确定性写入结构化诊断。输出截断或预算耗尽会留档并交接，不算完成诊断。
 
+### 处置知识与复盘
+
+知识默认是草稿。新版本先进行有正例和反例的只读回放，再由用户明确审阅；检索只返回当前环境、服务和应用版本下的已审阅内容。命中结果显示知识版本、匹配依据及当前事实是否符合条件。历史案例不证明本次根因，知识审阅也不增加应用动作权限。
+
+`run` 在独立恢复或转交人工后保存复盘草稿，固定当时的输入、证据哈希与结果。人工交接保留为交接，不记为恢复；模型根因保留为待确认推断。查看与审阅不再调用模型：
+
+```powershell
+.\clawkit.cmd autonomy cases orders --state-dir .\demo-state
+.\clawkit.cmd autonomy postmortem orders --state-dir .\demo-state
+.\clawkit.cmd autonomy case-review orders <案例ID> --state-dir .\demo-state `
+  --confirm-reviewed --cause DEPENDENCY_FAILURE --review-note '根据独立调查确认依赖故障'
+.\clawkit.cmd autonomy case-revoke orders <案例ID> --state-dir .\demo-state --review-note '原先确认的原因被新证据推翻'
+```
+
+流程版本示例见 [依赖故障流程](../examples/autonomy/dependency-runbook-v1.json)。使用前把 `scope` 改为登记中的实际环境、服务和应用版本；`sourceCaseIds` 可以引用已人工审阅的同范围案例。不能覆盖已有版本；更新使用新的 `version`，错误版本使用撤销。
+
+```powershell
+.\clawkit.cmd autonomy knowledge-import orders --state-dir .\demo-state --input .\runbook.json
+.\clawkit.cmd autonomy knowledge-list orders --state-dir .\demo-state
+.\clawkit.cmd autonomy knowledge-replay orders dependency-outage@1 --state-dir .\demo-state --input .\replay.json
+.\clawkit.cmd autonomy knowledge-review orders dependency-outage@1 --state-dir .\demo-state `
+  --replay-id <回放ID> --confirm-reviewed --review-note '已检查正例、反例与禁用条件'
+.\clawkit.cmd autonomy knowledge-search orders --state-dir .\demo-state --query '依赖不可用'
+.\clawkit.cmd autonomy knowledge-revoke orders dependency-outage@1 --state-dir .\demo-state --review-note '适用条件需要修订'
+```
+
+回放文件包含 `sampleVersion` 和 2..24 个 `samples`；每个样本为 `id`、登记中的 `application`、判定时间 `at`、诊断记录中的 `evidence` 和事前预期 `expectedApplicable`。可复用隔离诊断保存的事实，另设超过证据有效期的反例；修复流程还应覆盖真实 OOM、依赖失败、截断或不适用版本。程序只核对流程条件，不调用模型或执行修复。输入与全部失败结果留存，缺少正例/反例或有失败时不能通过审阅。
+
+处置建议引用检索版本并在提交时检查条件。执行前锁定知识版本、重新读取所需事实，仍通过现有应用授权、现场检查和独立验证；撤销、哈希变化或条件不适用会交接。执行持有版本检查锁期间，知识变更会提示忙碌，需要稍后重试。案例确认原因不能原地改写；撤销错误案例会使引用它的知识失效。当前支持固定采证及已有启动/重启流程，没有任意命令或自动配置变更。
+
+有/无知识的受控运行时对照仅验证相同工具、模型参数、预算和记录合同；实际诊断收益留待新版本冻结评测，不从这些门禁测试推算成功率。
+
 ## 5. 在夹具中注入故障
 
 仅对上面本次创建的试用夹具使用以下入口。该入口不属于 Agent 工具，也不用于实际应用。

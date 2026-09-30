@@ -50,6 +50,31 @@ public final class ManagedOperationsService {
         return new ManagedOperationsService(stateRoot,new ProcessCommandExecutor(),Clock.systemUTC());
     }
     public List<String> applications() throws IOException { return registrations.applications(); }
+    public ManagedKnowledgeStore knowledge(String id) throws IOException {
+        registrations.read(id); return new ManagedKnowledgeStore(registrations.directory(id).resolve("knowledge"),clock);
+    }
+    public OpsKnowledge.Reference importKnowledge(String id,Path input) throws Exception {
+        var b=ManagedKnowledgeStore.read(input,OpsKnowledge.RunbookVersion.class,16384);
+        java.util.function.UnaryOperator<String> safe=s -> LogSanitizer.sanitizeAll(s).text();
+        var sanitized=new OpsKnowledge.RunbookVersion(b.id(),b.version(),b.scope(),safe.apply(b.title()),safe.apply(b.symptoms()),b.conditions(),
+            b.applicability().stream().map(safe).toList(),b.prohibitions().stream().map(safe).toList(),b.probes(),b.disposition(),b.playbook(),
+            b.verification().stream().map(safe).toList(),b.sourceCaseIds(),b.createdAt());
+        return knowledge(id).importRunbook(registrations.read(id).application(),sanitized);
+    }
+    public OpsKnowledge.SearchResult searchKnowledge(String id,String query) throws Exception {
+        var record=diagnoses(id).latest(id);
+        return knowledge(id).search(registrations.read(id).application(),query,3,record==null ? List.of() : record.evidence());
+    }
+    public OpsKnowledge.OpsCase postmortem(String id) throws Exception {
+        var store=incidents(id); var snapshot=store.read(); var incident=snapshot.current();
+        if(incident==null) throw new IllegalArgumentException("no incident to archive");
+        ManagedIncidentController.DecisionRecord decision=incident.decisionArtifact()==null ? null
+            : ManagedKnowledgeStore.read(store.artifactPath(incident.decisionArtifact()),ManagedIncidentController.DecisionRecord.class,262144);
+        Object decisionArtifact=incident.decisionArtifact()==null ? null
+            : ManagedKnowledgeStore.read(store.artifactPath(incident.decisionArtifact()),com.fasterxml.jackson.databind.JsonNode.class,262144);
+        return knowledge(id).archive(registrations.read(id).application(),incident,decision,
+            ManagedKnowledgeStore.contentHash(decisionArtifact),ManagedKnowledgeStore.contentHash(snapshot));
+    }
     public void configureMetrics(String id,URI endpoint) throws Exception {
         var app=registrations.read(id).application(); metricStore(id).configure(app,endpoint,clock.instant());
     }
@@ -70,7 +95,7 @@ public final class ManagedOperationsService {
         try (var recorder=new FileRunRecorder(directory);
              var observer=observer(id,config.target())) {
             var agent=new OpsDecisionAgent(provider,directory.resolve("agent"),recorder,clock,OpsDecisionAgent.Limits.defaults(),
-                OpsDecisionAgent.Guidance.REVIEWED_PLAYBOOKS,OpsDecisionAgent.ModelSettings.multisourceDefaults(),OpsDecisionAgent.Profile.MULTISOURCE);
+                OpsDecisionAgent.Guidance.REVIEWED_PLAYBOOKS,OpsDecisionAgent.ModelSettings.multisourceDefaults(),OpsDecisionAgent.Profile.MULTISOURCE,knowledge(id));
             var baseline=ManagedEvidenceCollector.initial(config.application(),observer,clock);
             var outcome=agent.decide(config.application(),observer,com.clawkit.tools.control.ExecutionControl.none(),
                 new OpsDecisionAgent.DecisionContext("diagnostic-"+UUID.randomUUID(),1,null,baseline));
@@ -211,7 +236,7 @@ public final class ManagedOperationsService {
             var verifier=new IndependentManagedVerifier(clock,IndependentManagedVerifier.Settings.defaults(),d -> Thread.sleep(d.toMillis()));
             executor=new ManagedRepairExecutor(directory.resolve("execution"),clock,recorder,verifier);
             var agent=new OpsDecisionAgent(provider,directory.resolve("agent"),recorder,clock,OpsDecisionAgent.Limits.defaults(),
-                OpsDecisionAgent.Guidance.REVIEWED_PLAYBOOKS,OpsDecisionAgent.ModelSettings.multisourceDefaults(),OpsDecisionAgent.Profile.MULTISOURCE);
+                OpsDecisionAgent.Guidance.REVIEWED_PLAYBOOKS,OpsDecisionAgent.ModelSettings.multisourceDefaults(),OpsDecisionAgent.Profile.MULTISOURCE,knowledge(id));
             notificationTransport=notifications==null ? null : new ManagedFeishuTransport(notifications.appId(),notifications.secret());
             notifier=notifications==null ? null : new ManagedLifecycleNotifier(directory.resolve("notifications"),config.application(),
                 notifications.chatId(),notificationTransport,clock);
@@ -228,8 +253,14 @@ public final class ManagedOperationsService {
                         if (notifier!=null) {
                             try { notifier.enqueue(event); } catch (IOException e) { throw new UncheckedIOException(e); }
                         }
+                        if(Set.of(ManagedIncident.State.RECOVERED,ManagedIncident.State.HANDOFF).contains(event.state()) && !event.kind().equals("OBSERVATION_MERGED")) {
+                            try { postmortem(id); }
+                            catch(Exception e) { org.slf4j.LoggerFactory.getLogger(ManagedOperationsService.class)
+                                .warn("Postmortem projection unavailable: {}",e.getClass().getSimpleName()); }
+                        }
                         if (!event.kind().equals("OBSERVATION_MERGED")) sink.accept(new EventView(event.id(),event.at(),event.kind(),event.state().name(),event.incidentId(),event.detail()));
                     });
+                controller.configureKnowledge(knowledge(id));
             } catch (Exception e) { executor.close(); adapter.close(); recorder.close(); lifecycle.shutdown(); humanCommands.shutdown(); delivery.shutdown();
                 if (notificationTransport!=null) notificationTransport.close(); throw e; }
         }

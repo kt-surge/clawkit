@@ -17,6 +17,11 @@
     <dependencies>
         <dependency>
             <groupId>com.clawkit</groupId>
+            <artifactId>clawkit-memory</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.clawkit</groupId>
             <artifactId>clawkit-ops-mcp</artifactId>
             <version>${project.version}</version>
         </dependency>

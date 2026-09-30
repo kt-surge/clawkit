@@ -47,6 +47,7 @@ public final class ManagedIncidentController implements AutoCloseable {
     private final ReentrantLock cycleLock=new ReentrantLock();
     private final AtomicReference<CancellationTree> activeControl=new AtomicReference<>();
     private volatile String lastFailure;
+    private KnowledgeAccess knowledge=KnowledgeAccess.none();
     private ScheduledHandle handle;
     private volatile boolean closed;
 
@@ -83,6 +84,11 @@ public final class ManagedIncidentController implements AutoCloseable {
         store.requestMode(ManagedIncidentStore.Mode.RUNNING,clock.instant());
         if (handle==null || handle.isCancelled()) handle=scheduler.schedule(this::tickSafely,0,
             applications.get().checkInterval().toMillis(),TimeUnit.MILLISECONDS);
+    }
+    /** User-owned wiring, installed before the controller starts; model tools cannot change it. */
+    public synchronized void configureKnowledge(KnowledgeAccess access) {
+        if(handle!=null) throw new IllegalStateException("configure knowledge before starting control");
+        knowledge=Objects.requireNonNull(access);
     }
     public void pause() throws Exception { requestMode(ManagedIncidentStore.Mode.PAUSED); }
     public void resume() throws Exception { start(); }
@@ -213,11 +219,12 @@ public final class ManagedIncidentController implements AutoCloseable {
     }
     public record ProviderUsage(Instant startedAt,Instant completedAt,com.clawkit.provider.TokenUsage usage,String failureType) {}
     public record DecisionRecord(OpsDecisionAgent.Origin origin,OpsDecision decision,List<DecisionEvidence> evidence,
-            List<String> rejectedSubmissions,List<ProviderUsage> providerUsage,String failureType,DiagnosticReport diagnosis) {
+            List<String> rejectedSubmissions,List<ProviderUsage> providerUsage,String failureType,DiagnosticReport diagnosis,List<OpsKnowledge.Reference> knowledgeReferences) {
+        public DecisionRecord { knowledgeReferences=knowledgeReferences==null ? List.of() : List.copyOf(knowledgeReferences); }
         static DecisionRecord from(OpsDecisionAgent.Outcome outcome) {
             return new DecisionRecord(outcome.origin(),outcome.decision(),outcome.evidence(),outcome.rejectedSubmissions(),
                 outcome.providerExchanges().stream().map(e -> new ProviderUsage(e.startedAt(),e.completedAt(),
-                    e.usage(),e.failureType())).toList(),outcome.failureType(),outcome.diagnosis());
+                    e.usage(),e.failureType())).toList(),outcome.failureType(),outcome.diagnosis(),outcome.knowledgeReferences());
         }
     }
 
@@ -273,6 +280,31 @@ public final class ManagedIncidentController implements AutoCloseable {
         return current;
     }
     private void execute(ManagedIncident incident,ManagedApplication app,RepairAuthorization.Request authorization,ExecutionControl control) throws Exception {
+        var refs=new ArrayList<OpsKnowledge.Reference>();
+        if(incident.decisionArtifact()!=null) {
+            var record=ManagedKnowledgeStore.read(store.artifactPath(incident.decisionArtifact()),com.fasterxml.jackson.databind.JsonNode.class,262144);
+            var values=record.path("knowledgeReferences");
+            if(!values.isMissingNode() && !values.isNull()) {
+                if(!values.isArray() || values.size()>12) throw new IllegalArgumentException("invalid knowledge references in decision artifact");
+                for(var value:values) refs.add(ManagedContracts.JSON.treeToValue(value,OpsKnowledge.Reference.class));
+            }
+        }
+        try(var guard=knowledge.guard(app,refs)) {
+            var probes=knowledge.proposalProbes(app,refs);
+            if(!probes.isEmpty()) {
+                var fresh=observe(app,probes);
+                knowledge.validateProposal(app,refs,incident.decision(),fresh);
+            }
+            executeQualified(incident,app,authorization,control);
+        }
+        catch(Exception e) {
+            var current=store.read().current();
+            if(current!=null && current.state()==ManagedIncident.State.AWAITING_APPROVAL)
+                save(transition(current,ManagedIncident.State.HANDOFF,"knowledge qualification unavailable; no repair dispatched"),"KNOWLEDGE_HANDOFF");
+            throw e;
+        }
+    }
+    private void executeQualified(ManagedIncident incident,ManagedApplication app,RepairAuthorization.Request authorization,ExecutionControl control) throws Exception {
         if (!running(control)) return;
         incident=transition(incident,ManagedIncident.State.EXECUTING,"fresh precheck and authorized execution"); save(incident,"REPAIR_STARTED");
         var outcome=repair.execute(incident.id(),app,incident.decision(),incident.decisionEvidence(),authorization,

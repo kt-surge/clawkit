@@ -1,0 +1,21 @@
+{
+  "id": "dependency-outage",
+  "version": 1,
+  "scope": { "environment": "clawkit-autonomy-demo", "service": "orders", "applicationVersion": 1 },
+  "title": "依赖故障调查与人工交接",
+  "symptoms": "依赖不可用 dependency unavailable；应用业务检查失败",
+  "conditions": {
+    "statuses": [ { "probe": "DEPENDENCIES", "status": "UNHEALTHY" } ],
+    "requiredProbes": [ "DEPENDENCIES" ],
+    "oomKilled": null,
+    "forbidTruncated": true
+  },
+  "applicability": [ "当前完整证据表明已登记依赖不健康" ],
+  "prohibitions": [ "证据缺失、过期或冲突时先补证", "当前依赖健康时不采用此流程", "不得因应用 500 自动重启依赖或修改配置" ],
+  "probes": [ "DEPENDENCIES", "BUSINESS", "LOGS" ],
+  "disposition": "ESCALATE",
+  "playbook": null,
+  "verification": [ "人工恢复依赖后，重新读取依赖健康和订单业务", "只有既有独立验证持续通过才记录恢复" ],
+  "sourceCaseIds": [],
+  "createdAt": "2026-09-30T00:00:00Z"
+}
