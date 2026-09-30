@@ -37,7 +37,37 @@ jobs:
             git show --check --oneline "${{ github.sha }}"
           }
       - name: Clean verify
-        run: mvn -B -ntp clean verify -Dgroups='!e2e'
+        run: |
+          mvn -B -ntp clean verify "-Dgroups=!e2e" 2>&1 | Tee-Object -FilePath ci-clean-verify.log
+          exit $LASTEXITCODE
+      - name: Annotate failed tests
+        if: failure()
+        shell: pwsh
+        run: |
+          $reports = Get-ChildItem -Path . -Recurse -Filter 'TEST-*.xml' |
+            Where-Object { $_.FullName -match '[\\/]surefire-reports[\\/]' }
+          $reported = 0
+          foreach ($report in $reports) {
+            [xml]$suite = Get-Content -LiteralPath $report.FullName -Raw
+            foreach ($test in $suite.testsuite.testcase) {
+              foreach ($problem in @($test.failure) + @($test.error)) {
+                if ($null -eq $problem) { continue }
+                $message = "$($test.classname).$($test.name): $($problem.message)"
+                if ($message.Length -gt 1200) { $message = $message.Substring(0, 1200) }
+                $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+                Write-Output "::error title=Failed test::$message"
+                $reported++
+              }
+            }
+          }
+          if ($reported -eq 0 -and (Test-Path -LiteralPath ci-clean-verify.log)) {
+            $errors = Select-String -LiteralPath ci-clean-verify.log -Pattern '^\[ERROR\]' |
+              Select-Object -Last 12
+            foreach ($entry in $errors) {
+              $message = $entry.Line.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=Build failure::$message"
+            }
+          }
       - name: Runtime baseline compare
         run: mvn -B -ntp -pl clawkit-evaluation -am -Pbenchmark verify "-Dbenchmark.mode=compare"
       - name: Ensure build did not modify tracked files
