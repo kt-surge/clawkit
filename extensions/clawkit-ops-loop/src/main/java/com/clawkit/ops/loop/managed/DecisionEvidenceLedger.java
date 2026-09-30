@@ -15,6 +15,7 @@ final class DecisionEvidenceLedger {
     private final Map<String, DecisionEvidence> evidence = new LinkedHashMap<>();
     private final List<String> rejections = new ArrayList<>();
     private OpsDecision submitted;
+    private DiagnosticReport diagnosis;
 
     DecisionEvidenceLedger(ManagedApplication app, Clock clock) { this.app = app; this.clock = clock; }
 
@@ -32,8 +33,10 @@ final class DecisionEvidenceLedger {
             throw new IllegalArgumentException("observer returned a different target/project/service/probe");
         if (observation.observedAt().isAfter(clock.instant()))
             throw new IllegalArgumentException("observation is from the future");
-        DecisionEvidence item = new DecisionEvidence("ev-" + UUID.randomUUID(), app.id(), app.version(),
-            observation, observation.observedAt().plus(app.evidenceTtl()));
+        validateSource(app,observation,clock);
+        String id="ev-"+UUID.randomUUID();
+        DecisionEvidence item = new DecisionEvidence(id, app.id(), app.version(),
+            observation, observation.observedAt().plus(app.evidenceTtl()),EvidenceEnvelope.of(id,app,observation));
         evidence.put(item.id(), item);
         return item;
     }
@@ -43,8 +46,14 @@ final class DecisionEvidenceLedger {
         validate(decision);
         submitted = decision;
     }
+    synchronized void diagnose(DiagnosticReport report) {
+        if (submitted!=null) throw new IllegalArgumentException("decision already submitted");
+        report.validate(snapshot(),clock); diagnosis=report;
+    }
+    synchronized DiagnosticReport diagnosis() { return diagnosis; }
 
     synchronized void validate(OpsDecision decision) {
+        if (diagnosis!=null) diagnosis.validate(snapshot(),clock);
         validateCollected(app, decision, List.copyOf(evidence.values()), clock);
     }
 
@@ -52,6 +61,7 @@ final class DecisionEvidenceLedger {
         Map<String, DecisionEvidence> evidence = new LinkedHashMap<>();
         for (DecisionEvidence item : collected) {
             Observation o = item.observation();
+            validateSource(app,o,clock);
             if (!app.id().equals(item.applicationId()) || app.version() != item.applicationVersion()
                     || !app.targetId().equals(o.targetId()) || !app.composeProject().equals(o.composeProject())
                     || !app.service().equals(o.service()) || o.observedAt().isAfter(clock.instant())
@@ -66,6 +76,14 @@ final class DecisionEvidenceLedger {
         }).toList();
         if (decision.disposition() != OpsDecision.Disposition.PROPOSE_ACTION) return;
         if (!app.repairIntendedAt(clock.instant())) throw new IllegalArgumentException("maintenance/desired state/stateless declaration forbids repair");
+        for (DecisionEvidence item:collected) {
+            if (!item.currentAt(clock.instant()) || item.observation().payload()==null) continue;
+            var payload=item.observation().payload();
+            if (payload.collection().quality()==EvidenceEnvelope.Quality.TRUNCATED)
+                throw new IllegalArgumentException("truncated current evidence prevents proposed action");
+            if (payload.resources()!=null && payload.resources().oomKilled())
+                throw new IllegalArgumentException("OOM cause needs human resource remediation before restart");
+        }
         // Reject conflicting or missing observations, including uncited counterevidence.
         for (Probe probe : List.of(Probe.SERVICE, Probe.HEALTH, Probe.BUSINESS, Probe.DEPENDENCIES)) {
             List<DecisionEvidence> current = evidence.values().stream()
@@ -82,6 +100,13 @@ final class DecisionEvidenceLedger {
         }
         if (cited.stream().anyMatch(e -> !e.currentAt(clock.instant())))
             throw new IllegalArgumentException("proposal cites stale evidence");
+    }
+
+    private static void validateSource(ManagedApplication app,Observation observation,Clock clock) {
+        var payload=observation.payload(); if (payload==null) return; // Legacy facts remain legacy; no source data is invented.
+        if (payload.collection().collectedAt().isAfter(clock.instant())
+                || payload.changes().stream().anyMatch(c -> !c.matches(app)))
+            throw new IllegalArgumentException("source evidence time/identity mismatch");
     }
 
     synchronized OpsDecision submitted() { return submitted; }

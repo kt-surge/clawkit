@@ -2,7 +2,7 @@
 
 此版本在**本地隔离 Linux Docker Compose** 中管理已登记的无状态服务。支持持续发现、事件归并、Agent 调查／等待／建议、人工批准或限定自主启动／重启、独立业务验证和人工交接。真实服务器自治接入另行选择目标与授权。
 
-需要 Java 21、Docker CLI 与 Compose，以及运行中的 Linux Docker daemon。Windows 可用 Docker Desktop 的 `desktop-linux` context；Linux 通常使用 `default`。仅 `run` 需要模型凭据；登记、状态、配置检查、暂停和撤销不调用模型。
+需要 Java 21、Docker CLI 与 Compose，以及运行中的 Linux Docker daemon。Windows 可用 Docker Desktop 的 `desktop-linux` context；Linux 通常使用 `default`。`run` 和 `diagnose` 需要模型凭据；登记、状态、已保存诊断、配置检查、暂停和撤销不调用模型。
 
 安装包解压后包含 `clawkit.jar`、Windows 启动器 `clawkit.cmd`、Linux 启动器 `clawkit.sh` 和隔离夹具。Linux 可执行 `sh ./clawkit.sh` 或 `java -jar ./clawkit.jar`；下方示例为 PowerShell。
 
@@ -72,6 +72,51 @@ docker --context desktop-linux compose -f .\ops-fixtures\layered-autonomy\compos
 ```
 
 状态显示应用、目标、控制进程是否运行、当前权限、事件、最近观察时间、标准事实、动作及结果。默认用中文展示服务／健康／业务／依赖事实；`status --details` 或 `events --details` 可展开模型判断和事件细节，模型判断不替代事实。控制进程未运行时，这是已保存的历史观察。事件归并不会为相同异常反复调用模型；等待／补证有截止时间和次数限制。成功要求新会话中的服务、健康、业务连续通过；命令退出码 0 不等于恢复。
+
+### 多源调查与已保存诊断
+
+`diagnose` 调查当前状态，提出假设和下一步，不执行修复；`diagnosis` 查看最近保存的结果，不再次调用模型。持续运行的 `run` 使用相同诊断合同，再进入既有授权、现场复查与独立验证链。
+
+```powershell
+.\clawkit.cmd autonomy diagnose orders --state-dir .\demo-state
+.\clawkit.cmd autonomy diagnosis orders --state-dir .\demo-state --details
+```
+
+诊断显示支持证据、反证、未知项和替代解释。日志限最近两分钟、最多 200 行与有界摘要，先脱敏；空结果不代表没有错误，截断会明确标记。资源采集提供 Docker 的 OOMKilled、退出信息及可得的当前内存快照；没有历史指标时不推断内存趋势。旧错误日志不能单独推翻当前健康业务。证据过期、来源不完整或相互冲突时，Agent 需要补证或交接。
+
+每次调查有独立记录，包含引用、时间窗、来源状态和内容哈希。模型诊断是推断；配置、依赖和资源问题不因一条“重启建议”获得额外动作权限。默认产品记录不包含原始模型推理轨迹。
+
+已采集到当前 OOMKilled 或截断来源时，程序拒绝启动和重启建议，保留调查并转交人工。服务处于停止状态也不豁免这项条件。初始服务/健康/业务/依赖事实由产品采集，Agent 按假设选择额外来源，过期或冲突时再刷新。
+
+### 导入人工或 CI 变更记录
+
+变更记录必须对应已登记的应用、环境、服务和应用版本。下面示例对应第 2 节的 `orders` 登记；把版本及摘要换成实际变更。不要填密钥。导入不会修改服务配置或发布应用。
+
+```powershell
+@{
+  id='release-v2'; applicationId='orders'; applicationVersion=1
+  environment='clawkit-autonomy-demo'; service='orders'
+  occurredAt=(Get-Date).ToUniversalTime().ToString('o')
+  configurationVersion='v2'; summary='更新了接口配置，需核对运行版本'
+  operator='local-user'
+} | ConvertTo-Json | Set-Content -Encoding utf8 .\change.json
+.\clawkit.cmd autonomy change-import orders --state-dir .\demo-state --input .\change.json
+```
+
+相同 ID 的相同内容可重复导入；内容不同则拒绝覆盖。调查按最近 24 小时读取有界记录。变更时间接近故障只能支持关联，配置原因还需要日志或其他事实佐证。
+
+### 可选内存历史
+
+已有本地 Prometheus 和 cAdvisor 时，可显式登记指标来源：
+
+```powershell
+.\clawkit.cmd autonomy metrics orders --state-dir .\demo-state --metrics-url http://127.0.0.1:9090
+.\clawkit.cmd autonomy metrics orders off --state-dir .\demo-state
+```
+
+仅用固定模板查询已登记容器的 `container_memory_working_set_bytes`，读取最近五分钟、30 秒步长，并限制响应、序列和样本数。缺失、过期、NaN、warning、身份不符及超时均保留状态；没有这套指标服务也能使用其他调查能力。
+
+每次 Agent 运行默认预算为 120 秒、6 次模型请求、12 次工具调用和 30,000 Token；单次输出上限 4096。登记检查和初始发现按各只读采集器的限制执行。多源诊断默认关闭额外原生思考，将假设、证据和不确定性写入结构化诊断。输出截断或预算耗尽会留档并交接，不算完成诊断。
 
 ## 5. 在夹具中注入故障
 

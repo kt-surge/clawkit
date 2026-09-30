@@ -44,6 +44,13 @@ public class ApplicationBootstrap {
             com.clawkit.ops.delivery.managed.ManagedOperationsService service,String id,String model,String baseUrl,String protocol,
             java.util.function.Consumer<com.clawkit.ops.delivery.managed.ManagedOperationsService.EventView> events,
             com.clawkit.ops.delivery.managed.ManagedOperationsService.NotificationConfiguration notifications) throws Exception {
+        return service.open(id,managedProvider(model,baseUrl,protocol),events,notifications);
+    }
+    public static com.clawkit.ops.delivery.managed.ManagedOperationsService.DiagnosisView managedDiagnosis(
+            com.clawkit.ops.delivery.managed.ManagedOperationsService service,String id,String model,String baseUrl,String protocol) throws Exception {
+        return service.diagnose(id,managedProvider(model,baseUrl,protocol));
+    }
+    private static LLMProvider managedProvider(String model,String baseUrl,String protocol) {
         var resolved=ConfigResolver.resolve(model,baseUrl,protocol,false,null,System.getenv(),Path.of(System.getProperty("user.home")));
         if (resolved.apiKey()==null || resolved.apiKey().isBlank())
             throw new ConfigurationException("C-003","CLAWKIT_API_KEY is not set","autonomy control was not started","Set CLAWKIT_API_KEY before run; status and check do not need a key.");
@@ -51,7 +58,7 @@ public class ApplicationBootstrap {
         var config=LLMConfig.builder().apiKey(resolved.apiKey()).baseUrl(effective.baseUrl()).model(effective.model())
             .protocol(LLMConfig.Protocol.valueOf(effective.protocol().toUpperCase(java.util.Locale.ROOT)))
             .requestTimeout(Duration.ofSeconds(Math.min(45,effective.requestTimeoutSeconds()))).maxRetries(0).build();
-        return service.open(id,ProviderFactory.create(config),events,notifications);
+        return ProviderFactory.create(config);
     }
 
     /**

@@ -121,6 +121,19 @@ class ManagedIncidentControllerTest {
         }
     }
 
+    @Test void missingOptionalSourcesDoNotPreventIndependentSelfRecovery() throws Exception {
+        try (var fixture=new Fixture(ActionPolicy.Mode.LIMITED_AUTO)) {
+            fixture.disposition=OpsDecision.Disposition.INVESTIGATE;
+            fixture.investigationProbes=List.of(Probe.RESOURCES,Probe.CHANGES,Probe.METRICS);
+            fixture.start(); fixture.controller.tick();
+            fixture.running=true; fixture.healthy=true;
+            clock.advance(Duration.ofSeconds(5)); fixture.controller.tick();
+            assertThat(fixture.controller.status().current().state()).isEqualTo(ManagedIncident.State.RECOVERED);
+            assertThat(fixture.decisions).hasValue(1); assertThat(fixture.writes).hasValue(0);
+            assertThat(fixture.store.observations().source()).isEqualTo("INDEPENDENT_VERIFICATION");
+        }
+    }
+
     @Test void importantChangedEvidenceCanReevaluateBeforeLongWaitExpires() throws Exception {
         try (var fixture=new Fixture(ActionPolicy.Mode.LIMITED_AUTO)) {
             fixture.disposition=OpsDecision.Disposition.WAIT; fixture.recheckSeconds=60;
@@ -238,6 +251,7 @@ class ManagedIncidentControllerTest {
         final ManagedIncidentController controller;
         boolean running,healthy,unknown;
         OpsDecision.Disposition disposition=OpsDecision.Disposition.PROPOSE_ACTION;
+        List<Probe> investigationProbes=List.of(Probe.LOGS);
         int recheckSeconds=5;
         java.util.function.Consumer<ManagedIncidentStore.Event> extraListener=event -> {};
         Runnable beforeRead=() -> {};
@@ -252,7 +266,7 @@ class ManagedIncidentControllerTest {
                 var refs=context.baseline().stream().map(DecisionEvidence::id).toList();
                 var d=new OpsDecision(disposition,"scripted controller contract",refs,
                     disposition==OpsDecision.Disposition.PROPOSE_ACTION ? OpsDecision.Playbook.START_STOPPED_V1 : null,
-                    disposition==OpsDecision.Disposition.INVESTIGATE ? List.of(Probe.LOGS) : List.of(),
+                    disposition==OpsDecision.Disposition.INVESTIGATE ? investigationProbes : List.of(),
                     disposition==OpsDecision.Disposition.INVESTIGATE || disposition==OpsDecision.Disposition.WAIT ? recheckSeconds : null);
                 return new OpsDecisionAgent.Outcome(OpsDecisionAgent.Origin.MODEL,d,context.baseline(),List.of(),List.of(),"test double",null);
             },(a,p) -> {
@@ -273,7 +287,7 @@ class ManagedIncidentControllerTest {
             return new Observation(a.targetId(),a.composeProject(),a.service(),p,clock.instant(),switch(p) {
                 case SERVICE -> running ? Status.RUNNING : Status.STOPPED;
                 case DEPENDENCIES -> Status.HEALTHY;
-                case LOGS -> Status.UNKNOWN;
+                case LOGS,RESOURCES,CHANGES,METRICS -> Status.UNKNOWN;
                 default -> healthy ? Status.HEALTHY : Status.UNHEALTHY;
             },"normalized controller fixture");
         }

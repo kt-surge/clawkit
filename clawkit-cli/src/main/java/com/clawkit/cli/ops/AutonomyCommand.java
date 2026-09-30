@@ -11,10 +11,10 @@ import java.util.concurrent.Callable;
 import picocli.CommandLine.*;
 import picocli.CommandLine.Model.CommandSpec;
 
-/** Deterministic product commands; only run creates a narrowly scoped operations Agent. */
+/** Deterministic product commands; run and diagnose create a narrowly scoped read-only operations Agent. */
 @Command(name="autonomy",mixinStandardHelpOptions=true,description={
     "登记和管理隔离 Linux Compose 服务的分层自治闭环。",
-    "操作：register, policy, check, run, status, events, approve, reject, command-result, handoff, notifications, pause, resume, stop。",
+    "操作：register, policy, check, diagnose, diagnosis, change-import, metrics, run, status, events, approve, reject, command-result, handoff, notifications, pause, resume, stop。",
     "登记默认需审批；policy limited-auto 需要 --confirm-reviewed 和 --review-note。"})
 public final class AutonomyCommand implements Callable<Integer> {
     @Spec CommandSpec spec;
@@ -40,15 +40,20 @@ public final class AutonomyCommand implements Callable<Integer> {
     @Option(names="--once",description="只执行一个观察/决定周期后退出") boolean once;
     @Option(names="--limit",defaultValue="20",description="最近事件条数（1..100）") int limit;
     @Option(names="--details",description="展开原始 Agent 判断和事件细节（默认仅展示标准事实）") boolean details;
+    @Option(names="--input",description="人工/CI 变更记录 JSON 文件") Path input;
+    @Option(names="--metrics-url",description="已部署的本地 Prometheus 地址，固定查询登记容器的内存历史") URI metricsUrl;
     @Option(names="--model",description="运行所用模型") String model;
     @Option(names="--base-url",description="模型 API endpoint") String baseUrl;
     @Option(names="--protocol",description="模型协议") String protocol;
     @Option(names="--notify",description="启用已选择会话的飞书通知；需要 --chat-id 和机器人环境凭据") boolean notify;
     @Option(names="--chat-id",description="明确选择的飞书接收会话 ID（不由 Agent 决定）") String chatId;
     private final ServiceFactory services;
+    private final DiagnosisFactory diagnosisFactory;
     @FunctionalInterface interface ServiceFactory { ManagedOperationsService create(Path stateDirectory) throws Exception; }
+    @FunctionalInterface interface DiagnosisFactory { ManagedOperationsService.DiagnosisView diagnose(ManagedOperationsService service,String id,String model,String baseUrl,String protocol) throws Exception; }
     public AutonomyCommand() { this(ApplicationBootstrap::managedOperations); }
-    AutonomyCommand(ServiceFactory services) { this.services=services; }
+    AutonomyCommand(ServiceFactory services) { this(services,ApplicationBootstrap::managedDiagnosis); }
+    AutonomyCommand(ServiceFactory services,DiagnosisFactory diagnosisFactory) { this.services=services; this.diagnosisFactory=diagnosisFactory; }
     @Override public Integer call() throws Exception {
         PrintWriter out=spec.commandLine().getOut();
         if (operation==null) { spec.commandLine().usage(out); return 0; }
@@ -77,6 +82,20 @@ public final class AutonomyCommand implements Callable<Integer> {
                     out.println("权限已更新；故障或未知结果导致的持久化降级仍保留。");
                 }
                 case "check" -> { render(service.check(applicationId),out,details); out.println("配置和已登记容器身份检查通过；未调用模型或修复。"); }
+                case "change-import" -> {
+                    require(input,"--input"); service.importChange(applicationId,input,operator());
+                    out.println("变更记录已导入；后续诊断可引用，时间关联仍需补证。");
+                }
+                case "metrics" -> {
+                    if (!"off".equals(argument)) require(metricsUrl,"--metrics-url（或 metrics <应用> off 关闭）");
+                    service.configureMetrics(applicationId,"off".equals(argument) ? null : metricsUrl);
+                    out.println("指标来源配置已更新；缺失/过期/warning 结果会显式保留。");
+                }
+                case "diagnose" -> {
+                    var view=diagnosisFactory.diagnose(service,applicationId,model,baseUrl,protocol);
+                    renderDiagnosis(view,out,details); if (view.failureType()!=null) return 2;
+                }
+                case "diagnosis" -> renderDiagnosis(service.diagnosis(applicationId),out,details);
                 case "status", "handoff" -> render(service.status(applicationId),out,details);
                 case "events" -> { for (var event:service.events(applicationId,limit)) render(event,out,details); }
                 case "notifications" -> {
@@ -164,6 +183,27 @@ public final class AutonomyCommand implements Callable<Integer> {
             +(details ? "  "+event.detail() : "")); out.flush(); }
     }
     private static String time(Instant value) { return java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault()).format(value); }
+    public static void renderDiagnosis(ManagedOperationsService.DiagnosisView view,PrintWriter out,boolean details) {
+        out.println("应用："+view.applicationId()+"  诊断时间："+(view.at()==null ? "尚无" : time(view.at())));
+        out.println("调查结论："+view.summary());
+        for (var h:view.hypotheses()) {
+            String cause=switch(h.cause()) { case "DEPENDENCY_FAILURE" -> "上游依赖故障"; case "CONFIGURATION_MISMATCH" -> "配置不匹配";
+                case "RESOURCE_EXHAUSTION" -> "资源压力"; case "APPLICATION_FAILURE" -> "应用自身故障";
+                case "SELF_RECOVERY" -> "已自行恢复"; default -> "原因待确认"; };
+            String assessment=switch(h.assessment()) { case "SUPPORTED" -> "有证据支持的推断"; case "SUSPECTED" -> "待补证假设"; default -> "未知"; };
+            out.println(cause+"（"+assessment+"）："+h.explanation());
+            if (!h.supportRefs().isEmpty()) out.println("  支持证据："+String.join(", ",h.supportRefs()));
+            if (!h.counterRefs().isEmpty()) out.println("  反证："+String.join(", ",h.counterRefs()));
+            if (!h.missingEvidence().isEmpty()) out.println("  待确认："+String.join("；",h.missingEvidence()));
+            if (!h.alternatives().isEmpty()) out.println("  替代解释："+String.join(", ",h.alternatives()));
+        }
+        if (view.failureType()!=null) out.println("调查已交接人工："+view.failureType());
+        if (view.decision()!=null) out.println("建议："+switch(view.decision()) { case "WAIT" -> "等待复查"; case "INVESTIGATE" -> "继续补证";
+            case "PROPOSE_ACTION" -> action(view.action())+"，仍需现有授权与现场复查"; default -> "交接人工处理"; });
+        if (details) for (var evidence:view.evidence()) out.println("["+evidence.id()+"] "+evidence.probe()+" "+time(evidence.at())+" "+evidence.quality()
+            +" "+evidence.summary()+"（"+evidence.limitation()+"）");
+        out.println("诊断记录："+view.artifact()); out.flush();
+    }
     private static String facts(Map<String,String> values) {
         List<String> facts=new ArrayList<>();
         for (String probe:List.of("SERVICE","HEALTH","BUSINESS","DEPENDENCIES")) {

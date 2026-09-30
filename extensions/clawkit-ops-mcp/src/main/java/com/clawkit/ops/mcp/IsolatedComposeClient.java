@@ -29,6 +29,7 @@ public final class IsolatedComposeClient {
                 throw new IllegalArgumentException("registered daemon/config identity required");
             IsolatedComposeClient.containerId(containerId);
             dependencies=Map.copyOf(dependencies);
+            if (dependencies.size()>16) throw new IllegalArgumentException("at most sixteen registered dependencies supported");
             mounts=Map.copyOf(mounts);
             if (dependencies.containsKey(service)) throw new IllegalArgumentException("a service cannot depend on itself");
             dependencies.forEach((serviceName,id) -> { identifier(serviceName); IsolatedComposeClient.containerId(id); });
@@ -37,7 +38,11 @@ public final class IsolatedComposeClient {
     public record MountPin(String source,String hostPath,String contentHash) {}
     public record Container(String id,String state,boolean restarting,String restartPolicy,boolean writableMount,String health) {}
     public enum DependencyHealth { HEALTHY, UNHEALTHY, UNKNOWN }
+    public record DependencyFact(String service,String containerId,String state,boolean restarting,String health) {}
     public enum Action { START, RESTART }
+    public record LogRead(String redactedText,boolean complete,boolean truncated,String limitation) {}
+    public record ResourceSnapshot(boolean oomKilled,int exitCode,java.time.Instant finishedAt,
+                                   Long memoryUsageBytes,Long memoryLimitBytes,String limitation) {}
     private final Target target;
     private final CommandExecutor commands;
     public IsolatedComposeClient(Target target,CommandExecutor commands) { this.target=Objects.requireNonNull(target); this.commands=Objects.requireNonNull(commands); }
@@ -45,6 +50,7 @@ public final class IsolatedComposeClient {
 
     public static Target register(CommandExecutor commands,Path composeFile,String context,String project,String service,List<String> dependencies) throws Exception {
         identifier(context); identifier(project); identifier(service);
+        if (dependencies==null || dependencies.size()>16) throw new IllegalArgumentException("at most sixteen registered dependencies supported");
         if (!project.startsWith("clawkit-autonomy-")) throw new IllegalArgumentException("isolated project prefix required");
         Path file=composeFile.toRealPath();
         String endpoint=read(commands,context,List.of("context","inspect",context,"--format","{{.Endpoints.docker.Host}}"));
@@ -73,15 +79,67 @@ public final class IsolatedComposeClient {
     }
 
     public Container service() throws Exception { verifyEnvironment(); return inspect(target.service(),target.containerId()); }
+    /** A fixed time window and tail, no follow or arbitrary container arguments. Stderr may contain Docker log data. */
+    public LogRead logs(java.time.Instant since,java.time.Instant until) throws Exception {
+        service();
+        if (since==null || until==null || since.isAfter(until)
+                || Duration.between(since,until).compareTo(Duration.ofMinutes(15))>0)
+            throw new IllegalArgumentException("bounded log window required");
+        var result=commands.execute(command(target.context(),List.of("logs","--since",since.toString(),"--until",until.toString(),
+            "--tail","200","--timestamps",target.containerId())),Map.of(),Duration.ofSeconds(5),8192);
+        if (!result.success()) return new LogRead("",false,result.truncated(),"container logs unavailable; no inference from missing output");
+        String text=LogSanitizer.sanitizeAll(result.stdout()+"\n"+result.stderr()).text().strip();
+        boolean truncated=result.truncated() || text.length()>1200 || text.contains("...[TRUNCATED]");
+        if (text.length()>1200) text=text.substring(0,1200);
+        // Tail itself is a sampling bound, not evidence that no older errors exist.
+        return new LogRead(text,true,truncated,truncated ? "log byte/summary cap reached" : "last 200 lines within requested window; empty means no returned lines");
+    }
+    public ResourceSnapshot resources() throws Exception {
+        Container container=service();
+        String format="{{json .State.OOMKilled}} {{json .State.ExitCode}} {{json .State.FinishedAt}} {{json .HostConfig.Memory}}";
+        String raw=read(commands,target.context(),List.of("inspect","--format",format,target.containerId()));
+        List<JsonNode> parts;
+        try (var parser=JSON.createParser(raw); var values=JSON.readValues(parser,JsonNode.class)) { parts=values.readAll(); }
+        if (parts.size()!=4 || !parts.get(0).isBoolean() || !parts.get(1).isIntegralNumber() || !parts.get(3).isIntegralNumber())
+            throw new IOException("resource inspect contract mismatch");
+        java.time.Instant finished=parts.get(2).asText().startsWith("0001-") ? null : java.time.Instant.parse(parts.get(2).asText());
+        long configuredLimit=parts.get(3).asLong();
+        Long usage=null;
+        String limitation="snapshot only; no historical trend";
+        if ("running".equals(container.state())) {
+            var result=commands.execute(command(target.context(),List.of("stats","--no-stream","--format","{{json .MemUsage}}",target.containerId())),
+                Map.of(),Duration.ofSeconds(5),1024);
+            if (result.success() && !result.truncated()) {
+                try { usage=memoryBytes(JSON.readTree(result.stdout().strip()).asText().split("/",2)[0].strip()); }
+                catch (Exception ignored) { limitation+="; memory usage unavailable"; }
+            } else limitation+="; memory usage unavailable";
+        } else limitation+="; stopped container has no current memory usage";
+        return new ResourceSnapshot(parts.get(0).asBoolean(),parts.get(1).asInt(),finished,usage,
+            configuredLimit>0 ? configuredLimit : null,limitation);
+    }
+    private static long memoryBytes(String value) {
+        var matcher=java.util.regex.Pattern.compile("([0-9]+(?:\\.[0-9]+)?)\\s*(B|KiB|MiB|GiB|TiB|kB|KB|MB|GB|TB)").matcher(value);
+        if (!matcher.matches()) throw new IllegalArgumentException("unrecognized memory unit");
+        String unit=matcher.group(2);
+        int power=switch(unit) { case "B" -> 0; case "KiB","kB","KB" -> 1; case "MiB","MB" -> 2; case "GiB","GB" -> 3; default -> 4; };
+        var bytes=new java.math.BigDecimal(matcher.group(1)).multiply(java.math.BigDecimal.valueOf(unit.contains("i") ? 1024 : 1000).pow(power));
+        return bytes.setScale(0,java.math.RoundingMode.HALF_UP).longValueExact();
+    }
     public DependencyHealth dependenciesHealth() throws Exception {
-        verifyEnvironment();
         boolean unknown=false;
-        for (var entry:target.dependencies().entrySet()) {
-            Container container=inspect(entry.getKey(),entry.getValue());
+        for (var container:dependencyFacts()) {
             if (!"running".equals(container.state()) || container.restarting() || "unhealthy".equals(container.health())) return DependencyHealth.UNHEALTHY;
             if (!"healthy".equals(container.health())) unknown=true;
         }
         return unknown ? DependencyHealth.UNKNOWN : DependencyHealth.HEALTHY;
+    }
+    public List<DependencyFact> dependencyFacts() throws Exception {
+        verifyEnvironment(); var facts=new ArrayList<DependencyFact>();
+        for (var entry:target.dependencies().entrySet()) {
+            var container=inspect(entry.getKey(),entry.getValue());
+            facts.add(new DependencyFact(entry.getKey(),container.id(),container.state(),container.restarting(),container.health()));
+        }
+        return List.copyOf(facts);
     }
     public CommandResult execute(Action action) throws Exception {
         Container current=service();

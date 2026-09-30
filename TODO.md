@@ -49,7 +49,8 @@
 - **[x] INTELLIGENCE-E0：基线与协议** — 2026-09-30 完成。先修复 Fixture 调度竞争和 Windows 8.3 临时目录夹具身份问题，保留原有断言；提交 `fe29447` 的 GitHub CI/CodeQL 成功。协议增量：保留供应商 finish_reason，输出截断/过滤/未完成响应不进入工具执行；流式坏参数不再退成 `{}`，拒绝多余 JSON、空身份和损坏片段。Ops 单次输出默认从 1536 调整至 4096，允许显式 512..16384 配置，原生思考采用供应商默认且保留工具轮次 reasoning_content；总运行预算仍为 120 秒/30000 Token/6 请求/12 工具。请求预留计入声明输出、工具描述和推理内容；失败响应按实际 usage 结算，流式错误只结算一次。原始失败/实际用量和分类继续归档，系统交接不计模型成功。
 
   验证：新增 10 项协议/预算/决定合同检查；全量 `clean verify` 14 个 Reactor SUCCESS，当前模块 169 份 XML 共 1514 项、0 failure/0 error、5 skipped；Runtime baseline compare 为 UNCHANGED/0 degraded。日志 `tmp/intelligence-e0-clean-verify-20260930.log` / `tmp/intelligence-e0-baseline-compare-20260930.log`。小型实际模型冒烟 `tmp/intelligence-e0-live-20260930-01/` 通过：2 请求/5049 actual Token，5 项 test-double 观察，提交启动建议；仅验证模型协议，不计容器恢复或正式率。开发回归失败两次分别为故障输入在同一测试累积触发熔断、测试使用错误事件字段，修正后通过，原日志未删除。旧 P4 分数及全部失败不变。
-- **[ ] INTELLIGENCE-E1：多源证据与诊断** — 有界日志、资源事实、变更导入、可选指标接口、支持/反证/缺口及产品展示。先做依赖故障、变更关联、OOM 与历史错误反例；保持现有权限与动作范围。
+- **[x] INTELLIGENCE-E1：多源证据与诊断** — 2026-10-01 完成统一来源/时间窗/质量/哈希合同、Docker 有界日志和资源事实、人工/CI 变更导入、可选 Prometheus 固定查询及 `diagnose/diagnosis` 产品入口。Agent 自选补证，提交假设、支持/反证、缺口和替代解释；程序检查引用与条件，不生成根因。缺失/过期/冲突、身份漂移、截断、OOM 和预算失败保持保守停止；可选来源缺失不阻断独立业务恢复。权限、既有动作范围和独立验证链保持原合同。
+  验证：CI 同条件 clean verify 14 模块通过（173 suites，1527 tests，0 failures/errors，6 skipped），Runtime baseline compare 为 UNCHANGED、0 degraded；实际 DeepSeek + 独立 Compose 容器的四条调查链开发冒烟完成，依赖/配置/OOM 交接、历史错误但当前健康等待，共 13 实际请求/80906 Token，容器清理通过。此前四轮及专项失败保留在 `tmp/intelligence-e1-live-*`，含截断、字段校验、缺失引用、OOM 错误启动建议被门禁拒绝后预算耗尽；不将最后一轮 4/4 写成正式成功率。Prometheus 的异常来源合同用本地 HTTP 测试验证，未运行真实监控平台；正式对照仍由 E4 冻结。
 - **[ ] INTELLIGENCE-E2：处置知识与经验反馈** — 案例归档、版本化流程、按需检索、复盘草稿、回放审阅和撤销；知识资格与用户动作授权分开，不自动提权。
 - **[ ] INTELLIGENCE-E3：告警与事件协同** — 一个外部告警源、身份与关联、事件继续处理、通知/审批反馈；飞书卡片单独验收，不以受控传输代替实际送达。
 - **[ ] INTELLIGENCE-E4：新冻结对照与交付** — 同证据强规则、普通 Agent、审核知识消融；根因、处置、恢复、关联及失败成本分别记录，打包可安装增量，保留首轮原始负面结果。

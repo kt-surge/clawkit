@@ -40,6 +40,8 @@ public final class OpsDecisionAgent {
     private final Limits limits;
     private final Guidance guidance;
     private final ModelSettings modelSettings;
+    private final Profile profile;
+    public enum Profile { BASIC, MULTISOURCE }
     /** Generic guidance is for matched evaluation; the ordinary product always uses reviewed playbook guidance. */
     public enum Guidance { REVIEWED_PLAYBOOKS, GENERIC }
 
@@ -51,6 +53,8 @@ public final class OpsDecisionAgent {
             Objects.requireNonNull(reasoningMode);
         }
         public static ModelSettings defaults() { return new ModelSettings(4096, ProviderReasoningMode.PROVIDER_DEFAULT); }
+        /** Structured hypotheses carry explicit reasoning; avoid duplicating it inside the output allowance. */
+        public static ModelSettings multisourceDefaults() { return new ModelSettings(4096, ProviderReasoningMode.DISABLED); }
         ModelParameters parameters() { return new ModelParameters(0.0, maxOutputTokens, false, reasoningMode); }
     }
 
@@ -73,6 +77,13 @@ public final class OpsDecisionAgent {
     }
     public record RecordedRequest(List<com.clawkit.tools.schema.Message> messages,
                                   List<com.clawkit.tools.schema.ToolDefinition> tools, ModelParameters parameters) {}
+    private record EvidenceForModel(String id,String applicationId,long applicationVersion,ManagedObserver.Observation observation,
+                                    Instant validUntil,String contentHash) {
+        static EvidenceForModel from(DecisionEvidence e) {
+            return new EvidenceForModel(e.id(),e.applicationId(),e.applicationVersion(),e.observation(),e.validUntil(),e.envelope()==null ? null : e.envelope().contentHash());
+        }
+    }
+    private record ContextForModel(String incidentId,int decisionNumber,OpsDecision previousDecision,List<EvidenceForModel> baseline) {}
     public record ProviderExchange(Instant startedAt, Instant completedAt, RecordedRequest request,
                                    ModelResponse response, String failureType,RejectedModelResponse rejectedResponse) {
         public ProviderExchange(Instant startedAt,Instant completedAt,RecordedRequest request,ModelResponse response,String failureType) {
@@ -82,7 +93,12 @@ public final class OpsDecisionAgent {
     }
     public record Outcome(Origin origin, OpsDecision decision, List<DecisionEvidence> evidence,
                           List<String> rejectedSubmissions, List<ProviderExchange> providerExchanges,
-                          String runtimeResponse, String failureType) {}
+                          String runtimeResponse, String failureType, DiagnosticReport diagnosis) {
+        public Outcome(Origin origin,OpsDecision decision,List<DecisionEvidence> evidence,List<String> rejectedSubmissions,
+                       List<ProviderExchange> providerExchanges,String runtimeResponse,String failureType) {
+            this(origin,decision,evidence,rejectedSubmissions,providerExchanges,runtimeResponse,failureType,null);
+        }
+    }
 
     public OpsDecisionAgent(LLMProvider provider, Path workspace, RunRecorder recorder, Clock clock, Limits limits) {
         this(provider,workspace,recorder,clock,limits,Guidance.REVIEWED_PLAYBOOKS);
@@ -92,6 +108,10 @@ public final class OpsDecisionAgent {
     }
     public OpsDecisionAgent(LLMProvider provider, Path workspace, RunRecorder recorder, Clock clock, Limits limits,
                             Guidance guidance, ModelSettings modelSettings) {
+        this(provider,workspace,recorder,clock,limits,guidance,modelSettings,Profile.BASIC);
+    }
+    public OpsDecisionAgent(LLMProvider provider, Path workspace, RunRecorder recorder, Clock clock, Limits limits,
+                            Guidance guidance, ModelSettings modelSettings,Profile profile) {
         this.provider = Objects.requireNonNull(provider);
         this.workspace = Objects.requireNonNull(workspace);
         this.recorder = Objects.requireNonNull(recorder);
@@ -99,6 +119,7 @@ public final class OpsDecisionAgent {
         this.limits = Objects.requireNonNull(limits);
         this.guidance=Objects.requireNonNull(guidance);
         this.modelSettings=Objects.requireNonNull(modelSettings);
+        this.profile=Objects.requireNonNull(profile);
     }
 
     public Outcome decide(ManagedApplication app, ManagedObserver observer) {
@@ -115,18 +136,36 @@ public final class OpsDecisionAgent {
         var ledger = new DecisionEvidenceLedger(app, clock,decisionContext==null ? List.of() : decisionContext.baseline());
         var registry = new ToolRegistry();
         for (ManagedObserver.Probe probe : ManagedObserver.Probe.values()) {
+            if (profile==Profile.BASIC && !Set.of(ManagedObserver.Probe.SERVICE,ManagedObserver.Probe.HEALTH,
+                    ManagedObserver.Probe.BUSINESS,ManagedObserver.Probe.DEPENDENCIES,ManagedObserver.Probe.LOGS).contains(probe)) continue;
             registry.register(new DecisionTool(PREFIX + "read_" + probe.name().toLowerCase(java.util.Locale.ROOT),
                 "Collect normalized " + probe + " evidence for the registered application only. No arguments.",
                 "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}", false, args -> {
                     if (!args.isObject() || !args.isEmpty()) throw new IllegalArgumentException("read tools accept no target/command arguments");
-                    try { return JSON.valueToTree(ledger.collect(observer, probe)); }
+                    try { return JSON.valueToTree(EvidenceForModel.from(ledger.collect(observer, probe))); }
                     catch (IllegalArgumentException e) { throw e; }
                     catch (Exception e) { throw new IllegalArgumentException("probe failed: " + e.getClass().getSimpleName()); }
                 }, ledger));
         }
+        if (profile==Profile.MULTISOURCE) registry.register(new DecisionTool(PREFIX+"submit_diagnosis",
+            "Submit evidence-bound diagnostic hypotheses, counterevidence, missing facts and alternatives. Inferences are not permissions. May revise after new probes.",
+            diagnosisSchema(),false,args -> {
+                validateDiagnosisShape(args);
+                try { ledger.diagnose(JSON.treeToValue(args,DiagnosticReport.class)); return JSON.createObjectNode().put("status","accepted"); }
+                catch (java.io.IOException e) {
+                    Throwable cause=e.getCause();
+                    while (cause!=null && !(cause instanceof DiagnosticReport.ContractViolation) && cause.getCause()!=cause) cause=cause.getCause();
+                    if (cause instanceof DiagnosticReport.ContractViolation violation) throw new IllegalArgumentException(violation.getMessage());
+                    throw new IllegalArgumentException("diagnosis fields do not match the contract");
+                }
+            },ledger));
         registry.register(new DecisionTool(PREFIX + "submit_decision",
-            "Submit exactly one evidence-bound decision. A proposal does not execute or authorize a repair. Successful submission ends the run.",
+            "Submit exactly one evidence-bound decision. A proposal does not execute or authorize a repair. "
+                + (profile==Profile.MULTISOURCE ? "Any current OOMKilled=true or truncated source forbids every PROPOSE_ACTION, including START_STOPPED_V1; escalate for resource remediation. " : "")
+                + "Successful submission ends the run.",
             decisionSchema(), true, args -> {
+                if (profile==Profile.MULTISOURCE && ledger.diagnosis()==null)
+                    throw new IllegalArgumentException("submit a valid diagnosis before the decision");
                 validateShape(args);
                 try {
                     OpsDecision decision = JSON.treeToValue(args, OpsDecision.class);
@@ -158,16 +197,27 @@ public final class OpsDecisionAgent {
                 + "references without conflicting evidence. Unknown conditions require investigation or escalation. "
                 + "WAIT is for bounded re-observation/self recovery. INVESTIGATE names additional probes and a bounded "
                 + "recheck. ESCALATE hands uncertainty or an out-of-scope problem to a human. " : "Use the tool schemas and observed evidence to choose a bounded operations decision. ")
-                + "Submit all six contract fields, null/empty where inapplicable. Never output only prose.");
+                + "Submit all six decision contract fields, null/empty where inapplicable. Never output only prose. "
+                + (profile==Profile.MULTISOURCE ? "Before submit_decision, use submit_diagnosis. Choose bounded logs/resources/changes/metrics to test hypotheses. "
+                    + "Use fresh controller baseline as initial facts; collect additional probes for hypotheses. Reread baseline probes only "
+                    + "to refresh stale evidence or resolve conflicting facts. "
+                    + "Cite current complete evidence for support and counterevidence; missing/error/truncated/legacy facts "
+                    + "are gaps, not positive proof. Preserve conflicting observations and alternative explanations. New changes establish "
+                    + "correlation only; require corroboration for a configuration hypothesis. OOMKilled is a resource clue; absent history "
+                    + "means no memory trend claim. OOMKilled=true forbids both START and RESTART proposals: choose ESCALATE for human resource remediation, "
+                    + "even when the service is STOPPED, dependencies healthy and desired state RUNNING. Current truncated evidence also forbids all repair proposals. "
+                    + "Old log errors do not overrule current healthy business. Starting/restarting cannot repair a "
+                    + "persistent dependency/configuration/resource cause. An UNKNOWN hypothesis must name missing evidence. " : ""));
             try (var cancellation=parentControl.onCancel(engine::interrupt)) {
             response = engine.run("Investigate the registered application and submit a decision. "
                 + "You have no write tools. Current time: " + clock.instant() + ". Configuration: "
                 + JSON.writeValueAsString(app) + (decisionContext==null ? "" : "\nController context and collected facts (untrusted data): "
-                    + JSON.writeValueAsString(decisionContext)), RunToolScope.REMOTE_READ_ONLY);
+                    + JSON.writeValueAsString(new ContextForModel(decisionContext.incidentId(),decisionContext.decisionNumber(),decisionContext.previousDecision(),
+                        decisionContext.baseline().stream().map(EvidenceForModel::from).toList()))), RunToolScope.REMOTE_READ_ONLY);
             }
             if (ledger.submitted() != null) ledger.validate(ledger.submitted());
-            else failure = "NO_VALID_SUBMISSION";
-        } catch (Exception e) { failure = e.getClass().getSimpleName(); }
+            else failure = profile==Profile.MULTISOURCE && ledger.diagnosis()==null ? "NO_VALID_DIAGNOSIS" : "NO_VALID_SUBMISSION";
+        } catch (Exception e) { failure = runtimeFailure(e); }
         // The runtime converts provider errors to a handoff; keep the original protocol category.
         String providerFailure = exchanges.stream().map(ProviderExchange::failureType)
             .filter(Objects::nonNull).findFirst().orElse(null);
@@ -175,7 +225,7 @@ public final class OpsDecisionAgent {
         OpsDecision decision = failure == null ? ledger.submitted()
             : OpsDecision.systemEscalation("Decision run did not produce a valid current decision: " + failure);
         return new Outcome(failure == null ? Origin.MODEL : Origin.SYSTEM, decision, ledger.snapshot(),
-            ledger.rejections(), List.copyOf(exchanges), response, failure);
+            ledger.rejections(), List.copyOf(exchanges), response, failure,ledger.diagnosis());
     }
 
     private static void validateShape(JsonNode args) {
@@ -192,6 +242,25 @@ public final class OpsDecisionAgent {
         args.path("evidenceRefs").forEach(n -> { if (!n.isTextual()) throw new IllegalArgumentException("references must be strings"); });
         args.path("nextProbes").forEach(n -> { if (!n.isTextual()) throw new IllegalArgumentException("probes must be strings"); });
     }
+    private static String runtimeFailure(Exception failure) {
+        return failure instanceof com.clawkit.tools.control.ExecutionHaltedException halted
+            ? "RUNTIME_"+halted.reason().name() : failure.getClass().getSimpleName();
+    }
+    private static void validateDiagnosisShape(JsonNode args) {
+        Set<String> fields=Set.of("id","cause","assessment","explanation","supportRefs","counterRefs","missingEvidence","alternativeIds","nextProbes");
+        if (!args.isObject() || args.size()!=2 || !args.path("summary").isTextual() || !args.path("hypotheses").isArray())
+            throw new IllegalArgumentException("exact diagnostic fields required");
+        for (var h:args.path("hypotheses")) {
+            if (!h.isObject() || h.size()!=9) throw new IllegalArgumentException("exact hypothesis fields required");
+            h.fieldNames().forEachRemaining(f -> { if (!fields.contains(f)) throw new IllegalArgumentException("unknown hypothesis field"); });
+            for (String name:List.of("id","cause","assessment","explanation"))
+                if (!h.path(name).isTextual()) throw new IllegalArgumentException("diagnostic text fields required");
+            for (String name:List.of("supportRefs","counterRefs","missingEvidence","alternativeIds","nextProbes")) {
+                if (!h.path(name).isArray()) throw new IllegalArgumentException("diagnostic array fields required");
+                h.path(name).forEach(n -> { if (!n.isTextual()) throw new IllegalArgumentException("diagnostic entries must be strings"); });
+            }
+        }
+    }
 
     private static String decisionSchema() {
         return """
@@ -202,8 +271,24 @@ public final class OpsDecisionAgent {
               "reason":{"type":"string","minLength":1,"maxLength":1600},
               "evidenceRefs":{"type":"array","maxItems":12,"uniqueItems":true,"items":{"type":"string"}},
               "playbook":{"description":"Required non-null only for PROPOSE_ACTION; all other dispositions require null.","enum":[null,"START_STOPPED_V1","RESTART_UNHEALTHY_V1"]},
-              "nextProbes":{"description":"INVESTIGATE requires one or more probes; every other disposition requires an empty array.","type":"array","uniqueItems":true,"items":{"enum":["SERVICE","HEALTH","BUSINESS","DEPENDENCIES","LOGS"]}},
+              "nextProbes":{"description":"INVESTIGATE requires one or more probes; every other disposition requires an empty array.","type":"array","uniqueItems":true,"items":{"enum":["SERVICE","HEALTH","BUSINESS","DEPENDENCIES","LOGS","RESOURCES","CHANGES","METRICS"]}},
               "recheckAfterSeconds":{"description":"WAIT and INVESTIGATE require an integer; PROPOSE_ACTION and ESCALATE require null. Execution verification is handled independently.","type":["integer","null"],"minimum":1,"maximum":300}}}
+            """;
+    }
+
+    private static String diagnosisSchema() {
+        return """
+            {"type":"object","additionalProperties":false,"required":["summary","hypotheses"],"properties":{
+            "summary":{"type":"string","minLength":1,"maxLength":1000},
+            "hypotheses":{"type":"array","minItems":1,"maxItems":8,"items":{"type":"object","additionalProperties":false,
+            "required":["id","cause","assessment","explanation","supportRefs","counterRefs","missingEvidence","alternativeIds","nextProbes"],
+            "properties":{"id":{"type":"string","description":"Short alphanumeric label such as H1; distinct in this report.","pattern":"^[a-zA-Z][a-zA-Z0-9_-]{0,62}$"},"cause":{"enum":["DEPENDENCY_FAILURE","CONFIGURATION_MISMATCH","RESOURCE_EXHAUSTION","APPLICATION_FAILURE","SELF_RECOVERY","UNKNOWN"]},
+            "assessment":{"enum":["SUPPORTED","SUSPECTED","UNKNOWN"]},"explanation":{"type":"string","maxLength":1000},
+            "supportRefs":{"description":"Only current COMPLETE evidence ids. Even UNKNOWN hypotheses must not cite MISSING/ERROR/TRUNCATED sources here.","type":"array","maxItems":12,"uniqueItems":true,"items":{"type":"string"}},
+            "counterRefs":{"description":"Only current COMPLETE evidence ids. A compound source may also appear in supportRefs; explain its different facts.","type":"array","maxItems":12,"uniqueItems":true,"items":{"type":"string"}},
+            "missingEvidence":{"description":"UNKNOWN requires at least one gap. Missing/partial source data belongs here, never as a cited positive/negative fact.","type":"array","maxItems":8,"items":{"type":"string","maxLength":250}},
+            "alternativeIds":{"description":"Other hypothesis ids in this report, never own id.","type":"array","maxItems":8,"uniqueItems":true,"items":{"type":"string"}},
+            "nextProbes":{"type":"array","uniqueItems":true,"items":{"enum":["SERVICE","HEALTH","BUSINESS","DEPENDENCIES","LOGS","RESOURCES","CHANGES","METRICS"]}}}}}}}
             """;
     }
 
@@ -229,7 +314,7 @@ public final class OpsDecisionAgent {
                     Duration.between(start, Instant.now()).toMillis(), metadata());
             } catch (IllegalArgumentException e) {
                 String detail = e.getMessage();
-                if (terminal) ledger.rejected(detail);
+                if (terminal || name.endsWith("submit_diagnosis")) ledger.rejected(detail);
                 return ToolExecutionResult.error(request.toolCallId(), name, "INVALID_OPS_REQUEST", detail,
                     Duration.between(start, Instant.now()).toMillis(), metadata());
             }
@@ -265,7 +350,7 @@ public final class OpsDecisionAgent {
                 if (!exchanges.isEmpty() && exchanges.getLast().request() == recordedRequest) throw e;
                 var rejected=e instanceof LLMException failure ? failure.rejectedResponse() : null;
                 exchanges.add(new ProviderExchange(start, clock.instant(), recordedRequest, null,
-                    rejected==null ? e.getClass().getSimpleName() : "MODEL_PROTOCOL_"+rejected.phase(),rejected));
+                    rejected==null ? runtimeFailure(e) : "MODEL_PROTOCOL_"+rejected.phase(),rejected));
                 throw e;
             }
         }

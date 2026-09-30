@@ -213,11 +213,11 @@ public final class ManagedIncidentController implements AutoCloseable {
     }
     public record ProviderUsage(Instant startedAt,Instant completedAt,com.clawkit.provider.TokenUsage usage,String failureType) {}
     public record DecisionRecord(OpsDecisionAgent.Origin origin,OpsDecision decision,List<DecisionEvidence> evidence,
-            List<String> rejectedSubmissions,List<ProviderUsage> providerUsage,String failureType) {
+            List<String> rejectedSubmissions,List<ProviderUsage> providerUsage,String failureType,DiagnosticReport diagnosis) {
         static DecisionRecord from(OpsDecisionAgent.Outcome outcome) {
             return new DecisionRecord(outcome.origin(),outcome.decision(),outcome.evidence(),outcome.rejectedSubmissions(),
                 outcome.providerExchanges().stream().map(e -> new ProviderUsage(e.startedAt(),e.completedAt(),
-                    e.usage(),e.failureType())).toList(),outcome.failureType());
+                    e.usage(),e.failureType())).toList(),outcome.failureType(),outcome.diagnosis());
         }
     }
 
@@ -323,7 +323,9 @@ public final class ManagedIncidentController implements AutoCloseable {
         return ledger.snapshot();
     }
     private static boolean healthy(List<DecisionEvidence> evidence,Instant now) {
-        return evidence.stream().filter(e -> e.observation().probe()!=Probe.LOGS).allMatch(e -> e.currentAt(now) && (e.observation().probe()==Probe.SERVICE
+        var core=Set.of(Probe.SERVICE,Probe.HEALTH,Probe.BUSINESS,Probe.DEPENDENCIES);
+        if (!evidence.stream().map(e -> e.observation().probe()).collect(java.util.stream.Collectors.toSet()).containsAll(core)) return false;
+        return evidence.stream().filter(e -> core.contains(e.observation().probe())).allMatch(e -> e.currentAt(now) && (e.observation().probe()==Probe.SERVICE
             ? e.observation().status()==Status.RUNNING : e.observation().status()==Status.HEALTHY));
     }
     private boolean running(ExecutionControl control) {

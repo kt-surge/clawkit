@@ -1,0 +1,38 @@
+services:
+  api:
+    image: python:3.13-alpine
+    command: ["python", "-u", "/fixture/server.py"]
+    environment:
+      FIXTURE_ROLE: api
+      DEPENDENCY_URL: http://dependency:8080/health
+    mem_limit: 64m
+    volumes:
+      - ./server.py:/fixture/server.py:ro
+    ports:
+      - "127.0.0.1:${DIAGNOSTIC_API_PORT:-18280}:8080"
+    restart: "no"
+    depends_on:
+      dependency:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=1)"]
+      interval: 2s
+      timeout: 2s
+      retries: 2
+      start_period: 2s
+  dependency:
+    image: python:3.13-alpine
+    command: ["python", "-u", "/fixture/server.py"]
+    environment:
+      FIXTURE_ROLE: dependency
+    volumes:
+      - ./server.py:/fixture/server.py:ro
+    ports:
+      - "127.0.0.1:${DIAGNOSTIC_DEPENDENCY_PORT:-18281}:8080"
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=1)"]
+      interval: 2s
+      timeout: 2s
+      retries: 2
+      start_period: 2s
