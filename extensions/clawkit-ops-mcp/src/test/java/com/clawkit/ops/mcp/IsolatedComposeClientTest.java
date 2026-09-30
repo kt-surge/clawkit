@@ -73,7 +73,9 @@ class IsolatedComposeClientTest {
     }
     @Test void registrationPinsReadOnlyContentAndChangedOrMissingContentBlocksMutation() throws Exception {
         for (String fault:List.of("changed","deleted","added-tree-entry")) {
-            Path directory=Files.createDirectory(root.resolve(fault));
+            // Windows runners can expose an 8.3 alias for java.io.tmpdir.
+            // The fake Docker labels must use the canonical path pinned by registration.
+            Path directory=Files.createDirectory(root.resolve(fault)).toRealPath();
             Path compose=directory.resolve("compose.yaml"); Files.writeString(compose,"services: {}");
             Path config=Files.createDirectory(directory.resolve("config")); Files.writeString(config.resolve("app.conf"),"healthy");
             var writes=new AtomicInteger();
