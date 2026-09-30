@@ -2,6 +2,7 @@ package com.clawkit.cli.ops;
 
 import com.clawkit.ops.loop.automation.ObservedSignal;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -41,28 +42,28 @@ class FixtureAutomationControllerTest {
         assertThat(controller.view().running()).isFalse();
     }
 
-    @Test
+    @RepeatedTest(10)
     void controllerStartsTheFirstFixtureObservationOnTheJdkScheduler() throws Exception {
         controller = new FixtureAutomationController(tempDir);
         controller.start();
 
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-        while (controller.view().status().requested() == 0 && System.nanoTime() < deadline) {
-            Thread.sleep(20);
-        }
+        awaitFirstCompletedObservation();
 
         var view = controller.view();
         assertThat(view.status().requested()).isGreaterThanOrEqualTo(1);
         assertThat(view.status().completed() + view.status().merged()).isGreaterThanOrEqualTo(1);
         assertThat(view.budget().providerConsumed()).isZero();
         assertThat(view.incidentCount()).isEqualTo(1);
+
+        // Completion is persisted before the timeline projection. Stop drains
+        // the admitted callback before we verify its immutable output.
+        controller.stop();
         assertThat(controller.timeline(10)).singleElement().satisfies(entry -> {
             assertThat(entry.type()).isEqualTo("OBSERVATION_INCIDENT_CREATED");
             assertThat(entry.providerCalled()).isFalse();
             assertThat(entry.evidenceRefs()).allMatch(ref -> ref.startsWith("fixture://"));
         });
 
-        controller.stop();
         assertThat(controller.timeline(10)).hasSize(1);
     }
 
@@ -71,10 +72,7 @@ class FixtureAutomationControllerTest {
         controller = new FixtureAutomationController(tempDir);
         controller.start();
 
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-        while (controller.view().status().requested() == 0 && System.nanoTime() < deadline) {
-            Thread.sleep(20);
-        }
+        awaitFirstCompletedObservation();
         assertThatThrownBy(controller::snapshot)
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("stop");
@@ -92,10 +90,7 @@ class FixtureAutomationControllerTest {
     void shadowReplayRequiresAStoppedImmutableSnapshotAndNeverExposesAnExecutor() throws Exception {
         controller = new FixtureAutomationController(tempDir);
         controller.start();
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-        while (controller.view().status().requested() == 0 && System.nanoTime() < deadline) {
-            Thread.sleep(20);
-        }
+        awaitFirstCompletedObservation();
         assertThatThrownBy(controller::shadowReplay).isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("stop");
 
@@ -123,10 +118,7 @@ class FixtureAutomationControllerTest {
     void shadowReviewRecordsOnlyAHumanCounterfactualChoice() throws Exception {
         controller = new FixtureAutomationController(tempDir);
         controller.start();
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-        while (controller.view().status().requested() == 0 && System.nanoTime() < deadline) {
-            Thread.sleep(20);
-        }
+        awaitFirstCompletedObservation();
         controller.stop();
         controller.snapshot();
         controller.shadowReplay();
@@ -179,10 +171,7 @@ class FixtureAutomationControllerTest {
     void opsFixtureShadowReviewCommandRecordsOnlyTheCounterfactualChoice() throws Exception {
         controller = new FixtureAutomationController(tempDir);
         controller.start();
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-        while (controller.view().status().requested() == 0 && System.nanoTime() < deadline) {
-            Thread.sleep(20);
-        }
+        awaitFirstCompletedObservation();
         controller.stop();
         controller.snapshot();
         controller.shadowReplay();
@@ -203,5 +192,17 @@ class FixtureAutomationControllerTest {
         } finally {
             handler.close();
         }
+    }
+
+    private void awaitFirstCompletedObservation() throws InterruptedException {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        var status = controller.view().status();
+        while (status.completed() + status.merged() == 0 && System.nanoTime() < deadline) {
+            Thread.sleep(20);
+            status = controller.view().status();
+        }
+        assertThat(status.completed() + status.merged())
+            .as("first JDK-scheduled observation must complete within five seconds; status=%s", status)
+            .isGreaterThanOrEqualTo(1);
     }
 }
