@@ -4,6 +4,14 @@
 
 ## 设计原则
 
+2026-09-30 分层自治演进合同见 [实施方案](docs/layered-autonomy-implementation-plan.md)。人工批准与用户事先授予的限定策略必须分别建模，自动执行不得伪造人工 ApprovalGrant 或绕过统一副作用可靠性链；底层通用工具权限不随 Ops 自治模式扩大。当前真实远程自动写入仍未开放。
+
+Ops 的锁内现场复查通过 SideEffectGate 的显式 WORKFLOW precheck 装配点接入：仅可信 composition root 可传入，不由模型选择或生成；既有文件工具仍使用原确定性前置校验。登记 Compose 的人工和策略授权均进入私有工具 Registry、ToolCallExecutor、SideEffectGate 和原 Attempt journal，不使用通用 AUTO。授权记录须在 dispatch intent 前落盘；未知结果保持 journal 状态，验证失败不自动停止服务作为回滚，降级记录失败时也不得把已派发动作报告成“未执行”。
+
+分层自治 CLI 由 ApplicationBootstrap 装配 ManagedOperationsService：本地状态／事件／暂停不加载模型；持续控制每应用持有进程租约，人工命令通过绑定事件／目标／动作且最多五分钟有效的本地 Inbox 交给控制进程消费。登记与逐版本策略审阅记录持久化，用户 scope review 不等同模型评测或生产晋级。健康视图采用最近实际采集／独立验证事实及其采集时间，不把心跳或旧决定当新健康状态。
+
+重要生命周期事件先投影到本地 NotificationOutbox，独立持有投递租约的 worker 使用用户明确指定的飞书会话与稳定 UUID。重试次数及首次派发时间先落盘，超过 SDK 去重窗口的未知发送不再自动重派；通知失败不改变修复权限或结果。普通产品不保存原始模型聊天，隔离评测可显式保存标准化完整模型交换。
+
 1. 底层保持通用，垂类能力通过 MCP、Skill、工具包、插件或 workflow 接入。
 2. 解耦用于隔离变化，不以增加接口、类和模块数量作为目标。
 3. 编排层只决定流程，具体执行、解析、持久化和展示由独立组件负责。
@@ -232,6 +240,15 @@ RunEvent 是运行时与持久化的边界。业务代码只发事件，不直�
 - 原始 prompt、工具参数、工具输出和敏感凭据不落盘；只写有长度限制的脱敏摘要。
 - Reader 流式逐行容错：单行损坏跳过并报告 warning，不让整份记录不可用。
 - 并发 run 按 `ConcurrentHashMap<String, RunState>` 管理独立 writer、lock、sequence 和 accumulator。
+
+### Ops 持续控制的事实与投影
+
+- `ManagedIncidentStore` 的原子 Snapshot 是领域控制状态，`pendingEvent` 补偿 Snapshot 到事件日志／Outbox 的跨文件窗口；它不替代 Runtime RunEvent 的事实链。
+- 每个应用在同一控制工作区只允许一个持有进程租约的控制器。事件投影至少一次，通知按稳定事件 ID 去重；通知监听只持久化本地 Outbox，不在状态转换中直接发送。
+- 重复异常合并为当前事件；调查／等待受调用数、复查间隔和事件截止时间限制。未知结果交接保持 sticky，进程恢复不重新派发。已知未派发且现场自恢复时，只有独立持续验证通过后才标为恢复。
+- 外部暂停／停止文件在执行检查点读取；派发前可取消，派发后保留实际验证及结果。工作区文件损坏或投影失败时暂停自主工作并保留既有状态。
+- 普通产品持久化决定、标准证据和用量摘要；原始模型请求／响应仅显式开启隔离评测轨迹时保存，不作为默认产品日志。
+- 首轮目标固定本地 Linux Docker context、daemon、Compose 文件及完整容器 ID；只读 host bind 配置内容也登记哈希，行动前拒绝漂移。挂载树有深度、条目和字节限制，符号链接、不可读或未知挂载不能获得自动修复资格。
 
 ## CLI 与 IM
 

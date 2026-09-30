@@ -32,6 +32,27 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
  * 应用装配器。将 ClawkitApp 的 picocli 参数 + 配置组装为 ApplicationContext。
  */
 public class ApplicationBootstrap {
+    public static com.clawkit.ops.delivery.managed.ManagedOperationsService managedOperations(Path stateRoot) throws java.io.IOException {
+        return com.clawkit.ops.delivery.managed.ManagedOperationsService.local(stateRoot);
+    }
+    public static com.clawkit.ops.delivery.managed.ManagedOperationsService.RunningSession managedSession(
+            com.clawkit.ops.delivery.managed.ManagedOperationsService service,String id,String model,String baseUrl,String protocol,
+            java.util.function.Consumer<com.clawkit.ops.delivery.managed.ManagedOperationsService.EventView> events) throws Exception {
+        return managedSession(service,id,model,baseUrl,protocol,events,null);
+    }
+    public static com.clawkit.ops.delivery.managed.ManagedOperationsService.RunningSession managedSession(
+            com.clawkit.ops.delivery.managed.ManagedOperationsService service,String id,String model,String baseUrl,String protocol,
+            java.util.function.Consumer<com.clawkit.ops.delivery.managed.ManagedOperationsService.EventView> events,
+            com.clawkit.ops.delivery.managed.ManagedOperationsService.NotificationConfiguration notifications) throws Exception {
+        var resolved=ConfigResolver.resolve(model,baseUrl,protocol,false,null,System.getenv(),Path.of(System.getProperty("user.home")));
+        if (resolved.apiKey()==null || resolved.apiKey().isBlank())
+            throw new ConfigurationException("C-003","CLAWKIT_API_KEY is not set","autonomy control was not started","Set CLAWKIT_API_KEY before run; status and check do not need a key.");
+        var effective=resolved.effective();
+        var config=LLMConfig.builder().apiKey(resolved.apiKey()).baseUrl(effective.baseUrl()).model(effective.model())
+            .protocol(LLMConfig.Protocol.valueOf(effective.protocol().toUpperCase(java.util.Locale.ROOT)))
+            .requestTimeout(Duration.ofSeconds(Math.min(45,effective.requestTimeoutSeconds()))).maxRetries(0).build();
+        return service.open(id,ProviderFactory.create(config),events,notifications);
+    }
 
     /**
      * 完整装配流程，返回包含所有依赖的 ApplicationContext。
@@ -209,38 +230,11 @@ public class ApplicationBootstrap {
             return new com.clawkit.ops.delivery.RemoteMcpSessionAdapter(session);
         };
 
-        // Fix: build opsfix session from separate env config
+        // A2 current release is deliberately remote-read-only.  Do not infer write
+        // authority from CLAWKIT_REMOTE_FIX_* being present: that would silently
+        // turn a user's diagnostic shell into a remote repair client.  Fixture
+        // approval tests provide their own explicit in-memory FixSessionFactory.
         OpsInvestigationFacade.FixSessionFactory fixFactory = null;
-        String fixHost = System.getenv("CLAWKIT_REMOTE_FIX_HOST");
-        String fixUser = System.getenv("CLAWKIT_REMOTE_FIX_USER");
-        String fixIdentity = System.getenv("CLAWKIT_REMOTE_FIX_IDENTITY_FILE");
-        if (fixHost != null && !fixHost.isBlank()
-            && fixUser != null && !fixUser.isBlank()
-            && fixIdentity != null && !fixIdentity.isBlank()) {
-            String fixPort = System.getenv().getOrDefault("CLAWKIT_REMOTE_FIX_PORT", "22");
-            String fixKnownHosts = System.getenv().getOrDefault(
-                "CLAWKIT_REMOTE_FIX_KNOWN_HOSTS",
-                System.getProperty("user.home") + "/.ssh/known_hosts");
-            fixFactory = targetId -> {
-                var fixProfile = com.clawkit.ops.mcp.OpsCapabilityProfile.FIX_ORDER_API_V1;
-                String fixToolSetHash = com.clawkit.ops.mcp.OpsMcpServer
-                    .computeToolSetHash(fixProfile);
-                String fixContractHash = com.clawkit.ops.mcp.OpsMcpServer
-                    .computeExpectedToolContractHash(fixProfile);
-                // Full 5-field descriptor: targetId, profile, probeVersion, toolSetHash, toolContractHash
-                var fixTarget = new com.clawkit.ops.loop.RemoteTargetDescriptor(
-                    targetId, "FIX_ORDER_API_V1", "1",
-                    fixToolSetHash, fixContractHash);
-                var fixConfig = new com.clawkit.ops.loop.SshConnectionConfig(
-                    fixHost, Integer.parseInt(fixPort), fixUser,
-                    java.nio.file.Path.of(fixIdentity),
-                    java.nio.file.Path.of(fixKnownHosts),
-                    java.time.Duration.ofSeconds(15), java.time.Duration.ofSeconds(30), 65536);
-                var session = new com.clawkit.ops.loop.repair.OpsFixSession(fixTarget, fixConfig);
-                session.start();
-                return session;
-            };
-        }
 
         OpsInvestigationFacade opsFacade = new OpsInvestigationFacade(
             clawkitDir, borrowProvider, freshFactory, fixFactory, ProviderFactory::create);
@@ -251,7 +245,7 @@ public class ApplicationBootstrap {
             null, // reader — 由 ClawkitApp 创建（需要 Terminal 初始化）
             new java.util.ArrayList<>(), // imChannels
             workDir, effective.model(), mode, effective,
-            remoteService, remoteTargetStore, opsFacade);
+            remoteService, remoteTargetStore, opsFacade, gateway);
     }
 
     // ── 静态工具方法 ─────────────────────────────────────────────────

@@ -445,6 +445,19 @@ class AgentEngineTest {
     }
 
     @Test
+    void shouldRejectRestrictedScopeBeforePlanExecutionStarts() {
+        MockProvider provider = new MockProvider();
+        AgentEngine engine = new AgentEngine(provider, new MockRegistry(), "/tmp/work");
+        engine.setExecutionMode(com.clawkit.engine.ExecutionMode.PLAN_EXECUTE);
+
+        String result = engine.run("inspect remote service",
+            com.clawkit.tools.RunToolScope.REMOTE_READ_ONLY);
+
+        assertThat(result).contains("[A-010]");
+        assertThat(provider.turn).isZero();
+    }
+
+    @Test
     void interruptedPlanRunDoesNotPoisonNextRun() throws Exception {
         Path workDir = Files.createTempDirectory("clawkit-plan-cancel");
         MockProvider provider = new MockProvider();
@@ -498,5 +511,33 @@ class AgentEngineTest {
             Files.list(tempDir).forEach(p -> p.toFile().delete());
             Files.deleteIfExists(tempDir);
         }
+    }
+
+    @Test
+    void shouldUseProviderStreamingWhenTokenListenerIsPresent() throws Exception {
+        Path workDir = Files.createTempDirectory("clawkit-streaming");
+        String answer = "## 检查结果\n**状态**：正常";
+        StringBuilder streamed = new StringBuilder();
+        LLMProvider provider = new LLMProvider() {
+            @Override
+            public Message generate(List<Message> messages, List<ToolDefinition> tools) {
+                throw new AssertionError("blocking generate must not be used");
+            }
+
+            @Override
+            public Message generateStream(List<Message> messages, List<ToolDefinition> tools,
+                                          java.util.function.Consumer<String> onToken) {
+                onToken.accept("## 检查");
+                onToken.accept("结果\n**状态**：正常");
+                return Message.assistant(answer);
+            }
+        };
+        AgentEngine engine = new AgentEngine(provider, new MockRegistry(), workDir.toString());
+        engine.addOnTokenListener(streamed::append);
+
+        String result = engine.run("检查服务器", com.clawkit.tools.RunToolScope.REMOTE_READ_ONLY);
+
+        assertThat(result).isEqualTo(answer);
+        assertThat(streamed.toString()).isEqualTo(answer);
     }
 }

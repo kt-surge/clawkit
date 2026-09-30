@@ -54,6 +54,7 @@ class PromptAssemblyTest {
         SkillCatalog catalog = new SkillCatalog(Map.of("a", "desc A", "b", "desc B"));
         String result = PromptAssembly.assemble(L1, null, catalog, Map.of(), L4, null);
         assertThat(result).contains("## Available Skills")
+            .contains("For greetings, identity questions, feature introductions")
             .contains("- a: desc A")
             .contains("- b: desc B")
             .doesNotContain("## Loaded Skills");

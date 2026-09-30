@@ -77,6 +77,10 @@ final class EngineEventHub {
     void reasoning(String value) {
         reasoning.forEach(listener -> safe(() -> listener.accept(value), "reasoning"));
     }
+    void token(String value) {
+        tokens.forEach(listener -> safe(() -> listener.accept(value), "token"));
+    }
+    boolean hasTokenListeners() { return !tokens.isEmpty(); }
     void thinkingBegin() { if (thinkingBegin != null) safe(thinkingBegin, "thinking-begin"); }
 
     void setThinkingBegin(Runnable callback) { thinkingBegin = callback; }

@@ -79,7 +79,13 @@ public class AgentEngine implements AgentLoop {
     // ── 5-layer prompt architecture ──────────────────────────────────
 
     private static final String L1_KERNEL =
-        "You are clawkit，一个专业的编程助手。";
+        "You are CLAWKIT，一个运行在用户本地的个人 AI 运维助手。"
+            + "你帮助用户连接已经登记的服务器、查看服务状态、调查故障，"
+            + "并在用户批准后执行受限修复，再确认服务是否真的恢复。"
+            + "普通问候、身份和功能问题直接用简短中文回答，不调用工具。"
+            + "用户询问服务器状态时，只使用已经连接的远程工具；"
+            + "如果没有远程工具，说明尚未连接并提示查看服务器列表，"
+            + "不要用本地文件、Git 状态或本地 shell 猜测服务器情况。";
 
     private volatile String l2WorkspaceRules = "";
     private volatile SkillCatalog skillCatalog = SkillCatalog.empty();
@@ -237,6 +243,8 @@ public class AgentEngine implements AgentLoop {
     private volatile Long runTokenBudget;
     private volatile Long runProviderCallBudget;
     private volatile Long runToolCallBudget;
+
+    // PRODUCT-2: tool scope is passed as parameter to run(), not shared mutable state
     volatile int lastRunTurns;
     volatile boolean enableSubAgents = true;
     private final java.util.concurrent.atomic.AtomicBoolean busy = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -349,8 +357,13 @@ public class AgentEngine implements AgentLoop {
 
     @Override
     public String run(String userPrompt) {
-        log.info("[Engine] 引擎启动，锁定工作区: {}, 思考模式: {}, 执行模式: {}",
-            workDir, thinkingMode, executionMode);
+        return run(userPrompt, com.clawkit.tools.RunToolScope.ALL);
+    }
+
+    /** PRODUCT-2: parameterized run with tool scope isolation. */
+    public String run(String userPrompt, com.clawkit.tools.RunToolScope toolScope) {
+        log.info("[Engine] 引擎启动, scope={}, 工作区: {}, 思考模式: {}, 执行模式: {}",
+            toolScope, workDir, thinkingMode, executionMode);
 
         // P1-G1：每次 run 建立控制根（SubAgent 从父控制派生，共享预算并级联取消）
         com.clawkit.reliability.CancellationTree control = createRunControl();
@@ -360,6 +373,12 @@ public class AgentEngine implements AgentLoop {
         }
 
         if (executionMode == ExecutionMode.PLAN_EXECUTE) {
+            // PRODUCT-2: restricted tool scope cannot be used with plan-execute
+            // (plan coordinator does not propagate scope to individual tool runs)
+            if (toolScope != com.clawkit.tools.RunToolScope.ALL) {
+                log.warn("[Engine] PLAN_EXECUTE rejected — scope={}", toolScope);
+                return "[A-010] 受限工具范围不支持计划执行模式。请使用 /auto 切换权限模式后重试。";
+            }
             String runId = generateRunId();
             this.currentRunId = runId;
             try {
@@ -578,6 +597,15 @@ public class AgentEngine implements AgentLoop {
             }
             availableTools = new ArrayList<>(availableTools);
             availableTools.addAll(internalTools.definitions(permissionMode, enableSubAgents));
+
+            // PRODUCT-2: per-run tool scope filter (after internal tools, so they're filtered too)
+            availableTools = filterByRunToolScope(availableTools, toolScope);
+            // REMOTE_READ_ONLY must also filter out remote write tools (e.g. restart_service)
+            if (toolScope == com.clawkit.tools.RunToolScope.REMOTE_READ_ONLY) {
+                availableTools = availableTools.stream()
+                    .filter(t -> registry.isReadOnly(t.name()))
+                    .toList();
+            }
             if (thinkingMode == ThinkingMode.TWO_STAGE) {
                 log.info("[Engine] 慢思考阶段2: 带工具执行 ({})...", availableTools.size());
             } else {
@@ -648,7 +676,7 @@ public class AgentEngine implements AgentLoop {
                 (p, rid, prid, tn, t) -> {
                     events.record(p, rid, prid, tn, t);
                 },
-                internalToolRouter, approvalCache, control);
+                internalToolRouter, approvalCache, control, toolScope);
             var batchResult = toolCallExecutor.executeBatch(calls, execCtx);
             for (ToolExecutionResult result : batchResult.results()) {
                 fireToolEnd(result);
@@ -861,6 +889,23 @@ public class AgentEngine implements AgentLoop {
             || content.equals(buildSystemPrompt());
     }
 
+    /** PRODUCT-2: filter tools by run scope. Remote tools are prefixed mcp__remote_. */
+    private List<ToolDefinition> filterByRunToolScope(List<ToolDefinition> tools,
+                                                       com.clawkit.tools.RunToolScope scope) {
+        if (scope == null || scope == com.clawkit.tools.RunToolScope.ALL) return tools;
+        return switch (scope) {
+            case ALL -> tools;
+            case NO_TOOLS -> List.of();
+            case LOCAL_ONLY -> tools.stream()
+                .filter(t -> !t.name().startsWith("mcp__remote_"))
+                .toList();
+            case REMOTE_READ_ONLY -> tools.stream()
+                .filter(t -> t.name().startsWith("mcp__remote_")
+                    && registry.isReadOnly(t.name()))
+                .toList();
+        };
+    }
+
     /** Provider 调用唯一入口。 */
     private Message callProvider(List<Message> messages, List<ToolDefinition> tools,
                                   int turn, RunPhase phase) {
@@ -870,7 +915,30 @@ public class AgentEngine implements AgentLoop {
         var req = ModelRequest.of(messages, stableTools);
         var scope = new RunScope(currentRunId, parentRunId, turn, phase, executionMode,
             activeControl());
-        var resp = providerGateway.generate(req, scope);
+        var resp = events.hasTokenListeners()
+            ? providerGateway.generateStream(req, scope, new com.clawkit.provider.StreamObserver() {
+                @Override
+                public void onContent(String delta) {
+                    if (delta != null && !delta.isEmpty()) events.token(delta);
+                }
+
+                @Override
+                public void onToolCallDelta(int index, String toolCallId,
+                                            String toolName, String argumentsDelta) {
+                    // Tool-call protocol deltas are assembled by the Provider. They are not UI text.
+                }
+
+                @Override
+                public void onComplete(com.clawkit.provider.ModelResponse response) {
+                    // The synchronous return value remains the source of truth for the Agent loop.
+                }
+
+                @Override
+                public void onError(com.clawkit.provider.ProviderError error) {
+                    // ObservingProviderGateway records and propagates the structured failure.
+                }
+            })
+            : providerGateway.generate(req, scope);
         if (resp.hasToolCalls()) {
             return Message.assistantWithTools(resp.content(), resp.toolCalls(),
                 resp.reasoningContent());

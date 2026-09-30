@@ -1,0 +1,37 @@
+services:
+  orders:
+    image: python:3.13-alpine
+    command: ["python", "-u", "/fixture/server.py"]
+    environment:
+      FIXTURE_ROLE: orders
+      DEPENDENCY_URL: http://catalog:8080/health
+    volumes:
+      - ./server.py:/fixture/server.py:ro
+    ports:
+      - "127.0.0.1:${AUTONOMY_ORDERS_PORT:-18180}:8080"
+    restart: "no"
+    depends_on:
+      catalog:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=1)"]
+      interval: 2s
+      timeout: 2s
+      retries: 2
+      start_period: 2s
+  catalog:
+    image: python:3.13-alpine
+    command: ["python", "-u", "/fixture/server.py"]
+    environment:
+      FIXTURE_ROLE: catalog
+    volumes:
+      - ./server.py:/fixture/server.py:ro
+    ports:
+      - "127.0.0.1:${AUTONOMY_CATALOG_PORT:-18181}:8080"
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=1)"]
+      interval: 2s
+      timeout: 2s
+      retries: 2
+      start_period: 2s

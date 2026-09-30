@@ -113,10 +113,7 @@ public final class NotificationOutbox {
                                 String chatId, EventType eventType) throws IOException {
         String key = idempotencyKey(incidentId, reportVersion, chatId, eventType);
         Entry existing = findByKey(key);
-        if (existing != null) {
-            if (existing.state() == State.SENT) return existing; // already sent
-            if (existing.state() == State.PERMANENT_FAILED) return existing; // don't retry
-        }
+        if (existing != null) return existing; // replay must not reset attempts, createdAt or delivery state
         String chatHash = hashChatId(chatId);
         Entry entry = new Entry(key, incidentId, reportVersion, chatHash,
             eventType, State.PENDING, null, null, 0,
@@ -193,8 +190,8 @@ public final class NotificationOutbox {
      * Atomic persist with CAS: if on-disk entry was already updated by another
      * process (e.g. concurrently marked SENT), reject the stale write.
      *
-     * <p>R4: Prevents two dispatchers from double-sending the same notification.
-     * DISPATCHING after crash recovers via the same idempotency key.
+     * <p>This guards stale SENT projections, not a cross-process send lease.
+     * Dispatchers must hold a separate process lease while sending.
      */
     private synchronized void persist(Entry entry) throws IOException {
         Files.createDirectories(outboxDir);
@@ -210,10 +207,14 @@ public final class NotificationOutbox {
             }
         }
 
-        Path tmp = outboxDir.resolve(entry.idempotencyKey() + ".tmp");
-        MAPPER.writerWithDefaultPrettyPrinter().writeValue(tmp.toFile(), entry);
-        Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE,
-            StandardCopyOption.REPLACE_EXISTING);
+        Path tmp = outboxDir.resolve(entry.idempotencyKey() + "." + UUID.randomUUID() + ".tmp");
+        byte[] bytes=MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(entry);
+        try {
+            try (var channel=java.nio.channels.FileChannel.open(tmp,java.nio.file.StandardOpenOption.CREATE_NEW,java.nio.file.StandardOpenOption.WRITE)) {
+                var buffer=java.nio.ByteBuffer.wrap(bytes); while (buffer.hasRemaining()) channel.write(buffer); channel.force(true);
+            }
+            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
+        } finally { Files.deleteIfExists(tmp); }
     }
 
     /** List entries in RETRYABLE_FAILED state that can be retried. */

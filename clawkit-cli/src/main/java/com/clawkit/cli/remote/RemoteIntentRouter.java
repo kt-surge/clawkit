@@ -22,8 +22,15 @@ public class RemoteIntentRouter {
         "^(?:连接到?|连接|connect\\s+to\\s+)([a-z0-9][a-z0-9_-]{0,62})(?:\\s*服务器)?[\\s。.]*$",
         Pattern.CASE_INSENSITIVE);
 
+    // PRODUCT-2: 常见中文说法匹配，避免进入 LLM
+    // 规则：必须包含"服务器/远程"或"状态/状况/情况"，避免裸动词匹配
     private static final Pattern STATUS_PATTERN = Pattern.compile(
-        "^(?:查看)?(?:远程)?连接状态[\\s。.]*$",
+        "^(?:(?:查看|看看|看一下|看下|检查)(?:当前|现在)?(?:服务器|远程)(?:连接)?(?:状态|状况|情况)?"
+            + "|(?:查看|看看|看一下|看下|检查)(?:当前|现在)?(?:连接)?(?:状态|状况|情况)"
+            + "|(?:当前|现在)?(?:服务器|远程)(?:连接)?(?:状态|状况|情况)"
+            + "|(?:查看)?(?:远程)?连接状态"
+            + "|现在连接了哪台服务器"
+            + ")[\\s。.]*$",
         Pattern.CASE_INSENSITIVE);
 
     private static final Pattern DISCONNECT_PATTERN = Pattern.compile(

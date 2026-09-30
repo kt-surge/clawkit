@@ -17,7 +17,7 @@ public final class OpsCommandParser {
     private OpsCommandParser() {}
 
     public enum SubCommand {
-        INVESTIGATE, RECENT, INSPECT, CONTINUE, HELP, UNKNOWN
+        INVESTIGATE, RECENT, INSPECT, CONTINUE, FEEDBACK, DOGFOOD_STATUS, OBSERVE_FIXTURE, HELP, UNKNOWN
     }
 
     public record ParsedCommand(
@@ -68,6 +68,22 @@ public final class OpsCommandParser {
             String id = trimmed.substring(9).strip();
             return new ParsedCommand(SubCommand.CONTINUE, null, null, null,
                 id.isEmpty() ? null : id, 0);
+        }
+
+        if (lower.startsWith("feedback ")) {
+            String payload = trimmed.substring(9).strip();
+            return new ParsedCommand(SubCommand.FEEDBACK, null, null,
+                payload.isEmpty() ? null : payload, null, 0);
+        }
+
+        if (lower.equals("dogfood") || lower.equals("dogfood status")) {
+            return new ParsedCommand(SubCommand.DOGFOOD_STATUS, null, null, null, null, 0);
+        }
+
+        if (lower.equals("observe fixture") || lower.startsWith("observe fixture ")) {
+            String action = trimmed.substring("observe fixture".length()).strip();
+            return new ParsedCommand(SubCommand.OBSERVE_FIXTURE, null, null,
+                action.isEmpty() ? "status" : action, null, 0);
         }
 
         if (lower.startsWith("investigate")) {

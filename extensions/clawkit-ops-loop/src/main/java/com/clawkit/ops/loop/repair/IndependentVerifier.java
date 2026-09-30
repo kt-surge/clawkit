@@ -44,7 +44,10 @@ public final class IndependentVerifier {
             opsroSession.start();
 
             DiscoveryProfile profile = DiscoveryProfile.REMOTE_APP_DOWN_V1;
-            RemoteDiscoveryCoordinator coordinator = new RemoteDiscoveryCoordinator(opsroSession);
+            // Keep verification collection on the verifier clock as well; a
+            // mixed system clock would make a fresh read look stale under a
+            // deterministic workflow clock.
+            RemoteDiscoveryCoordinator coordinator = new RemoteDiscoveryCoordinator(opsroSession, clock);
             DiscoveryResult discovery = coordinator.collect(incidentId,
                 "run-" + verificationRunId, profile);
 
@@ -107,7 +110,9 @@ public final class IndependentVerifier {
 
         try {
             DiscoveryProfile profile = DiscoveryProfile.REMOTE_APP_DOWN_V1;
-            RemoteDiscoveryCoordinator coordinator = new RemoteDiscoveryCoordinator(session);
+            // The caller may use a deterministic or monotonic workflow clock;
+            // collection must share it before applying freshness checks.
+            RemoteDiscoveryCoordinator coordinator = new RemoteDiscoveryCoordinator(session, clock);
             DiscoveryResult discovery = coordinator.collect(incidentId,
                 "run-" + verificationRunId, profile);
 

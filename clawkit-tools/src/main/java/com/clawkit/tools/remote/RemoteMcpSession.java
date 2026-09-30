@@ -76,7 +76,7 @@ public final class RemoteMcpSession implements AutoCloseable {
      */
     public static final java.util.Set<String> SSH_ENV_ALLOWLIST = java.util.Set.of(
         "PATH", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH",
-        "SYSTEMROOT", "COMSPEC", "SSH_AUTH_SOCK", "SSH_AGENT_PID",
+        "SYSTEMROOT", "PROGRAMDATA", "COMSPEC", "SSH_AUTH_SOCK", "SSH_AGENT_PID",
         "LANG", "LC_ALL", "TEMP", "TMP", "TMPDIR"
     );
 

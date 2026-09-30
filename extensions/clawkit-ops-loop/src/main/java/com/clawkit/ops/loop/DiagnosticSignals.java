@@ -31,6 +31,7 @@ public record DiagnosticSignals(
         boolean lockAcquired = false;
         boolean lockReleased = false;
         boolean appDown = false;
+        boolean applicationHttpFailing = false;
         double maxCpu = 0;
         List<String> relevant = new ArrayList<>();
 
@@ -90,18 +91,26 @@ public record DiagnosticSignals(
                         relevant.add(item.evidenceId());
                     }
                 }
+                case HTTP_PROBE -> {
+                    int statusCode = data.path("statusCode").asInt(-1);
+                    if (statusCode <= 0) statusCode = data.path("status").asInt(-1);
+                    if (statusCode > 0 && statusCode != 200) {
+                        applicationHttpFailing = true;
+                        relevant.add(item.evidenceId());
+                    }
+                }
                 default -> { }
             }
         }
 
         boolean completedLock = lockAcquired && lockReleased;
-        String root = appDown ? "APP_DOWN"
+        String root = appDown && applicationHttpFailing ? "APP_DOWN"
             : lockWait ? "DB_LOCK_WAIT"
             : poolSaturated ? "CONNECTION_EXHAUSTION"
             : maxCpu >= CPU_PRESSURE_PERCENT ? "CPU_PRESSURE"
             : completedLock && incidentDegraded ? "DB_LOCK_WAIT"
             : "INCONCLUSIVE";
-        boolean currentCauseActive = appDown || lockWait || poolSaturated
+        boolean currentCauseActive = appDown && applicationHttpFailing || lockWait || poolSaturated
             || maxCpu >= CPU_PRESSURE_PERCENT;
         String condition = currentCauseActive ? "ACTIVE"
             : currentHealthy ? "RECOVERED"

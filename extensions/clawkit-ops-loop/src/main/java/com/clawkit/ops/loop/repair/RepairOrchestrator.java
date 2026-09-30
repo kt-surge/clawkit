@@ -52,13 +52,16 @@ public final class RepairOrchestrator {
     public RepairResult executeApprovedRepair(
             ApprovalGrant grant, RepairAction action, String serviceId,
             String canonicalTarget, OpsReadSession opsroSession,
-            String incidentId, OpsFixSession fixSession, String runId) throws IOException {
+            String incidentId, FixSession fixSession, String runId) throws IOException {
 
         var seq = new AtomicInteger(0);
 
         emit(seq, runId, incidentId, null, "fresh_precheck_started", "in_progress", "new opsro session");
         DiscoveryProfile profile = DiscoveryProfile.REMOTE_APP_DOWN_V1;
-        RemoteDiscoveryCoordinator precheckCoord = new RemoteDiscoveryCoordinator(opsroSession);
+        // Use the same injected clock for collection and freshness evaluation.
+        // Mixing a system-clock collector with a workflow/test clock can turn
+        // newly collected evidence into a false stale precheck result.
+        RemoteDiscoveryCoordinator precheckCoord = new RemoteDiscoveryCoordinator(opsroSession, clock);
         DiscoveryResult precheckDiscovery = precheckCoord.collect(incidentId, "precheck-" + runId, profile);
         EvidenceBundle freshEvidence = precheckDiscovery.bundle();
         Instant now = clock.instant();
@@ -144,12 +147,20 @@ public final class RepairOrchestrator {
             emit(seq, runId, incidentId, attemptId, "execution_reported",
                 result.certainty() == EffectCertainty.EFFECT_CONFIRMED ? "ok" : "failed",
                 "certainty=" + result.certainty());
-        } catch (IOException e) {
-            emit(seq, runId, incidentId, attemptId, "execution_reported", "unknown", "SSH: " + e.getMessage());
-            safeReportOutcome(ticket, EffectCertainty.EFFECT_UNKNOWN, FailureClass.TIMEOUT_OUTCOME_UNKNOWN, e.getMessage());
+        } catch (Exception e) {
+            // The dispatch intent is already durable. Any non-fatal failure
+            // after that point — including an adapter/runtime failure rather
+            // than only an IOException — leaves the remote effect unknown and
+            // must never escape into a path that can re-dispatch the action.
+            emit(seq, runId, incidentId, attemptId, "execution_reported", "unknown",
+                "dispatch failure: " + e.getMessage());
+            FailureClass failureClass = e instanceof IOException
+                ? FailureClass.TIMEOUT_OUTCOME_UNKNOWN
+                : FailureClass.EXECUTION_ERROR_OUTCOME_UNKNOWN;
+            safeReportOutcome(ticket, EffectCertainty.EFFECT_UNKNOWN, failureClass, e.getMessage());
             return new RepairResult(grant.incidentId(), attemptId, runId, AttemptState.OUTCOME_UNKNOWN,
-                EffectCertainty.EFFECT_UNKNOWN, FailureClass.TIMEOUT_OUTCOME_UNKNOWN,
-                "SSH failure", start, clock.instant(), null);
+                EffectCertainty.EFFECT_UNKNOWN, failureClass,
+                "dispatch outcome unknown", start, clock.instant(), null);
         }
 
         ActionAttempt reported = safeReportOutcome(ticket, result.certainty(), result.failureClass(), result.detail());

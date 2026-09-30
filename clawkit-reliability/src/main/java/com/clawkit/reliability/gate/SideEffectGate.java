@@ -36,6 +36,7 @@ public final class SideEffectGate {
 
     private final ActionAttemptCoordinator coordinator;
     private final VerificationHandler verificationHandler;
+    private final PrecheckHandler precheckHandler;
 
     public SideEffectGate(ActionAttemptCoordinator coordinator) {
         this(coordinator, null);
@@ -43,9 +44,23 @@ public final class SideEffectGate {
 
     public SideEffectGate(ActionAttemptCoordinator coordinator,
                           VerificationHandler verificationHandler) {
+        this(coordinator, verificationHandler, null);
+    }
+
+    /** Domain workflow prechecks run after begin() holds the durable target mutex, before dispatch intent. */
+    public SideEffectGate(ActionAttemptCoordinator coordinator,
+                          VerificationHandler verificationHandler, PrecheckHandler precheckHandler) {
         this.coordinator = coordinator;
         this.verificationHandler = verificationHandler;
+        this.precheckHandler = precheckHandler;
     }
+
+    @FunctionalInterface
+    public interface PrecheckHandler {
+        PrecheckOutcome check(ActionAttempt attempt);
+    }
+
+    public record PrecheckOutcome(boolean passed, String evidence) {}
 
     @FunctionalInterface
     public interface VerificationHandler {
@@ -109,6 +124,10 @@ public final class SideEffectGate {
                 "副作用工具未提供可信 ActionDescriptor，按 fail-closed 拒绝执行。"
                 + "工具必须实现 describeAction()。", FailureClass.PRECONDITION_FAILED);
         }
+        if (precheckHandler != null && descriptor.verificationMode() != VerificationMode.WORKFLOW) {
+            return blocked(toolCallId,toolName,meta,"T-SEG-010",
+                "A domain precheck is allowed only for an explicitly declared workflow action",FailureClass.PRECONDITION_FAILED);
+        }
 
         AttemptTicket ticket;
         try {
@@ -153,8 +172,20 @@ public final class SideEffectGate {
                 .withReliability(null, FailureClass.CANCELLED_BEFORE_DISPATCH, ticket.attemptId());
         }
 
-        DeterministicVerifier.Verdict precheck =
-            DeterministicVerifier.verifyPreconditions(descriptor.preconditions());
+        DeterministicVerifier.Verdict precheck;
+        try {
+            if (precheckHandler == null) {
+                precheck = DeterministicVerifier.verifyPreconditions(descriptor.preconditions());
+            } else {
+                PrecheckOutcome checked = precheckHandler.check(current);
+                precheck = new DeterministicVerifier.Verdict(checked.passed(), checked.evidence());
+            }
+        } catch (Exception e) {
+            safeCancelBeforeDispatch(ticket, "domain precheck failed: " + e.getClass().getSimpleName());
+            return blocked(toolCallId, toolName, meta, "T-SEG-007",
+                "Domain precheck failed before dispatch", FailureClass.PRECONDITION_FAILED)
+                .withReliability(EffectCertainty.NOT_DISPATCHED, FailureClass.PRECONDITION_FAILED, ticket.attemptId());
+        }
         try {
             coordinator.completePrecheck(ticket, precheck.passed(), precheck.detail());
         } catch (RuntimeException e) {
@@ -167,6 +198,13 @@ public final class SideEffectGate {
                 FailureClass.PRECONDITION_FAILED)
                 .withReliability(EffectCertainty.NOT_DISPATCHED,
                     FailureClass.PRECONDITION_FAILED, ticket.attemptId());
+        }
+
+        if (control != null && control.isCancelled()) {
+            safeCancelBeforeDispatch(ticket, "cancelled after fresh precheck");
+            return ToolExecutionResult.cancelled(toolCallId, toolName,
+                "Cancelled after precheck; action not dispatched", 0, meta, true)
+                .withReliability(EffectCertainty.NOT_DISPATCHED, FailureClass.CANCELLED_BEFORE_DISPATCH, ticket.attemptId());
         }
 
         // durable DISPATCH_INTENT：落盘后崩溃/超时一律按可能已发送处理

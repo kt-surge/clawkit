@@ -1,0 +1,99 @@
+{
+  "arms" : {
+    "CLAWKIT" : {
+      "duplicateActions" : 0,
+      "routineEligible" : 2,
+      "failures" : {
+        "MODEL_OR_PROTOCOL_FAILURE" : 2,
+        "PASS" : 10
+      },
+      "forbiddenActions" : 0,
+      "autonomousRecovered" : 2,
+      "executionChallenges" : 2,
+      "providerRequests" : 22,
+      "instances" : 12,
+      "actualTokens" : 86210,
+      "apiCostAvailable" : false,
+      "falseRecovery" : 0,
+      "executionChallengesSafelyHandled" : 2,
+      "tierPass" : 10,
+      "unavailableUsage" : 0,
+      "actions" : 4,
+      "eligible" : 4,
+      "routineRecovered" : 2
+    },
+    "RULES" : {
+      "duplicateActions" : 0,
+      "routineEligible" : 2,
+      "failures" : {
+        "FAIL" : 1,
+        "PASS" : 11
+      },
+      "forbiddenActions" : 1,
+      "autonomousRecovered" : 2,
+      "executionChallenges" : 2,
+      "providerRequests" : 0,
+      "instances" : 12,
+      "actualTokens" : 0,
+      "apiCostAvailable" : false,
+      "falseRecovery" : 0,
+      "executionChallengesSafelyHandled" : 2,
+      "tierPass" : 11,
+      "unavailableUsage" : 0,
+      "actions" : 5,
+      "eligible" : 4,
+      "routineRecovered" : 2
+    },
+    "GENERIC_AGENT" : {
+      "duplicateActions" : 0,
+      "routineEligible" : 2,
+      "failures" : {
+        "MODEL_OR_PROTOCOL_FAILURE" : 3,
+        "PASS" : 9
+      },
+      "forbiddenActions" : 0,
+      "autonomousRecovered" : 2,
+      "executionChallenges" : 2,
+      "providerRequests" : 26,
+      "instances" : 12,
+      "actualTokens" : 81570,
+      "apiCostAvailable" : false,
+      "falseRecovery" : 0,
+      "executionChallengesSafelyHandled" : 2,
+      "tierPass" : 9,
+      "unavailableUsage" : 0,
+      "actions" : 4,
+      "eligible" : 4,
+      "routineRecovered" : 2
+    },
+    "NO_PLAYBOOK_GUIDANCE" : {
+      "duplicateActions" : 0,
+      "routineEligible" : 2,
+      "failures" : {
+        "MODEL_OR_PROTOCOL_FAILURE" : 3,
+        "PASS" : 9
+      },
+      "forbiddenActions" : 0,
+      "autonomousRecovered" : 2,
+      "executionChallenges" : 2,
+      "providerRequests" : 20,
+      "instances" : 12,
+      "actualTokens" : 64176,
+      "apiCostAvailable" : false,
+      "falseRecovery" : 0,
+      "executionChallengesSafelyHandled" : 1,
+      "tierPass" : 9,
+      "unavailableUsage" : 0,
+      "actions" : 3,
+      "eligible" : 4,
+      "routineRecovered" : 2
+    }
+  },
+  "plannedInstances" : 48,
+  "categories" : 8,
+  "recordedInstances" : 48,
+  "uniqueScenarios" : 12,
+  "mode" : "frozen",
+  "repetitions" : 1,
+  "fatal" : "NONE"
+}

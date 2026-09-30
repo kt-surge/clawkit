@@ -52,7 +52,7 @@ public final class OpsInvestigationFacade implements AutoCloseable {
     }
     @FunctionalInterface
     public interface FixSessionFactory {
-        OpsFixSession openFix(String targetId) throws IOException;
+        com.clawkit.ops.loop.repair.FixSession openFix(String targetId) throws IOException;
     }
 
     // ── Approval preparation result (no user interaction yet) ───────────
@@ -61,6 +61,9 @@ public final class OpsInvestigationFacade implements AutoCloseable {
                                      Diagnosis diagnosis, DiscoveryResult precheckDiscovery,
                                      String snapshot,
                                      com.clawkit.tools.action.ActionDescriptor descriptor) {}
+
+    private record DiagnosisDecision(Diagnosis diagnosis, boolean providerCalled,
+                                     String failureCode, DiagnosisProvenance provenance) {}
 
     // ── Constructor ─────────────────────────────────────────────────────
 
@@ -115,11 +118,14 @@ public final class OpsInvestigationFacade implements AutoCloseable {
             emitProgress(interaction, 2, 4, "已取得 " + discovery.bundle().evidence().size()
                 + " 项证据，正在判断原因……", UserIncidentStatus.DIAGNOSING);
             updateManifestStatus(incidentId, UserIncidentStatus.DIAGNOSING);
-            Diagnosis diagnosis = runDiagnosis(discovery, effectiveSvc);
-            RemoteIncidentResult result = new RemoteIncidentResult(discovery, diagnosis, true, null,
-                clock.instant());
+            DiagnosisDecision diagnosisDecision = runDiagnosis(discovery, effectiveSvc,
+                request.question());
+            Diagnosis diagnosis = diagnosisDecision.diagnosis();
+            RemoteIncidentResult result = new RemoteIncidentResult(discovery, diagnosis,
+                diagnosisDecision.providerCalled(), diagnosisDecision.failureCode(), clock.instant(),
+                diagnosisDecision.provenance());
             String report = renderReport(request.targetId(), effectiveSvc, discovery, diagnosis,
-                UserIncidentStatus.INCONCLUSIVE);
+                diagnosisDecision.provenance(), UserIncidentStatus.INCONCLUSIVE);
             incidentStore.updateInvestigationResult(incidentId, result, diagnosisToStatus(diagnosis));
             incidentStore.writeReport(incidentId, report);
 
@@ -252,7 +258,7 @@ public final class OpsInvestigationFacade implements AutoCloseable {
         try (FileActionAttemptStore attemptStore = new FileActionAttemptStore(attemptDir)) {
             orchestrator = new RepairOrchestrator(attemptStore, clock);
             try (OpsReadSession freshPrecheckForOrch = freshFactory.openFresh(targetId);
-                 OpsFixSession fixSession = fixFactory.openFix(targetId)) {
+                 com.clawkit.ops.loop.repair.FixSession fixSession = fixFactory.openFix(targetId)) {
                 repairResult = orchestrator.executeApprovedRepair(grant,
                     RepairAction.RESTART_SERVICE, serviceId, "target:" + targetId,
                     freshPrecheckForOrch, incidentId, fixSession, repairRunId);
@@ -348,6 +354,10 @@ public final class OpsInvestigationFacade implements AutoCloseable {
                 verifySummary = "验证未完成，可重新尝试验证";
             }
 
+        } else if (repairResult.attemptState() == AttemptState.CANCELLED_NO_EFFECT) {
+            finalStatus = UserIncidentStatus.NO_ACTION_REQUIRED;
+            verifySummary = "服务已自行恢复 — 执行前复查发现状态已恢复正常，自动取消修复操作";
+            actionExecuted = "";
         } else if (repairResult.attemptState() == AttemptState.OUTCOME_UNKNOWN) {
             finalStatus = UserIncidentStatus.NEEDS_HUMAN;
             verifySummary = "执行结果未知，需要人工检查远端状态";
@@ -439,6 +449,10 @@ public final class OpsInvestigationFacade implements AutoCloseable {
                 }
                 case RESOLVED -> emitError(incidentId, targetId, serviceId,
                     "问题已恢复，无需继续操作。", interaction);
+                case NO_ACTION_REQUIRED -> emitError(incidentId, targetId, serviceId,
+                    "服务已自行恢复，无需操作。", interaction);
+                case FAILED_NO_EFFECT -> emitError(incidentId, targetId, serviceId,
+                    "操作已确认未产生远端副作用，无法继续。建议人工登录检查。", interaction);
                 case REJECTED, CANCELLED -> emitError(incidentId, targetId, serviceId,
                     "操作已被拒绝或取消，无法继续。", interaction);
                 default -> emitError(incidentId, targetId, serviceId,
@@ -474,14 +488,16 @@ public final class OpsInvestigationFacade implements AutoCloseable {
             DiscoveryResult discovery = new RemoteDiscoveryCoordinator(session, clock)
                 .collect(incidentId, "reinvest-" + UUID.randomUUID().toString().substring(0, 8),
                     DiscoveryProfile.REMOTE_APP_DOWN_V1);
-            Diagnosis diagnosis = runDiagnosis(discovery, serviceId);
-            RemoteIncidentResult result = new RemoteIncidentResult(discovery, diagnosis, true, null,
-                clock.instant());
+            DiagnosisDecision diagnosisDecision = runDiagnosis(discovery, serviceId, null);
+            Diagnosis diagnosis = diagnosisDecision.diagnosis();
+            RemoteIncidentResult result = new RemoteIncidentResult(discovery, diagnosis,
+                diagnosisDecision.providerCalled(), diagnosisDecision.failureCode(), clock.instant(),
+                diagnosisDecision.provenance());
             incidentStore.updateInvestigationResult(incidentId, result,
                 diagnosisToStatus(diagnosis));
             incidentStore.writeReport(incidentId,
                 renderReport(targetId, serviceId, discovery, diagnosis,
-                    UserIncidentStatus.INCONCLUSIVE));
+                    diagnosisDecision.provenance(), UserIncidentStatus.INCONCLUSIVE));
 
             if (!"APP_DOWN".equals(diagnosis.rootCauseCode())) {
                 UserIncidentStatus t = diagnosisToStatus(diagnosis);
@@ -539,7 +555,7 @@ public final class OpsInvestigationFacade implements AutoCloseable {
                 clock.instant(), clock.instant(), "incidents/" + incidentId + "/"), interaction);
         }
 
-        Diagnosis diagnosis = runDiagnosis(discovery, serviceId);
+        Diagnosis diagnosis = runDiagnosis(discovery, serviceId, null).diagnosis();
         RepairSuggestion suggestion = new RepairSuggestion(incidentId, "restart_service",
             "order-api", "order-api container is stopped", diagnosis.confidence(),
             diagnosis.supportingEvidence());
@@ -639,7 +655,7 @@ public final class OpsInvestigationFacade implements AutoCloseable {
             emitProgress(interaction, 2, 2, summary, finalStatus);
             return emitView(new InvestigationView(incidentId, targetId, serviceId, finalStatus,
                 statusChinese(finalStatus), List.of(), "", "", false, "", summary,
-                formatNextAction(finalStatus, fixFactory != null),
+                formatNextAction(finalStatus, fixFactory != null, incidentId),
                 clock.instant(), clock.instant(), "incidents/" + incidentId + "/"), interaction);
         } catch (Exception e) {
             return emitError(incidentId, targetId, serviceId,
@@ -670,42 +686,47 @@ public final class OpsInvestigationFacade implements AutoCloseable {
 
     // ── Diagnosis ───────────────────────────────────────────────────────
 
-    private Diagnosis runDiagnosis(DiscoveryResult discovery, String serviceId) {
-        if (discovery.status() != DiscoveryStatus.COMPLETE) return inconclusiveDiagnosis();
+    private DiagnosisDecision runDiagnosis(DiscoveryResult discovery, String serviceId,
+                                            String symptom) {
+        if (discovery.status() != DiscoveryStatus.COMPLETE) {
+            return signalsOnlyDecision(discovery, "DISCOVERY_INCOMPLETE");
+        }
         try {
             String apiKey = System.getenv("CLAWKIT_API_KEY");
-            if (apiKey == null || apiKey.isBlank()) return diagnosticSignalsOnly(discovery);
+            if (apiKey == null || apiKey.isBlank()) {
+                return signalsOnlyDecision(discovery, "PROVIDER_NOT_CONFIGURED");
+            }
             String model = System.getenv().getOrDefault("CLAWKIT_DIAGNOSIS_MODEL",
                 "deepseek-v4-pro");
             LLMConfig llmConfig = LLMConfig.builder().apiKey(apiKey).model(model).build();
             LLMProvider llmProvider = providerCreator.apply(llmConfig);
             DeepSeekDiagnosisGate gate = new DeepSeekDiagnosisGate(llmProvider, llmConfig.model(),
                 clock);
-            Diagnosis modelDiagnosis = gate.diagnose(discovery, null, Duration.ofSeconds(120));
-            Instant now = clock.instant();
-            List<Evidence> currentEvidence = currentEvidence(discovery, now);
-            DiagnosticSignals signals = DiagnosticSignals.extract(currentEvidence);
-            return DiagnosisReconciler.reconcile(modelDiagnosis, signals, currentEvidence, now);
+            Diagnosis modelDiagnosis = gate.diagnose(discovery, normalizeSymptom(symptom),
+                Duration.ofSeconds(120));
+            ReconciledDiagnosis reconciled = ReconciledDiagnosis.fromCandidate(modelDiagnosis,
+                discovery, clock.instant());
+            return new DiagnosisDecision(reconciled.diagnosis(), true, null,
+                DiagnosisProvenance.modelReconciled(modelDiagnosis, reconciled.diagnosis(),
+                    reconciled.signals()));
         } catch (Exception e) {
             log.error("[diagnosis] failed: {}", e.getMessage());
-            return diagnosticSignalsOnly(discovery);
+            return signalsOnlyDecision(discovery, "PROVIDER_ERROR");
         }
     }
 
-    private Diagnosis diagnosticSignalsOnly(DiscoveryResult discovery) {
-        Instant now = clock.instant();
-        List<Evidence> ce = currentEvidence(discovery, now);
-        return DiagnosisReconciler.reconcile(inconclusiveDiagnosis(),
-            DiagnosticSignals.extract(ce), ce, now);
+    private static String normalizeSymptom(String symptom) {
+        if (symptom == null || symptom.isBlank()) return null;
+        String normalized = symptom.replaceAll("[\\p{Cntrl}&&[^\\r\\n\\t]]", " ").strip();
+        return normalized.length() <= 500 ? normalized : normalized.substring(0, 500);
     }
 
-    private static List<Evidence> currentEvidence(DiscoveryResult d, Instant now) {
-        return d.bundle().evidence().stream()
-            .filter(e -> e.collectionStatus() == Evidence.CollectionStatus.OBSERVED)
-            .filter(e -> e.freshness() == Evidence.Freshness.CURRENT)
-            .filter(e -> e.fact().path("success").asBoolean(false))
-            .filter(e -> e.isCurrentAt(now))
-            .toList();
+    private DiagnosisDecision signalsOnlyDecision(DiscoveryResult discovery, String reasonCode) {
+        ReconciledDiagnosis reconciled = ReconciledDiagnosis.fromCandidate(inconclusiveDiagnosis(),
+            discovery, clock.instant());
+        Diagnosis diagnosis = reconciled.diagnosis();
+        return new DiagnosisDecision(diagnosis, false, reasonCode,
+            DiagnosisProvenance.signalsOnly(diagnosis, reconciled.signals(), reasonCode));
     }
 
     private static Diagnosis inconclusiveDiagnosis() {
@@ -726,8 +747,10 @@ public final class OpsInvestigationFacade implements AutoCloseable {
     private InvestigationView rejectedView(String incidentId, String targetId, String serviceId,
                                              UserIncidentStatus status, Diagnosis diagnosis) {
         return new InvestigationView(incidentId, targetId, serviceId, status,
-            statusChinese(status), List.of(), formatDiagnosisChinese(diagnosis),
-            "用户未批准修复", false, "", "",
+            "服务器未发生任何变更 — " + statusChinese(status),
+            List.of(), formatDiagnosisChinese(diagnosis),
+            "未批准修复操作", false, "",
+            "未建立修复会话，未执行任何命令或容器操作，服务器状态与调查前完全一致",
             "未执行任何写操作。详情: /ops inspect " + incidentId,
             clock.instant(), clock.instant(), "incidents/" + incidentId + "/");
     }
@@ -737,20 +760,16 @@ public final class OpsInvestigationFacade implements AutoCloseable {
                                                       DiscoveryResult discovery,
                                                       Diagnosis diagnosis,
                                                       UserIncidentStatus status) {
-        List<String> facts = new ArrayList<>();
-        for (Evidence e : discovery.bundle().evidence()) {
-            if (e.collectionStatus() == Evidence.CollectionStatus.OBSERVED
-                && e.isCurrentAt(clock.instant())) {
-                facts.add(formatEvidenceFact(e));
-            }
-        }
+        List<String> facts = formatObservedFacts(discovery, clock.instant());
         return new InvestigationView(incidentId, request.targetId(),
             request.serviceId() != null ? request.serviceId() : "",
             status, "对 " + request.targetId() + " 的调查已完成",
             facts, formatDiagnosisChinese(diagnosis),
-            formatRecommendation(diagnosis, fixFactory != null),
+            formatRecommendation(diagnosis, fixFactory != null, discovery,
+                request.serviceId()),
             status == UserIncidentStatus.AWAITING_APPROVAL,
-            "", "", formatNextAction(status, fixFactory != null),
+            "", "", formatNextAction(status, fixFactory != null, incidentId,
+                discovery, request.serviceId(), diagnosis),
             clock.instant(), clock.instant(), "incidents/" + incidentId + "/");
     }
 
@@ -838,27 +857,131 @@ public final class OpsInvestigationFacade implements AutoCloseable {
         };
     }
     static String formatRecommendation(Diagnosis d, boolean repairConfigured) {
+        return formatRecommendation(d, repairConfigured, null, null);
+    }
+    static String formatRecommendation(Diagnosis d, boolean repairConfigured,
+                                       DiscoveryResult discovery, String serviceId) {
         if ("APP_DOWN".equals(d.rootCauseCode()))
             return repairConfigured ? "重启 order-api 服务"
                 : "发现可修复问题，但当前未配置受限修复通道。请配置 opsfix 凭据后重试。";
+        if ("INCONCLUSIVE".equals(d.rootCauseCode())
+            && discovery != null && hasHttp5xx(discovery)
+            && isServiceRunning(discovery, serviceId)) {
+            return "已确认网关出现 HTTP 5xx，但 "
+                + (serviceId == null || serviceId.isBlank() ? "目标服务" : serviceId)
+                + " 当前仍在运行；请检查网关到服务的上游连接，并补充应用请求日志。";
+        }
+        if ("INCONCLUSIVE".equals(d.rootCauseCode())) {
+            String gaps = mergeEvidenceGapSummaries(
+                summarizeEvidenceGaps(d.missingEvidence()),
+                deriveEvidenceGaps(discovery, serviceId));
+            if (!gaps.isBlank()) {
+                return "当前证据不足，未触发修复。优先补充：" + gaps + "。";
+            }
+        }
         return "建议人工登录服务器检查";
     }
-    static String formatNextAction(UserIncidentStatus s, boolean repairConfigured) {
+
+    /**
+     * Render only a small, fixed vocabulary of missing-evidence categories.
+     * Provider supplied prose is deliberately not copied into the terminal,
+     * so a diagnostic explanation cannot become an unbounded or unsafe UI
+     * payload.
+     */
+    static String summarizeEvidenceGaps(List<String> missingEvidence) {
+        if (missingEvidence == null || missingEvidence.isEmpty()) return "";
+        java.util.LinkedHashSet<String> labels = new java.util.LinkedHashSet<>();
+        for (String item : missingEvidence) {
+            String value = item == null ? "" : item.toLowerCase(java.util.Locale.ROOT);
+            if (value.contains("health check")) labels.add("服务健康检查失败原因");
+            else if (value.contains("application log") || value.contains("request log")) labels.add("应用请求日志");
+            else if (value.contains("cpu") || value.contains("memory")) labels.add("服务资源使用情况");
+            else if (value.contains("connection pool") || value.contains("pool saturation")) labels.add("连接池状态");
+            else if (value.contains("database lock") || value.contains("transaction state")) labels.add("数据库锁等待情况");
+            else if (value.contains("restart history") || value.contains("oom")) labels.add("重启与 OOM 历史");
+        }
+        return labels.stream().limit(3).collect(java.util.stream.Collectors.joining("、"));
+    }
+
+    /**
+     * Do not make the product explanation depend on optional model prose.
+     * These gaps are derived only from bounded, read-only evidence already in
+     * the completed discovery bundle.
+     */
+    static String deriveEvidenceGaps(DiscoveryResult discovery, String serviceId) {
+        if (discovery == null || serviceId == null || serviceId.isBlank()) return "";
+        java.util.LinkedHashSet<String> labels = new java.util.LinkedHashSet<>();
+        boolean unhealthy = discovery.bundle().evidence().stream()
+            .filter(e -> e.collectionStatus() == Evidence.CollectionStatus.OBSERVED)
+            .filter(e -> e.scope().contains(serviceId))
+            .anyMatch(e -> hasUnhealthyHealth(e.fact().path("data")));
+        if (unhealthy) labels.add("服务健康检查失败原因");
+        boolean emptyLogs = discovery.bundle().evidence().stream()
+            .filter(e -> e.type() == EvidenceType.LOGS)
+            .filter(e -> e.collectionStatus() == Evidence.CollectionStatus.OBSERVED)
+            .filter(e -> e.scope().contains(serviceId))
+            .anyMatch(e -> e.fact().path("data").path("text").asText("").isBlank());
+        if (emptyLogs) labels.add("应用请求日志");
+        return labels.stream().collect(java.util.stream.Collectors.joining("、"));
+    }
+
+    private static boolean hasUnhealthyHealth(com.fasterxml.jackson.databind.JsonNode data) {
+        String serviceHealth = data.path("containers").path(0).path("Health").asText("");
+        String containerHealth = data.path("state").path("Health").path("Status").asText("");
+        return "unhealthy".equalsIgnoreCase(serviceHealth)
+            || "unhealthy".equalsIgnoreCase(containerHealth);
+    }
+
+    private static String mergeEvidenceGapSummaries(String first, String second) {
+        java.util.LinkedHashSet<String> values = new java.util.LinkedHashSet<>();
+        for (String summary : List.of(first == null ? "" : first, second == null ? "" : second)) {
+            for (String value : summary.split("、")) {
+                if (!value.isBlank()) values.add(value);
+            }
+        }
+        return values.stream().limit(3).collect(java.util.stream.Collectors.joining("、"));
+    }
+    static String formatNextAction(UserIncidentStatus s, boolean repairConfigured,
+                                   String incidentId) {
+        return formatNextAction(s, repairConfigured, incidentId, null, null);
+    }
+    static String formatNextAction(UserIncidentStatus s, boolean repairConfigured,
+                                   String incidentId, DiscoveryResult discovery,
+                                   String serviceId) {
+        return formatNextAction(s, repairConfigured, incidentId, discovery, serviceId, null);
+    }
+    static String formatNextAction(UserIncidentStatus s, boolean repairConfigured,
+                                   String incidentId, DiscoveryResult discovery,
+                                   String serviceId, Diagnosis diagnosis) {
+        String inspectCommand = "/ops inspect " + incidentId;
+        if (s == UserIncidentStatus.INCONCLUSIVE && discovery != null
+            && hasHttp5xx(discovery) && isServiceRunning(discovery, serviceId)) {
+            return "先检查网关到 " + serviceId
+                + " 的上游连接，并补充应用请求日志。详情: " + inspectCommand;
+        }
+        if (s == UserIncidentStatus.INCONCLUSIVE) {
+            String gaps = mergeEvidenceGapSummaries(
+                diagnosis == null ? "" : summarizeEvidenceGaps(diagnosis.missingEvidence()),
+                deriveEvidenceGaps(discovery, serviceId));
+            if (!gaps.isBlank()) {
+                return "先补充" + gaps + "，保持只读并重新调查。详情: " + inspectCommand;
+            }
+        }
         return switch (s) {
             case AWAITING_APPROVAL -> repairConfigured
                 ? "输入 approve 批准重启，或 reject 拒绝"
                 : "当前未配置修复通道，请先配置 opsfix 凭据";
-            case INCONCLUSIVE -> "建议人工登录服务器检查。详情: /ops inspect <incidentId>";
-            case RESOLVED -> "问题已恢复。详情: /ops inspect <incidentId>";
-            case NEEDS_HUMAN -> "需要人工判断。详情: /ops inspect <incidentId>";
+            case INCONCLUSIVE -> "建议人工登录服务器检查。详情: " + inspectCommand;
+            case RESOLVED -> "问题已恢复。详情: " + inspectCommand;
+            case NEEDS_HUMAN -> "需要人工判断。详情: " + inspectCommand;
             case FAILED_NO_EFFECT -> "操作已确认未产生远端副作用。建议人工检查。";
             case NO_ACTION_REQUIRED -> "服务已自行恢复，无需操作。";
             case REJECTED -> "审批被拒绝，未执行任何操作。";
             case CANCELLED -> "操作已取消，未执行任何写操作。";
-            default -> "使用 /ops inspect <incidentId> 查看详情";
+            default -> "使用 " + inspectCommand + " 查看详情";
         };
     }
-    static String statusChinese(UserIncidentStatus s) {
+    public static String statusChinese(UserIncidentStatus s) {
         return switch (s) {
             case CREATED -> "已创建"; case DISCOVERING -> "采集中";
             case DIAGNOSING -> "诊断中"; case AWAITING_APPROVAL -> "等待审批";
@@ -870,7 +993,8 @@ public final class OpsInvestigationFacade implements AutoCloseable {
         };
     }
     static String renderReport(String targetId, String serviceId, DiscoveryResult discovery,
-                                Diagnosis diagnosis, UserIncidentStatus status) {
+                                Diagnosis diagnosis, DiagnosisProvenance provenance,
+                                UserIncidentStatus status) {
         StringBuilder sb = new StringBuilder();
         sb.append("# 调查结果\n\n**服务器**：").append(targetId)
             .append("\n\n**服务**：").append(serviceId)
@@ -882,16 +1006,113 @@ public final class OpsInvestigationFacade implements AutoCloseable {
                 .append(e.type().name()).append(")\n");
         }
         sb.append("\n## 诊断结论\n\n").append(formatDiagnosisChinese(diagnosis)).append("\n\n");
+        if (provenance.deterministicEvidenceChangedConclusion()) {
+            sb.append("**证据裁决**：模型候选 ")
+                .append(provenance.modelCandidateRootCause())
+                .append(" 与当前证据冲突，已按 ")
+                .append(provenance.deterministicEvidenceIds().size())
+                .append(" 项确定性证据修正为 ")
+                .append(provenance.finalRootCause()).append("。\n\n");
+        }
+        if (DiagnosisProvenance.SIGNALS_ONLY.equals(provenance.mode())) {
+            sb.append("**诊断来源**：未调用 Provider（")
+                .append(provenance.reasonCode())
+                .append("），结论仅来自当前确定性证据。\n\n");
+        }
         if (!"INCONCLUSIVE".equals(diagnosis.rootCauseCode()))
             sb.append("**可信度**：").append(String.format("%.0f%%", diagnosis.confidence() * 100))
                 .append("\n\n");
         sb.append("## 建议\n\n");
         sb.append("APP_DOWN".equals(diagnosis.rootCauseCode())
-            ? "order-api 已停止运行。可以考虑重启服务。\n\n" : "建议人工检查。\n\n");
+            ? "order-api 已停止运行。可以考虑重启服务。\n\n"
+            : formatRecommendation(diagnosis, false, discovery, serviceId) + "\n\n");
         return sb.toString();
     }
-    private String formatEvidenceFact(Evidence e) {
-        return e.scope() + ": " + (e.fact().path("success").asBoolean(false) ? "正常" : "异常");
+
+    static String formatEvidenceFact(Evidence e) {
+        if (e.collectionStatus() != Evidence.CollectionStatus.OBSERVED) {
+            return e.scope() + "：采集失败";
+        }
+        var data = e.fact().path("data");
+        return switch (e.type()) {
+            case SERVICE_STATUS -> {
+                var containers = data.path("containers");
+                var container = containers.isArray() && !containers.isEmpty()
+                    ? containers.get(0)
+                    : com.fasterxml.jackson.databind.node.MissingNode.getInstance();
+                String state = container.path("State").asText("unknown");
+                String health = container.path("Health").asText("");
+                yield e.scope() + "：服务状态 " + state
+                    + (health.isBlank() ? "" : "，健康状态 " + health);
+            }
+            case CONTAINER_STATUS -> {
+                var state = data.path("state");
+                String status = state.path("Status").asText("unknown");
+                String health = state.path("Health").path("Status").asText("");
+                yield e.scope() + "：容器状态 " + status
+                    + (health.isBlank() ? "" : "，健康状态 " + health);
+            }
+            case HTTP_PROBE -> e.scope() + "：HTTP "
+                + data.path("statusCode").asText("unknown")
+                + (data.path("healthy").asBoolean(false) ? "，探测正常" : "，探测异常");
+            case LOGS -> {
+                String text = data.path("text").asText("");
+                int fiveXx = countHttp5xx(text);
+                if (fiveXx > 0) yield e.scope() + "：最近日志发现 " + fiveXx + " 条 HTTP 5xx";
+                if (text.isBlank()) yield e.scope() + "：最近窗口无日志";
+                yield e.scope() + "：已采集最近日志，未发现 HTTP 5xx";
+            }
+            default -> e.scope() + "：证据已采集";
+        };
+    }
+
+    static List<String> formatObservedFacts(DiscoveryResult discovery, Instant evaluatedAt) {
+        return discovery.bundle().evidence().stream()
+            .filter(e -> e.collectionStatus() == Evidence.CollectionStatus.OBSERVED)
+            .filter(e -> e.isCurrentAt(evaluatedAt))
+            .sorted(java.util.Comparator.comparingInt(OpsInvestigationFacade::presentationPriority))
+            .map(OpsInvestigationFacade::formatEvidenceFact)
+            .toList();
+    }
+
+    private static int presentationPriority(Evidence e) {
+        if (e.collectionStatus() != Evidence.CollectionStatus.OBSERVED) return 0;
+        if (e.type() == EvidenceType.LOGS
+            && countHttp5xx(e.fact().path("data").path("text").asText("")) > 0) return 0;
+        if (e.type() == EvidenceType.HTTP_PROBE
+            && !e.fact().path("data").path("healthy").asBoolean(false)) return 0;
+        return switch (e.type()) {
+            case SERVICE_STATUS, CONTAINER_STATUS -> 1;
+            case HTTP_PROBE, LOGS -> 2;
+            default -> 3;
+        };
+    }
+
+    private static boolean hasHttp5xx(DiscoveryResult discovery) {
+        return discovery.bundle().evidence().stream()
+            .filter(e -> e.type() == EvidenceType.LOGS)
+            .filter(e -> e.collectionStatus() == Evidence.CollectionStatus.OBSERVED)
+            .anyMatch(e -> countHttp5xx(e.fact().path("data").path("text").asText("")) > 0);
+    }
+
+    private static boolean isServiceRunning(DiscoveryResult discovery, String serviceId) {
+        if (serviceId == null || serviceId.isBlank()) return false;
+        return discovery.bundle().evidence().stream()
+            .filter(e -> e.type() == EvidenceType.SERVICE_STATUS)
+            .filter(e -> e.collectionStatus() == Evidence.CollectionStatus.OBSERVED)
+            .filter(e -> e.scope().contains(serviceId))
+            .map(e -> e.fact().path("data").path("containers"))
+            .filter(containers -> containers.isArray() && !containers.isEmpty())
+            .map(containers -> containers.get(0).path("State").asText(""))
+            .anyMatch(state -> "running".equalsIgnoreCase(state));
+    }
+
+    private static int countHttp5xx(String text) {
+        if (text == null || text.isBlank()) return 0;
+        var matcher = java.util.regex.Pattern.compile("\\\"\\s+5\\d{2}\\s").matcher(text);
+        int count = 0;
+        while (matcher.find()) count++;
+        return count;
     }
 
     @Override public void close() { incidentStore.close(); }

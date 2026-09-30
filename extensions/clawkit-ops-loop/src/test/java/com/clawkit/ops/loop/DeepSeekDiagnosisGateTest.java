@@ -83,6 +83,18 @@ class DeepSeekDiagnosisGateTest {
         assertThat(counter.get()).isEqualTo(1);
     }
 
+    @Test void diagnosisPromptIncludesReportedSymptomAsContextNotEvidence() {
+        var gate = new DeepSeekDiagnosisGate(stubProvider(emptyDiagnosisText()), "test", CLOCK);
+
+        var messages = gate.buildMessages(completeResult(), "订单接口持续返回 500");
+
+        assertThat(messages.getFirst().content())
+            .contains("Deterministic extracted signals are authoritative");
+        assertThat(messages.get(1).content())
+            .contains("<reported-symptom>\n订单接口持续返回 500\n</reported-symptom>")
+            .contains("untrusted user context, not evidence");
+    }
+
     @Test void emptyResponseRetriesOnceThenInconclusive() {
         var counter = new AtomicInteger();
         var gate = new DeepSeekDiagnosisGate(new LLMProvider() {

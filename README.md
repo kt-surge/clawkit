@@ -2,21 +2,23 @@
 
 [![CodeQL](https://github.com/kuangyngtao/miniclaw/actions/workflows/codeql.yml/badge.svg)](https://github.com/kuangyngtao/miniclaw/actions/workflows/codeql.yml)
 
-> 本地优先的个人 AI 运维助手：连接你的服务器，解释问题，审批后安全处置，并独立验证结果
+> 目标：面向个人和小团队的分层自治运维助手，持续发现异常，自主处理已授权的常见故障，并独立验证恢复结果
 
-clawkit 运行在用户自己的电脑上，通过受限远程能力连接用户已经登记的 Linux 服务器。用户可以用自然语言查看服务状态、分析有界日志、调查故障；命中经过审核的修复方案后，Clawkit 会说明原因和影响，等待人工批准，执行前重新检查现场，执行后使用独立只读会话确认业务是否真的恢复。
+clawkit 运行在用户自己的电脑上，首轮自治面向已登记的本地 Linux Docker Compose 无状态服务：持续发现并归并异常，Agent 采证后决定补证、等待、建议修复或交接；已授权的常见启动／重启可自主执行，需要人工批准的动作进入审批。执行前重新检查现场，执行后独立多次检查健康和业务结果。已有服务器巡检与调查入口继续维护，真实服务器自动写入仍未开放。
 
-Java 21 Agent Runtime、MCP、权限门禁和状态机是实现这些体验的底座，不是用户必须先理解的产品。项目仍处于工程化原型阶段；当前重点是把服务器接入、快速查看、Ops 调查和审批修复打磨成一条顺手的个人使用路径，而不是继续堆工具数量或建设通用 SSH/SRE 平台。
+Java 21 Agent Runtime、MCP、权限门禁和状态机支撑这些体验。当前已交付本地可安装 CLI，仍是首轮单机产品原型；使用范围、模型失败和验证证据见下面的说明。
+
+2026-09-30 的首轮产品支持 CLI 持续检查、限定自主启动／重启、人工批准、暂停／停止及可选飞书通知。[使用说明](docs/managed-operations.md)包含安装、登记、授权、运行和清理步骤；[分层自治实施合同](docs/layered-autonomy-implementation-plan.md)维护需求与验收，完成状态见 [TODO](TODO.md)。解压安装包通过实际模型／实际隔离容器的自主与人工修复；[冻结评测](docs/autonomy-evaluation.md)完成 12 场景、4 组、48 实例，CLAWKIT 分层处置 10/12、规则 11/12，CLAWKIT 的两项模型／协议失败完整保留，不宣称优于规则或生产稳定性。真实通知送达和真实目标试用未验证；现有离线 Console 用于证据回放。
 
 ## 项目概览
 
 | 维度 | 说明 |
 | --- | --- |
-| 项目类型 | 本地个人 AI 运维助手，内部使用 Java 多模块 Agent Runtime |
-| 运行方式 | 本地 CLI |
+| 项目类型 | 面向个人与小团队的分层自治运维助手，内部使用 Java 多模块 Agent Runtime |
+| 运行方式 | 本地 CLI，控制进程运行期间持续检查 |
 | 核心目标 | 让个人开发者更容易理解并安全处理自己服务器上的服务故障 |
-| 关键机制 | 复用本地 SSH、预定义只读能力、证据化调查、人工审批、受限执行和独立复验 |
-| 当前阶段 | REMOTE-0 与 OPS MVP-3 工程闭环已完成；下一步打磨服务器接入和统一调查体验 |
+| 关键机制 | 应用登记、持续观察、Agent 采证、策略／人工授权、独立验证、失败持久化交接 |
+| 当前阶段 | 首轮 P0—P4 完成：可安装 CLI 与冻结隔离评测；真实目标试用属于 P5 |
 
 ## 项目目标
 
@@ -234,10 +236,32 @@ Built-in Tools / MCP Tools / Safety Interceptors
 
 运行底座、远程只读连接和第一个审批修复闭环已经建立。后续顺序以 [TODO.md](./TODO.md) 为准：
 
-1. 补齐无需 Incident 的 Quick Check，让“服务是否正常、最近有什么错误”成为一句话任务。
-2. 通过真实远端 dogfood 检验现有调查、审批修复和独立验证产品链，优先修复重复出现的摩擦。
+1. 连续使用真实远端 Quick Check、调查、审批修复和独立验证产品链，优先修复重复出现的摩擦。
+2. 打磨面向用户的审批摘要，让风险、保护措施和验证结果能在 30 秒内看懂。
 3. 记录首次连接、有效结果、调查耗时、成本和人工决策等最小产品数据。
 4. 数据足够后再评审 Observe-only 持续运行与 Shadow；不整体切换 Agent 权限。
+
+当前可用的持续观察入口仅限本地 Fixture：`/ops observe fixture start`。它只生成
+`fixture://` 证据，用于检查去重、暂停、恢复和预算边界；不接受服务器 target、不连接远程
+服务器、不调用模型，也不执行审批或修复。可用 `status`、`healthy`、`unknown`、`pause`、
+`resume` 和 `stop` 观察不同分支；`replay` 会只读展示已校验的最近观测事件，即使 loop 已停止。
+停止后执行 `/ops observe fixture snapshot`，会在唯一目录中复制三份证据并生成绑定其精确字节数和
+SHA-256 的 `fixture-evidence-manifest.json`；活动 loop 不允许导出，旧快照不会被覆盖。
+随后可执行 `/ops observe fixture shadow`：它只读取最新一份已校验快照，在独立目录持久化固定策略和
+“本会如何处置”的 A3 反事实结论，输出 `Side effects: 0`；不启动远程会话、不调用修复执行器，也不绕过 A2 审批。
+`shadow-eval` 还会生成 100 个合成 Fixture 案例的边界矩阵；交互 CLI 可通过 `shadow-review <approve|reject|defer>`
+为一条已持久化的 Shadow 结论记录人工反事实选择。该选择不创建 ApprovalGrant、不执行修复，且目前没有真实
+dogfood 数据；整个入口仍只是 Fixture 原型和审计证据，不能描述为自动修复。
+
+可用 `/ops dogfood status` 只读查看本地脱敏采集的有效/损坏记录、记录天数、调查/反馈/A3 review 计数和
+“会同意/会拒绝/证据不足”聚合；它不展示目标、Incident 或反馈正文。连续记录满 7 天也只说明可以进入人工
+审计，不能自动提升到 A4。
+
+如需可视化演示，可在本机浏览器打开 [ops-console/dist/index.html](ops-console/dist/index.html)，选择或直接拖入同一
+snapshot 目录中的 manifest、`automation-state.json`、`incident-registry.jsonl` 和
+`observation-timeline.jsonl`。页面会先拒绝缺失、篡改或跨批次混搭文件，再执行 Fixture A0 语义校验；
+该页没有网络、调度、模型、审批或修复能力，只回放已持久化的本地证据。运行 `/ops observe fixture soak`
+生成的目录可额外导入第五份 `accelerated-soak-report.json`，用于校验并展示受控的 72 个逻辑小时演练；它不是自然墙钟运行。
 
 更详细的待办见 [TODO.md](./TODO.md)。
 

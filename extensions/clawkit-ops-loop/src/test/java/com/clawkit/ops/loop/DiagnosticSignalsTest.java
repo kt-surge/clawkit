@@ -79,6 +79,25 @@ class DiagnosticSignalsTest {
         assertThat(signals.candidateCurrentCondition()).isEqualTo("ACTIVE");
     }
 
+    @Test
+    void requiresBothStoppedServiceAndFailedHttpProbeForAppDown() throws Exception {
+        DiagnosticSignals serviceOnly = DiagnosticSignals.extract(List.of(
+            evidence("service", EvidenceType.SERVICE_STATUS, "order-api", """
+                {"State":"exited"}
+                """)));
+        DiagnosticSignals corroborated = DiagnosticSignals.extract(List.of(
+            evidence("service", EvidenceType.SERVICE_STATUS, "order-api", """
+                {"State":"exited"}
+                """),
+            evidence("http", EvidenceType.HTTP_PROBE, "endpoint/order-api", """
+                {"statusCode":503}
+                """)));
+
+        assertThat(serviceOnly.candidateRootCause()).isEqualTo("INCONCLUSIVE");
+        assertThat(corroborated.candidateRootCause()).isEqualTo("APP_DOWN");
+        assertThat(corroborated.relevantEvidence()).containsExactlyInAnyOrder("service", "http");
+    }
+
     private static Evidence evidence(
         String id, EvidenceType type, String scope, String dataJson
     ) throws Exception {

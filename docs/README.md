@@ -50,6 +50,9 @@
 | 文档 | 用途 |
 | --- | --- |
 | [`product-direction.md`](product-direction.md) | 产品定位、用户旅程、体验原则和长期路线 |
+| [`layered-autonomy-implementation-plan.md`](layered-autonomy-implementation-plan.md) | 2026-09-30 分层自治需求、技术选择、执行合同和 P0—P5 验收 |
+| [`managed-operations.md`](managed-operations.md) | 分层自治 CLI 安装、登记、用户授权、审批、暂停／停止、通知与清理 |
+| [`autonomy-evaluation.md`](autonomy-evaluation.md) | 冻结隔离场景、规则／同条件 Agent／指导消融、外部评分和失败证据 |
 | [`ops-loop.md`](ops-loop.md) | Ops Loop 架构、安全边界和演进方向 |
 | [`configuration.md`](configuration.md) | 非敏感配置和配置优先级 |
 | [`runtime.md`](runtime.md) | 运行时目录、状态和持久化约定 |

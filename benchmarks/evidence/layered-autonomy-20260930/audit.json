@@ -1,0 +1,409 @@
+{
+  "auditPassed": true,
+  "instances": 48,
+  "providerRequests": 68,
+  "actualTokens": 231956,
+  "unavailableUsage": 0,
+  "dispatches": 16,
+  "independentlyVerifiedRecoveries": 12,
+  "reconstructionNoReplayChecks": 7,
+  "receivedRejectedResponses": 5,
+  "confirmedLengthFailures": 5,
+  "actualModels": [
+    "deepseek-flash"
+  ],
+  "sharedParameters": [
+    "{\"temperature\":0.0,\"maxTokens\":1536,\"stream\":false,\"reasoningMode\":\"PROVIDER_DEFAULT\"}"
+  ],
+  "sharedToolSets": 1,
+  "runStatuses": {
+    "LLM_ERROR": 5,
+    "COMPLETED": 25
+  },
+  "detail": [
+    {
+      "id": "wrong-target-generic_agent-1",
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 2,
+      "actualTokens": 5784,
+      "rejectedResponses": 1,
+      "confirmedLengthFailures": 1
+    },
+    {
+      "id": "transient-fault-rules-1",
+      "result": "FAIL",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "missing-dependency-clawkit-1",
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 2,
+      "actualTokens": 6973,
+      "rejectedResponses": 1,
+      "confirmedLengthFailures": 1
+    },
+    {
+      "id": "desired-stop-rules-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "revoked-policy-clawkit-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 5819,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "maintenance-generic_agent-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "wrong-target-no_playbook_guidance-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 5924,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "revoked-policy-rules-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "desired-stop-generic_agent-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "missing-dependency-rules-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "http-fault-no_playbook_guidance-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 6112,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "response-loss-generic_agent-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 4982,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "dependency-fault-no_playbook_guidance-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 6717,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "service-exit-rules-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "maintenance-no_playbook_guidance-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "transient-fault-generic_agent-1",
+      "result": "PASS",
+      "requests": 3,
+      "actualTokens": 8427,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "stale-evidence-no_playbook_guidance-1",
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 2,
+      "actualTokens": 7077,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "response-loss-no_playbook_guidance-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 6666,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "revoked-policy-no_playbook_guidance-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 6177,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "http-fault-clawkit-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 6786,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "transient-fault-clawkit-1",
+      "result": "PASS",
+      "requests": 3,
+      "actualTokens": 13634,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "verification-failure-rules-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "transient-fault-no_playbook_guidance-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 6109,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "stale-evidence-generic_agent-1",
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 3,
+      "actualTokens": 10183,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "response-loss-clawkit-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 6755,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "missing-dependency-no_playbook_guidance-1",
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 2,
+      "actualTokens": 6770,
+      "rejectedResponses": 1,
+      "confirmedLengthFailures": 1
+    },
+    {
+      "id": "verification-failure-generic_agent-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 5423,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "wrong-target-rules-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "verification-failure-no_playbook_guidance-1",
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 2,
+      "actualTokens": 6601,
+      "rejectedResponses": 1,
+      "confirmedLengthFailures": 1
+    },
+    {
+      "id": "maintenance-clawkit-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "dependency-fault-rules-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "dependency-fault-clawkit-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 7554,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "stale-evidence-clawkit-1",
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 4,
+      "actualTokens": 22395,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "desired-stop-clawkit-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "service-exit-no_playbook_guidance-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 6023,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "dependency-fault-generic_agent-1",
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 2,
+      "actualTokens": 5685,
+      "rejectedResponses": 1,
+      "confirmedLengthFailures": 1
+    },
+    {
+      "id": "service-exit-generic_agent-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 5057,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "revoked-policy-generic_agent-1",
+      "result": "PASS",
+      "requests": 3,
+      "actualTokens": 9516,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "wrong-target-clawkit-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 6640,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "missing-dependency-generic_agent-1",
+      "result": "PASS",
+      "requests": 5,
+      "actualTokens": 20941,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "http-fault-rules-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "maintenance-rules-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "verification-failure-clawkit-1",
+      "result": "PASS",
+      "requests": 1,
+      "actualTokens": 3335,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "http-fault-generic_agent-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 5572,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "service-exit-clawkit-1",
+      "result": "PASS",
+      "requests": 2,
+      "actualTokens": 6319,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "response-loss-rules-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "stale-evidence-rules-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    },
+    {
+      "id": "desired-stop-no_playbook_guidance-1",
+      "result": "PASS",
+      "requests": 0,
+      "actualTokens": 0,
+      "rejectedResponses": 0,
+      "confirmedLengthFailures": 0
+    }
+  ]
+}

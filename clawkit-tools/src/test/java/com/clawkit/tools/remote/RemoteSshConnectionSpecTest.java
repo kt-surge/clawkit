@@ -272,7 +272,7 @@ class RemoteSshConnectionSpecTest {
     void sshEnvAllowlistShouldContainAgentVariables() {
         var allowlist = RemoteMcpSession.SSH_ENV_ALLOWLIST;
         assertThat(allowlist).contains("SSH_AUTH_SOCK", "SSH_AGENT_PID",
-            "PATH", "HOME", "TEMP", "TMP", "TMPDIR", "LANG");
+            "PATH", "HOME", "TEMP", "TMP", "TMPDIR", "LANG", "PROGRAMDATA");
     }
 
     @Test

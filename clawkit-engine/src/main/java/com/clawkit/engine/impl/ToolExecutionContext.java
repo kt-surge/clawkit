@@ -24,7 +24,8 @@ public record ToolExecutionContext(
     RunRecorder recorder,
     InternalToolRouter internalTools,
     ApprovalGrantCache approvalCache,
-    ExecutionControl control
+    ExecutionControl control,
+    com.clawkit.tools.RunToolScope toolScope
 ) {
     public ToolExecutionContext {
         if (permissionPolicy == null) {
@@ -33,9 +34,12 @@ public record ToolExecutionContext(
         if (control == null) {
             control = ExecutionControl.none();
         }
+        if (toolScope == null) {
+            toolScope = com.clawkit.tools.RunToolScope.ALL;
+        }
     }
 
-    /** 兼容构造器（无 ExecutionControl） */
+    /** 兼容构造器（无 ExecutionControl, 默认 toolScope） */
     public ToolExecutionContext(
         String runId, int turnNumber, PermissionMode permissionMode,
         PermissionPolicy permissionPolicy, ApprovalHandler approvalHandler,
@@ -43,6 +47,19 @@ public record ToolExecutionContext(
         ApprovalGrantCache approvalCache
     ) {
         this(runId, turnNumber, permissionMode, permissionPolicy, approvalHandler,
-            recorder, internalTools, approvalCache, ExecutionControl.none());
+            recorder, internalTools, approvalCache, ExecutionControl.none(),
+            com.clawkit.tools.RunToolScope.ALL);
+    }
+
+    /** 兼容构造器（无 ExecutionControl） */
+    public ToolExecutionContext(
+        String runId, int turnNumber, PermissionMode permissionMode,
+        PermissionPolicy permissionPolicy, ApprovalHandler approvalHandler,
+        RunRecorder recorder, InternalToolRouter internalTools,
+        ApprovalGrantCache approvalCache, ExecutionControl control
+    ) {
+        this(runId, turnNumber, permissionMode, permissionPolicy, approvalHandler,
+            recorder, internalTools, approvalCache, control,
+            com.clawkit.tools.RunToolScope.ALL);
     }
 }

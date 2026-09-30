@@ -169,6 +169,8 @@ class RemoteDiscoveryMainTest {
         assertThat(result.providerCalled()).isFalse();
         assertThat(result.diagnosisGated()).isTrue();
         assertThat(result.diagnosisFailureCode()).isEqualTo("DISCOVERY_INCOMPLETE");
+        assertThat(result.diagnosisProvenance().mode())
+            .isEqualTo(DiagnosisProvenance.NOT_RECORDED);
     }
 
     @Test void remoteIncidentResultDiagnosisGatedWhenNotCalled() {

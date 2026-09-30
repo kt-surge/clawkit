@@ -2,9 +2,9 @@
 
 > 面向项目作者的中文学习材料与秋招准备手册
 >
-> 代码快照：2026-07-30 当前工作区
+> 代码快照：2026-08-05 当前工作区（基线 commit `fe0500f`，同时包含尚未提交的 PRODUCT-3 / OPS-3A 工作区改动）
 >
-> 项目阶段：通用 Agent Runtime 主链、OPS MVP-3 审批修复闭环和 REMOTE-0 已完成工程验收。当前进入产品化阶段：先改善服务器接入和日常查看体验，再把它与现有 OPS 调查、审批和验证流程连成一条用户旅程；持续评估与分级自治保留为后续方向
+> 项目阶段：通用 Agent Runtime、REMOTE-0、PRODUCT-1/2 和 OPS MVP-3 主链已落地；PRODUCT-3 Phase 0—4 已完成夹具与终端体验闭环，Phase 5 正在进行 7 天个人 dogfood；OPS-3A A-D 已在可丢弃 Fixture 完成，仍只读且不为真实服务器新增写权限；下一门槛是墙钟持续运行证据
 >
 > 目标读者：具备苍穹外卖级别的 Java/Spring Boot 项目经验，了解 Docker 和常见 Agent 概念，希望应聘 Java 后端并兼顾 Agent 方向
 
@@ -18,7 +18,7 @@
 4. [上下文、Session、Memory 为什么不能混在一起](#4-上下文sessionmemory-为什么不能混在一起)
 5. [为什么写操作需要单独的可靠性内核](#5-为什么写操作需要单独的可靠性内核)
 6. [观测和评测：为什么不能只看最终输出](#6-观测和评测为什么不能只看最终输出)
-7. [OPS Loop 是如何一步步长出来的](#7-ops-loop-是如何一步步长出来的)
+7. [OPS Loop 与分层自治](#7-ops-loop-与分层自治)
 8. [远程 SSH：从接入体验到底层安全边界](#8-远程-ssh从接入体验到底层安全边界)
 9. [MVP-3 审批修复闭环](#9-mvp-3-审批修复闭环)
 10. [当前代码阅读地图](#10-当前代码阅读地图)
@@ -28,12 +28,13 @@
 14. [个人学习计划](#14-个人学习计划)
 15. [当前路线图该怎么理解](#15-当前路线图该怎么理解)
 16. [文档随代码更新的方法](#16-文档随代码更新的方法)
-17. [最后需要真正记住的十句话](#17-最后需要真正记住的十句话)
+17. [最后需要真正记住的十二句话](#17-最后需要真正记住的十二句话)
 
 核心专题导航：
 
 - Java 后端知识桥梁：第 2.4—2.6、5.7、5.8 节
-- Agent 原理：第 3.1—3.8 节
+- Agent 原理：第 3.1—3.10 节
+- 会话、上下文与记忆：第 4.1—4.10 节
 - 工具权限与安全：第 3.8、5、8 章
 - OPS 完整闭环：第 7—9 章
 - 测试、面试与学习：第 6、10—14 章
@@ -122,11 +123,21 @@ OPS Loop 是两条主线的交汇点：Agent 提供推理和工具使用方式�
 
 ## 1. 先用一句话理解项目
 
-从产品角度看，Clawkit 是一个运行在用户本地的个人 AI 运维助手：它连接用户已经拥有的服务器，帮助理解服务为什么异常；需要采取动作时先解释、再审批，最后重新验证是否真的恢复。
+Clawkit 是一个基于 Java 21 自研的智能体执行平台：它以统一引擎组织模型、上下文、记忆和工具调用，让命令行与飞书复用同一套任务流程，再通过远程运维场景验证工具权限、过程追踪和副作用控制是否真正有效。
 
-从实现角度看，它建立在 Java 21 编写的本地 Agent Runtime 上。Runtime 让模型能够使用文件、命令、MCP 等工具，同时通过权限、预算、执行记录、失败恢复和独立验证，控制模型产生的真实副作用。前者回答“用户为什么使用它”，后者回答“这件事为什么能够安全、可靠地实现”。
+代码和本文经常使用 `Agent Runtime`。这里的 Runtime 不是 JVM，也不是“程序运行时间”，而是智能体接到任务后真正负责推进任务的**核心执行引擎**：它按 Run 和 Turn 组织循环，准备模型上下文，处理工具调用，传播预算与取消信号，并记录实际发生的过程。
 
-产品的完整主线是：
+因此项目有两条前后衔接的主线：
+
+```text
+通用 Agent 底座
+输入 → 核心执行引擎 → 上下文与记忆 → 工具执行 → 运行观测
+
+远程运维落地
+SSH 能力接入 → 持续观察 → 诊断建议 → 审批修复 → 独立验证
+```
+
+运维场景的完整主线是：
 
 ```text
 导入已有 SSH 目标
@@ -187,7 +198,7 @@ Clawkit 的价值不是让模型“更聪明”，而是让模型的行动：
 - 服务进程重新运行不等于业务真正恢复；
 - 权限边界既要在客户端控制，也要在远端主机控制。
 
-因此，OPS Loop 既是对通用 Runtime 安全性和可靠性的压力测试，也是当前产品真正解决问题的核心引擎。REMOTE-0 提供可信连接和预定义工具入口，OPS Loop 负责把零散状态组织成 Incident、Evidence、Diagnosis、Action、Approval 和 Verification。二者不是两个产品，也不是谁替代谁。
+因此，OPS Loop 不是项目的全部，而是通用 Agent 底座最完整的验证场景。REMOTE-0 提供可信连接和预定义工具入口，OPS Loop 负责把零散状态组织成 Incident、Evidence、Diagnosis、Action、Approval 和 Verification。前四项简历亮点讲通用能力，SSH 讲能力如何安全延伸到服务器，OPS Loop 再证明这些能力能够组成一个受控闭环。
 
 下一步不是继续横向增加远程工具，而是缩短同一条用户旅程：复用已有 OpenSSH 配置完成接入；日常问题先做 Quick Check；用户明确要求深入排查或系统发现严重异常时，再进入 OPS Loop。Clawkit 仍不扩成通用 SSH 管理平台。
 
@@ -258,6 +269,21 @@ flowchart TB
 - **事实面**保存可追踪、可恢复、可复验的状态，不能只存在于模型上下文里。
 
 Agent 底座的核心价值，就是让这三个平面形成闭环：模型负责提出下一步候选，Runtime 负责决定候选是否能成为真实动作，事实记录负责证明实际发生了什么。
+
+#### 2.1.1 简历中的六条亮点，在架构中分别处于什么位置
+
+六条简历内容不是六个平铺的功能，而是一条从通用底座到领域闭环的递进关系：
+
+| 简历亮点 | 在架构中的职责 | 主要代码入口 | 深挖章节 |
+| --- | --- | --- | --- |
+| 核心执行引擎 | 组织 Run、Turn、模型和工具的完整生命周期，并让 CLI、飞书复用同一条主链 | [`AgentEngine`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/AgentEngine.java)、[`CancellationTree`](../clawkit-reliability/src/main/java/com/clawkit/reliability/CancellationTree.java)、[`AbstractImChannel`](../clawkit-im/src/main/java/com/clawkit/im/AbstractImChannel.java) | 第 3 章 |
+| 上下文与记忆 | 决定每轮模型能看到什么、什么可以跨会话保留、压缩后哪些约束不能丢 | [`DefaultContextPipeline`](../clawkit-context/src/main/java/com/clawkit/context/impl/DefaultContextPipeline.java)、[`ConversationSession`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/ConversationSession.java)、[`DefaultMemoryHooks`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/DefaultMemoryHooks.java) | 第 4 章 |
+| 工具安全 | 统一工具注册、可见范围、权限判断、重试和写操作状态 | [`ToolCallExecutor`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/ToolCallExecutor.java)、[`RunToolScope`](../clawkit-tools/src/main/java/com/clawkit/tools/RunToolScope.java)、[`SideEffectGate`](../clawkit-reliability/src/main/java/com/clawkit/reliability/gate/SideEffectGate.java) | 第 3、5 章 |
+| 运行观测 | 将模型、工具、审批和压缩过程转成可聚合、可回放的运行事实 | [`FileRunRecorder`](../clawkit-observability/src/main/java/com/clawkit/observability/FileRunRecorder.java)、[`RunAccumulator`](../clawkit-observability/src/main/java/com/clawkit/observability/RunAccumulator.java)、[`RunReader`](../clawkit-observability/src/main/java/com/clawkit/observability/RunReader.java) | 第 6 章 |
+| 远程 SSH | 把服务器能力临时挂载到当前任务，并在连接、能力和工具范围三处校验 | [`RemoteConnectionService`](../clawkit-cli/src/main/java/com/clawkit/cli/remote/RemoteConnectionService.java)、[`RemoteMcpSession`](../clawkit-tools/src/main/java/com/clawkit/tools/remote/RemoteMcpSession.java) | 第 8 章 |
+| OPS 分层自治 | 将观察、建议和审批执行按风险拆层，让权限随证据逐级开放 | [`ObservationAutomationCoordinator`](../extensions/clawkit-ops-loop/src/main/java/com/clawkit/ops/loop/automation/ObservationAutomationCoordinator.java)、[`DiagnosisReconciler`](../extensions/clawkit-ops-loop/src/main/java/com/clawkit/ops/loop/DiagnosisReconciler.java)、[`RepairOrchestrator`](../extensions/clawkit-ops-loop/src/main/java/com/clawkit/ops/loop/repair/RepairOrchestrator.java) | 第 7、9、15 章 |
+
+这张表也是面试时的讲述顺序：先说明平台如何执行任务，再讲上下文、工具和观测如何约束执行，最后讲这些通用能力怎样落到远程运维与分层自治。这样既不会把项目讲成几个底层类的集合，也不会只剩“AI 运维助手”这一层产品口号。
 
 ### 2.2 Maven 模块为什么要这样拆
 
@@ -352,7 +378,7 @@ Clawkit 不是 Web CRUD 项目，但很多职责可以类比：
 | Interceptor | PermissionPolicy、SafetyInterceptor、SideEffectGate | 不只做登录校验，还阻断危险副作用 |
 | 全局异常处理 | 结构化错误、FailureClass、EffectCertainty | 异常发生后还要判断副作用是否已经产生 |
 | Spring 容器 | ApplicationBootstrap | 项目选择显式组装依赖，便于看清唯一实例和边界 |
-| 定时任务 | 未来 OPS-3A | 目前持续调度尚未实现 |
+| 定时任务 | OPS-3A Observe-only | 已完成 Registry、fingerprint 去重、同目标互斥、冷却、暂停/恢复、预算和重启恢复；加速 72 小时 Fixture soak 通过，真实墙钟持续运行证据仍待收集 |
 
 最大的认知变化不是目录结构，而是**执行的不确定性**：
 
@@ -514,7 +540,7 @@ flowchart TD
     E -->|"否"| G["调用 Provider"]
     F --> G
     G --> H{"模型是否请求工具"}
-    H -->|"否"| I["保存可持久化对话并结束"]
+    H -->|"否"| I["更新事实 Session 并结束\n显式保存或清空时再落盘"]
     H -->|"是"| J["ToolCallExecutor 统一执行"]
     J --> K["工具结果回注上下文"]
     K --> D
@@ -699,7 +725,7 @@ flowchart LR
 
 > `AUTO` 不是“模型想做什么就做什么”，而是“不再逐次弹窗，但仍必须通过全部底层安全条件”。
 
-当前 OPS MVP-3 是人工审批闭环。测试参数 `--auto-approve` 仅用于 E2E，不等于 OPS-2B 的生产自动修复策略。
+当前 OPS MVP-3 是人工审批闭环。历史测试参数 `--auto-approve` 不等于 OPS-2B 的生产自动修复策略；当前独立远程 repair 启动器已 fail-closed。
 
 ### 3.6 Provider Adapter 解决了什么
 
@@ -807,50 +833,249 @@ flowchart TD
 
 底座不是“所有重要代码的集合”，而是跨场景复用的最小稳定内核。领域层可以依赖底座，底座不能反向理解领域名词。
 
+### 3.10 最近代码为什么增加“意图路由 + RunToolScope”
+
+早期入口把一句自然语言直接交给拥有全部注册工具的 `AgentEngine`。当本地代码工具与远程服务器工具同时存在时，这会出现一个产品和安全上的歧义：用户说“看看 order-api”，究竟是在看本地源码，还是在看服务器上的服务？只靠 system prompt 提醒模型不够，因为提示词属于软约束。
+
+当前工作区在 CLI 前面增加了两层确定性边界：
+
+```mermaid
+flowchart LR
+    U["用户自然语言"] --> C["IntentClassifier\n无工具、10 秒上限"]
+    C --> D{"WorkScope"}
+    D -->|"LOCAL_PROJECT"| L["AgentEngine.run\nLOCAL_ONLY"]
+    D -->|"REMOTE_SERVER"| R["远程查看 / Quick Check / Investigation\nREMOTE_READ_ONLY"]
+    D -->|"CHAT"| N["直接回复\nNO_TOOLS"]
+    D -->|"CLARIFY / 分类失败"| Q["追问，不进入全工具引擎"]
+
+    L --> E["模型可见工具过滤"]
+    R --> E
+    E --> X["ToolCallExecutor 再做一次范围校验"]
+```
+
+第一层是 [`IntentClassifier`](../clawkit-cli/src/main/java/com/clawkit/cli/intent/IntentClassifier.java)：它只接收用户输入、已登记服务器名和当前连接，不读取本地文件，也不获得任何工具。分类结果只能落在允许的 `WorkScope` 与 `ServerIntent` 枚举中；失败时按当前交互模式做保守回退，无法确定则追问。
+
+第二层是 [`RunToolScope`](../clawkit-tools/src/main/java/com/clawkit/tools/RunToolScope.java)：
+
+| Scope | 本轮允许看到和调用的能力 |
+| --- | --- |
+| `ALL` | 默认兼容路径，全部已注册工具 |
+| `LOCAL_ONLY` | 本地项目工具，不包含远程 MCP 工具 |
+| `REMOTE_READ_ONLY` | 当前远程连接中的只读工具，不包含本地文件、Git、Shell 和远程写工具 |
+| `NO_TOOLS` | 纯聊天，不提供工具 |
+
+这里故意采用“双门禁”：`AgentEngine` 在把工具定义交给模型前先过滤，`ToolCallExecutor` 在动作描述、审批和执行之前再次检查。即使模型猜到一个被隐藏的工具名，也只能得到 `BLOCKED`，不能借助 Plan、内部工具或直接点名形成旁路。受限 Scope 目前也拒绝 `PLAN_EXECUTE`，因为该协调器尚未把 Scope 逐步传播到每个计划任务；显式拒绝比静默退化到 `ALL` 更安全。
+
+这次变化最值得学习的点不是“多了一个分类模型”，而是：
+
+> 模型可以帮助理解用户意图，但能力边界必须成为随 Run 传播、在执行端重新验证的结构化参数。
+
 ---
 
 ## 4. 上下文、Session、Memory 为什么不能混在一起
 
-### 4.1 三者的生命周期不同
+### 4.1 先区分五种生命周期
+
+“模型记得什么”不是一个存储问题，而是五种生命周期共同形成的结果：
+
+| 概念 | 生命周期 | 典型内容 | 是否直接持久化 |
+| --- | --- | --- | --- |
+| `Run` | 一次用户目标 | `runId`、轮次、取消树、预算、工具 Scope | 通过 RunEvent 记录运行事实 |
+| `ModelContext` | 一次 Provider 调用 | system prompt、Session、Memory、Skill、工具定义 | 否，每轮重新组装 |
+| `Session` | 一段连续对话，可跨 Run | 用户消息、模型回复、工具调用与结果 | 可保存到 `~/.clawkit/sessions` |
+| Working Memory | 当前 Session 内 | 子目标、临时结论、模型主动 `remember` 的键值 | 否，`/new` 后清空 |
+| Long-term Memory | 跨 Session | 用户偏好、长期反馈、项目决策、参考资料 | 保存到 `~/.clawkit/memory` |
+
+此外还有 Workspace、Runtime Reminder、相关旧会话摘要和当前 Skill。它们会影响本轮模型决策，却不应因为“发给过模型”就自动变成对话事实。
 
 ```mermaid
 flowchart TB
-    INPUT["用户当前输入"] --> MODEL["本轮模型上下文"]
-    SESSION["Session\n真实对话历史"] --> MODEL
-    MEMORY["Memory\n跨任务长期知识"] --> MODEL
-    WORKSPACE["Workspace\n当前仓库信息"] --> MODEL
-    RUNTIME["Runtime\n临时提醒与控制状态"] --> MODEL
-    SKILL["Skill\n当前任务说明"] --> MODEL
+    INPUT["用户当前输入"] --> SESSION["ConversationSession\n事实对话历史"]
+    SESSION --> PIPE["ContextPipeline\n本轮临时视图"]
+    WORKSPACE["Workspace\nTODO / plan"] --> PIPE
+    RUNTIME["Runtime\n循环、进度、预算提醒"] --> PIPE
+    WM["Working Memory\n当前会话键值"] --> PIPE
+    LTM["Long-term Memory\n相关长期记忆"] --> PIPE
+    RELATED["Past Session Summary\n相关旧会话摘要"] --> PIPE
+    SKILL["Active Skill"] --> PIPE
+    PIPE --> MODEL["Provider"]
 
-    MODEL --> FILTER["持久化过滤"]
+    MODEL --> FILTER["isPersistable 过滤"]
     FILTER --> SESSION
-    MODEL -->|"任务结束后提取"| MEMORY
-    RUNTIME -.->|"默认不持久化"| SESSION
-    WORKSPACE -.->|"默认不持久化"| SESSION
+    SESSION -->|"显式保存 / 清空前自动保存"| DISK["Session JSON"]
+    SESSION -->|"受门槛控制的提取"| LTM
 ```
 
-- **上下文**：这一次请求真正发给模型的全部材料。
-- **Session**：真实发生过的用户消息、模型回复、工具调用和工具结果。
-- **Memory**：经过提取后，希望跨任务复用的长期信息。
-- **Ephemeral Context**：死循环提醒、工作区快照、相关会话摘要等临时材料。
+核心不变量是：
 
-如果把临时提醒保存进 Session，下一次任务可能把旧的运行状态当成当前事实。如果把旧事故证据写进长期 Memory，新 Incident 可能误用过期状态。
+> `ModelContext` 是可重建的临时视图；Session 是对话事实；Memory 是经过选择的跨会话知识。三者不能互相充当事实来源。
 
-因此项目强调：
+### 4.2 一次 Run 中，会话上下文如何进入模型
 
-> 模型上下文是临时视图，磁盘上的事实记录才是可追踪状态。
+入口在 [`AgentEngine.run`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/AgentEngine.java)。普通 ReAct Run 开始时按以下顺序准备材料：
 
-### 4.2 为什么需要上下文压缩
+1. 建立新的 `runId`、取消树、deadline 与预算控制；
+2. 从 Workspace 读取可重建信息；
+3. 把当前用户输入追加到 `ConversationSession`；
+4. 用当前任务召回最多 5 条长期 Memory；
+5. 搜索相关历史 Session，最多注入 3 条名称和摘要；
+6. 每轮再加入 Working Memory 与 Runtime Reminder；
+7. 交给 `ContextPipeline` 统一组装、计数、掩码和压缩；
+8. Provider 返回后，只把可持久化的用户/助手/工具事实写回 Session。
 
-模型上下文有长度限制。简单删除旧消息会丢掉：
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant E as AgentEngine
+    participant S as ConversationSession
+    participant M as MemoryHooks
+    participant C as ContextPipeline
+    participant P as ProviderGateway
 
-- 用户约束；
-- 文件路径；
-- 已发现错误；
-- 未完成任务；
-- 审批边界。
+    U->>E: prompt
+    E->>S: append user message
+    E->>M: beforeRun(prompt, max=5)
+    M-->>E: relevant memory fragments
+    E->>S: search related sessions
+    S-->>E: up to 3 summaries
+    loop each turn
+        E->>C: system + session + ephemeral + tools
+        C-->>E: budgeted ModelContext
+        E->>P: ModelRequest
+        P-->>E: answer or tool calls
+        E->>S: persist factual messages only
+    end
+    E->>M: afterRun(session history)
+```
 
-Clawkit 使用分级策略：
+这里有两个容易忽略的细节：
+
+- 稳定 system prompt 不保存在事实 Session 中，而是每轮由五层 [`PromptAssembly`](../clawkit-context/src/main/java/com/clawkit/context/PromptAssembly.java) 重建，避免权限模式、Skill 或 Memory Index 更新后仍带着旧提示词。
+- 召回的 Memory、旧会话摘要、运行时提醒都以 system message 形式进入临时上下文，但 `isPersistable` 会过滤稳定 prompt 和 Runtime system message，避免它们在 Session 中自我复制。
+
+### 4.3 ConversationSession 管理的不是“聊天字符串”
+
+[`ConversationSession`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/ConversationSession.java) 封装了内存历史与持久化边界。它负责：
+
+- 追加和替换结构化 `Message`；
+- 保存、加载、列出和删除 Session；
+- 清空前最多自动保存一次；
+- 根据新任务搜索相关旧 Session；
+- 在保存和加载两端都应用 `persistable` 过滤。
+
+Session 中保留的不只是 user/assistant 文本，还包括工具调用和与 `toolCallId` 对应的工具结果。这样恢复会话时，模型看到的是完整协议历史，而不是缺少调用原因的一串输出。
+
+`/session load <id>` 不是把旧摘要贴到当前对话末尾。引擎会先执行 `clearSession()`，完成强制记忆提取、自动保存、临时上下文与审批缓存清理，再用加载出的事实消息替换当前历史。这个顺序可以防止两个 Session 的 Working Memory、审批授权或死循环签名串在一起。
+
+### 4.4 Session 怎样落盘、搜索和恢复
+
+生产装配在 [`ApplicationBootstrap`](../clawkit-cli/src/main/java/com/clawkit/cli/ApplicationBootstrap.java)：
+
+```text
+~/.clawkit/sessions/
+├── index.json
+├── <session-id>.json
+└── <session-id>.json
+```
+
+[`SessionService`](../clawkit-engine/src/main/java/com/clawkit/engine/SessionService.java) 是门面，负责生成短 ID、摘要、搜索、统计和按年龄清理；[`FileSessionStore`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/FileSessionStore.java) 负责文件格式和 I/O。
+
+持久化设计包含几项后端工程细节：
+
+- `SessionDocument` 带 `schemaVersion`、时间、消息和 metadata；高于当前版本时拒绝读取，旧 v0 文件走兼容读取路径。
+- Session 文件和 `index.json` 先写同目录临时文件，再尝试 `ATOMIC_MOVE + REPLACE_EXISTING`；文件系统不支持原子移动时降级为替换。
+- Session ID 解析后仍通过 `normalize + startsWith(basePath)` 防路径穿越。
+- 损坏 JSON、未来版本、文件不存在和普通 I/O 错误使用不同的 `SessionError`，调用方不需要靠异常文本猜原因。
+- 保存时通过 `ProviderGateway` 生成 50—150 字摘要；模型不可用或摘要失败时，回退到第一条用户消息，不阻断保存。
+
+搜索不是加载所有完整对话交给模型。`SessionService.search` 只对名称、第一条用户消息和摘要做关键词评分，最多返回 5 条；Run 前的自动相关召回再限制为 3 条摘要。这同时控制了隐私暴露、I/O 和 Token 成本。
+
+需要诚实说明：当前文件锁和原子性主要解决单进程内写入及单文件替换，Session 正文与索引仍不是一个跨文件事务；如果未来允许多个 Clawkit 进程共享同一个 HOME，需要增加进程级锁、索引重建或单一存储服务。
+
+### 4.5 Memory 实际上有三层，不是一张无限增长的聊天表
+
+当前代码中容易混淆的三种“记住”如下：
+
+| 机制 | 入口 | 保存范围 | 适合内容 |
+| --- | --- | --- | --- |
+| Working Memory | 内部工具 `remember(key, value)` | 当前引擎 Session，内存 `ConcurrentHashMap` | 当前任务的临时子目标、短期结论 |
+| Related Session | `session.relatedContext(query)` / `session_context` | 已保存 Session 的摘要索引 | “以前做过类似任务吗” |
+| Long-term Memory | `memory_save`、CLI `/remember`、Run 后提取 | `~/.clawkit/memory/*.md` | 跨会话仍成立的偏好、反馈、决策、资料 |
+
+Working Memory 每轮以 `[Working Memory]` 注入，但 `/new`、Session 加载或清空都会删除。它不能代替 Session，因为它没有完整对话顺序；也不能代替长期 Memory，因为没有磁盘持久化。
+
+Related Session 召回的是“旧任务发生过什么”的摘要，不是自动加载旧对话。用户确实要继续那段对话时，才使用 `/session load <id>`。
+
+Long-term Memory 则是一条条带 YAML frontmatter 的 Markdown：
+
+```text
+~/.clawkit/memory/
+├── MEMORY.md               # 轻量索引：name + filename + description
+├── user_prefer-chinese.md  # 完整内容
+└── project_project-decision.md
+```
+
+`MemoryType` 只允许 `user`、`feedback`、`project`、`reference` 四类。索引可以进入稳定 prompt，让模型知道“有哪些记忆”；真正与当前任务相关的正文由召回流程按需加载。
+
+### 4.6 长期 Memory 如何召回
+
+[`DefaultMemoryHooks.beforeRun`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/DefaultMemoryHooks.java) 当前采用轻量关键词召回：
+
+```text
+当前 task
+→ 读取 MEMORY.md 索引
+→ 用 name + description 建立 KeywordScorer 语料
+→ 过滤 score = 0
+→ 按相关度排序
+→ 最多加载 5 个正文文件
+→ 注入 [Relevant Memory: <name>]
+```
+
+这样做的好处是本地、透明、无向量数据库依赖，也支持中英文关键词；代价是同义表达、隐含关联和长文本语义召回能力有限。正文不参与第一阶段打分，因此记忆条目的 `name` 与 `description` 不是装饰字段，而是检索质量的一部分。
+
+召回失败采取 best-effort：记录警告并返回空列表，不阻断主 Run。原因是 Memory 是辅助信息，不是工具权限、Attempt Journal 或审批状态那样的控制面事实。反过来，如果业务正确性依赖某条信息，就不应只把它放在 Memory；应该进入配置、策略、Incident 或版本化领域数据。
+
+### 4.7 长期 Memory 如何写入
+
+当前有三条写路径，但最终都进入同一个 `DiskMemoryService`：
+
+1. **模型显式保存**：`memory_save(name, description, type, content)`。它是有副作用的内部工具，仍经过 `ToolCallExecutor`、权限判断、ActionDescriptor 和 Side Effect Gate；PLAN 模式不暴露。
+2. **用户显式保存**：CLI `/remember` 先通过 Provider 提取元数据，再调用 `rememberMemory`，复用相同的去重和写入路径。
+3. **Run 后自动提取**：`afterRun` 用单独的 `MEMORY_EXTRACT` phase 调用模型，从事实 Session 中提取跨会话信息。
+
+自动提取不是每轮都跑。非强制模式同时要求：
+
+- 累计至少 5 个 Turn；
+- 距离上次提取至少新增 10 条消息；
+- 格式化后的候选文本达到模型上下文窗口的 60%。
+
+值得特别审查的是第三个条件：Token 检查使用的是已经截断到最多 40 条、每条 300 字的格式化文本。对于 128K 等大窗口，这个 60% 阈值可能长期无法达到，导致普通 Run 的自动提取很少触发，实际更多依赖清空 Session 时的强制提取。这是当前实现的行为边界，后续应让门槛基于未截断历史的预算报告，或改为独立的消息量/Token 上限策略。
+
+清空或切换 Session 时使用 `force=true`，跳过上述门槛，最多保存 5 条。普通 Run 结束最多保存 3 条。候选消息最多 30 条；system message 被排除，过长工具结果截到 200 字，送入提取器的单条内容再限到 300 字、总条数限到 40，避免把整段终端输出当长期记忆。
+
+提取器只允许保留：用户偏好、长期反馈、项目决策和外部资源；临时任务、工具输出以及可从代码重新推导的事实应跳过。同名同内容计为 `skipped`；同名不同内容会覆盖并计为 `conflicts`。提取失败、JSON 非法或存储异常不会让主任务改判失败。
+
+这套策略是在“完全不记”和“把聊天全存下来”之间取中间值，但它不是最终形态：当前冲突只计数、不做语义合并；条目缺少来源引用、可信度、有效期和用户确认状态；`MEMORY.md` 与正文文件也不是跨文件事务。后续若增强，应先补来源、冲突审阅、敏感信息策略和可撤回性，再考虑向量检索。
+
+### 4.8 ContextPipeline 如何阻止临时信息污染 Session
+
+[`DefaultContextPipeline`](../clawkit-context/src/main/java/com/clawkit/context/impl/DefaultContextPipeline.java) 把输入拆成带来源和生命周期的 `ContextFragment`：
+
+| Source | 生命周期 | 可压缩 | 说明 |
+| --- | --- | --- | --- |
+| `SYSTEM` | `EPHEMERAL` | 否 | 五层稳定提示词，每轮重建 |
+| `WORKSPACE` | `EPHEMERAL` | 否 | 当前 TODO / plan 等可重建信息 |
+| `SESSION` | `PERSISTED` | 是 | 事实对话历史 |
+| `RUNTIME` | `EPHEMERAL` | 否 | 循环检测、进度提醒 |
+| `MEMORY` | `EPHEMERAL` | 否 | Working Memory 与相关召回 |
+| `SKILL` | `EPHEMERAL` | 否 | 当前激活 Skill |
+| `TOOLS` | `EPHEMERAL` | 否 | 不作为 Message，但计入 Token 预算 |
+
+这解释了为什么“它出现在 prompt 中”不等于“它应写入 Session”。持久化过滤只是最后一道防线，真正的边界从 ContextFragment 的来源建模就开始了。
+
+### 4.9 为什么需要上下文压缩
+
+模型上下文有长度限制。简单删除旧消息会丢掉用户约束、文件路径、已发现错误、未完成任务和审批边界。Clawkit 使用分级策略：
 
 | 层级 | 做法 |
 | --- | --- |
@@ -860,13 +1085,13 @@ Clawkit 使用分级策略：
 | L3 | 调用模型生成摘要 |
 | L4 | 无法安全压缩时结构化失败 |
 
-关键约束叫 required anchor，可以理解为“绝不能压丢的钉子”。压缩前后会用快照和哈希检查这些约束是否还在。
+关键约束叫 required anchor，可以理解为“绝不能压丢的钉子”。`AnchorSnapshotPlanner` 在压缩前固定 required / optional anchors，压缩后检查规范快照、保留 ID 和丢失范围。压缩失败或压缩后仍超过 95% 硬限制时，`AgentEngine` 返回 `COMPACT_FAILED`，不调用主任务模型，也不把失败结果覆盖进 Session。手动 `/compact` 同样通过这条唯一管线；失败时原 Session 保持不变。
 
 这背后的设计思想是：
 
-> 上下文压缩不是文案优化，而是一种可能改变后续决策的有损操作，因此必须可验证。
+> 上下文压缩不是文案优化，而是一种可能改变后续决策的有损操作，因此必须有审计、锚点校验和 fail-closed 终态。
 
-### 4.3 同一条信息为什么要有不同形态
+### 4.10 同一条信息为什么要有不同形态
 
 “服务不可用”可能同时出现在对话、工具结果、Evidence、Incident 报告和长期 Memory 中，但它们不是同一份数据的随意复制：
 
@@ -1201,6 +1426,27 @@ Clawkit 把这些过程写成 `RunEvent`：
 
 观测模块只记录，不反向决定 Agent 行为。这样避免“为了让报表好看而改变控制状态”。
 
+#### 6.1.1 一条事件如何同时服务实时查看和事后回放
+
+运行观测的关键不在于“多打日志”，而在于实时摘要和事后回放不能各自维护一套统计逻辑：
+
+```mermaid
+flowchart LR
+    E["Agent / Provider / Tool\n产生结构化事件"] --> R["FileRunRecorder\n按顺序追加 events.jsonl"]
+    R --> A["RunAccumulator\n聚合状态和指标"]
+    A --> S["summary.json\n当前任务摘要"]
+
+    F["历史 events.jsonl"] --> RR["RunReader\n读取并校验事件"]
+    RR --> A2["同一 RunAccumulator"]
+    A2 --> RS["回放后的摘要与指标"]
+```
+
+[`FileRunRecorder`](../clawkit-observability/src/main/java/com/clawkit/observability/FileRunRecorder.java) 为同一 Run 分配递增序号，将事件顺序写入 `events.jsonl`，再把 [`RunAccumulator`](../clawkit-observability/src/main/java/com/clawkit/observability/RunAccumulator.java) 的当前结果写成 `summary.json`。事后读取时，[`RunReader`](../clawkit-observability/src/main/java/com/clawkit/observability/RunReader.java) 重新消费相同事件，并复用同一个聚合器。因此“运行时看到的摘要”和“离线重放得到的摘要”遵守同一套计算规则。
+
+事件不只记录成功或失败，还保留 `runId`、`parentRunId`、Turn、模型调用、工具重试、审批决定、输出截断和上下文压缩结果。父子 Run 可以串成调用树；[`RunEventCodec`](../clawkit-observability/src/main/java/com/clawkit/observability/RunEventCodec.java) 处理结构升级和未知事件；[`ObservabilityRedactor`](../clawkit-observability/src/main/java/com/clawkit/observability/ObservabilityRedactor.java) 在参数落盘前遮蔽密钥等敏感值。
+
+这套设计对应简历中的“过程追踪”：它让复杂任务可以定位和比较，但仍属于尽力而为的观测数据。真正决定写操作能否继续的 Attempt Journal 具有更强的持久化要求，不能被 `events.jsonl` 代替。
+
 ### 6.2 为什么可靠性日志和 RunEvent 要分开
 
 两类日志的重要性不同：
@@ -1318,7 +1564,7 @@ E2E 通过不能代替 Unit Test，因为真实环境很难稳定制造每个崩
 
 ---
 
-## 7. OPS Loop 是如何一步步长出来的
+## 7. OPS Loop 与分层自治
 
 ### 7.1 演进路线
 
@@ -1335,8 +1581,8 @@ timeline
            : 飞书单向通知
     MVP-3  : 人工审批修复
            : opsfix 与独立验证
-    OPS-2B : Shadow 后有限 AUTO
     OPS-3A : 只读持续发现
+    OPS-2B : Shadow 后有限 AUTO
     OPS-3B : 版本化 Playbook
 ```
 
@@ -1371,7 +1617,7 @@ flowchart TD
     ACTION -->|"是"| APPROVAL["解释风险并请求审批"]
 ```
 
-上图描述的是产品化目标旅程：底层远程连接、只读调查和审批修复闭环已经分别具备工程基础，但 Quick Check、自然语言入口和渐进式结果展示仍需要在普通 CLI 中继续串联。
+这条产品旅程目前已经接入普通 CLI：意图层区分本地项目、远程服务器、纯聊天和追问；服务器查询可以停在 Quick Check，也可以按明确调查请求进入 `RemoteDiscoveryWorkflow`、持久化 Incident、人工审批与独立验证。当前重点已从“把入口串起来”转为用真实 dogfood 检查提示是否易懂、结果是否过载以及失败后能否继续。
 
 这条旅程有三个体验原则：
 
@@ -1406,6 +1652,27 @@ flowchart LR
 ```
 
 前一个闭环可以高频、自动、只读运行；后一个闭环必须低频、强约束、可审计。即使未来增加持续观察，也不等于自动获得写权限；“谁触发任务”和“任务能做什么”是两条独立轴。
+
+#### 7.1.3 分层自治不是一个 AUTO 开关
+
+OPS Loop 没有把“人工处理”和“完全自动”做成一个二选一开关，而是按动作风险拆成五个层级。当前代码已落地 A0—A2 的主闭环，并完成了 A3 的 Fixture-only 反事实闭环；A4 仍是明确的 No-Go：
+
+| 层级 | 系统可以做什么 | 关键约束 | 当前状态 |
+| --- | --- | --- | --- |
+| A0 观察 | 定时只读采证，识别 APP_DOWN、HEALTHY、UNKNOWN，合并重复事件 | 无写工具；同目标互斥；暂停、预算、冷却和重启恢复均持久化 | 已完成，限可丢弃 Fixture；待真实墙钟证据 |
+| A1 建议 | 模型解释证据并生成诊断、处置建议 | 确定性信号校准模型结论；建议对象本身不可执行 | 已完成 |
+| A2 审批执行 | 对允许的固定动作展示风险并请求人工批准，执行后独立复核 | Policy Gate、现场快照、fresh precheck、持久化派发意图、结果未知阻断 | 已完成闭环；真实服务器保持只读，写动作在 Fixture 验证 |
+| A3 Shadow | 记录系统本来会执行的动作，但不真正派发 | Fixture allowlist、同次快照内的引用与白名单事实双校验、不可变 policy/decision/review、零副作用与人工反事实选择 | Fixture-only 已完成；缺真实 dogfood 人工对账，不能晋级 |
+| A4 有限自动 | 仅对 Fixture 或 Canary 中的单一白名单动作自动执行 | 目标、动作、频率和失败处理全部受限，可随时降级 | No-Go |
+
+这里有两条容易混淆的轴：
+
+- **触发自动化**回答任务由人发起还是由 Scheduler 发起；
+- **权限自治**回答任务最多能看到、建议或执行到哪一步。
+
+一个定时任务可以自动运行，但仍然只有 A0 只读权限；一次人工发起的调查也可以进入 A2 审批执行。把两条轴分开，才能避免“接入 Cron 就等于自动修复”的权限跃迁。
+
+简历使用“从自动巡检、模型诊断到审批修复逐级放权”，对应的是证据最完整的 A0—A2。A3 可以在追问时说明为“已完成 Fixture-only 的零副作用反事实闭环”，但不写成自动修复或真实效果；A4 不提前算作项目成果。
 
 ### 7.2 Fixture：可重复的测试世界
 
@@ -1532,6 +1799,21 @@ flowchart TD
 | 需要接管 | `ESCALATED` / `OUTCOME_UNKNOWN` | 已知事实、未知部分和下一步是什么？ |
 
 这张映射表比直接把内部枚举打印给用户更重要。好的 CLI 不是隐藏底层复杂度，而是把复杂度翻译成用户能做决定的信息。
+
+### 7.6 2026-08-04 工作区把哪些产品闭环补实了
+
+最近改动主要不是增加新的修复动作，而是把已有安全内核变成可独立验收的用户路径：
+
+| 改动 | 代码落点 | 它证明或改善什么 |
+| --- | --- | --- |
+| `FixSession` 接口 | `ops-loop/repair` | `OpsFixSession` 不再是不可替换的具体类，夹具能注入可控执行结果 |
+| 批准路径夹具 | `AppDownApproveFixtureTest` | 覆盖成功、自恢复、快照漂移、执行失败、结果未知、验证失败等 8 条决策路径 |
+| 拒绝/取消夹具 | `AppDownRejectFixtureTest` | 证明不创建写 Session、`restart_service` 调用为 0、终态持久化且不能继续 |
+| 六类终端展示 | `RejectedTerminalRenderTest` | 区分已拒绝、已取消、已恢复、无需操作、未产生效果和需要人工处理 |
+| 证据翻译 | `OpsInvestigationFacade` | 将通用“正常/异常”细化为服务状态、容器状态、HTTP 状态码和近期 5xx 数量 |
+| dogfood 记录 | `DogfoodLogger`、`/ops feedback`、手动 `shadow-review` | 记录脱敏任务、动作数、审批阅读时长、反馈，以及 Fixture A3 的人工反事实选择，为 Phase 5 提供原始数据 |
+
+这些测试仍不能替代真实远端批准成功的 dogfood。当前真实 `test-server` 保持只读；写入验收只允许在可丢弃 APP_DOWN Fixture 中使用唯一白名单动作 `restart_service(order-api)`。因此准确状态是：PRODUCT-3 Phase 0—4 已具备夹具闭环，Phase 5 的 7 天个人真实使用仍在进行。
 
 ---
 
@@ -1851,6 +2133,19 @@ stateDiagram-v2
 | `OUTCOME_UNKNOWN` | 目前无法确认动作是否发生 | 乐观假设失败并重试 |
 | `MANUAL_REQUIRED` | 已知事实、风险和接管步骤 | 留下模糊的“系统错误” |
 
+可靠性内核的 Attempt 终态不会原样暴露给普通用户。`OpsInvestigationFacade` 会把它们投影成面向 Incident 的 `UserIncidentStatus`：
+
+| 用户终态 | 含义 | 终端必须明确展示 |
+| --- | --- | --- |
+| `REJECTED` | 用户明确拒绝 | 未创建写会话、未执行任何操作、可查看 Incident |
+| `CANCELLED` | 用户取消或审批流程中止 | 未执行写操作，与“拒绝”使用不同标题 |
+| `NO_ACTION_REQUIRED` | fresh precheck 发现服务已恢复 | 是现场自恢复，不冒充 Clawkit 修复成功 |
+| `FAILED_NO_EFFECT` | 漂移或执行前失败，已确认无远端副作用 | 服务器状态未被改变，建议人工检查 |
+| `RESOLVED` | 写动作已执行且新只读会话验证恢复 | 展示完整“诊断→执行→验证”链与 inspect 入口 |
+| `NEEDS_HUMAN` | 结果未知或验证失败 | 已执行/可能执行了什么、哪里未知、禁止自动重试 |
+
+当前终端渲染测试不只断言状态枚举，还检查标题、动作、零副作用说明、观察事实和 `/ops inspect <incidentId>` 入口。用户真正需要的是“现在还能不能安全继续”，而不是内部对象序列化结果。
+
 用户信任来自准确表达边界：系统可以承认不知道，但不能把“不知道”伪装成“没发生”或“已恢复”。
 
 ---
@@ -1867,6 +2162,8 @@ stateDiagram-v2
 4. [`ToolCallExecutor`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/ToolCallExecutor.java)：工具统一入口。
 5. [`ToolMetadata`](../clawkit-tools/src/main/java/com/clawkit/tools/ToolMetadata.java)：权限依据。
 6. [`DefaultContextPipeline`](../clawkit-context/src/main/java/com/clawkit/context/impl/DefaultContextPipeline.java)：上下文如何生成。
+7. [`IntentClassifier`](../clawkit-cli/src/main/java/com/clawkit/cli/intent/IntentClassifier.java)：用户目的如何变成工作范围。
+8. [`RunToolScope`](../clawkit-tools/src/main/java/com/clawkit/tools/RunToolScope.java)：能力范围如何随单次 Run 传播。
 
 阅读目标不是理解每行，而是能回答：
 
@@ -1875,8 +2172,27 @@ stateDiagram-v2
 - PLAN 为什么看不到写工具？
 - 工具结果如何回到下一轮？
 - Session 保存的是什么？
+- 为什么隐藏工具后，执行端还要再拦一次？
 
-### 10.2 第二阶段：可靠性
+### 10.2 第二阶段：会话、上下文和记忆
+
+1. [`ConversationSession`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/ConversationSession.java)
+2. [`SessionService`](../clawkit-engine/src/main/java/com/clawkit/engine/SessionService.java)
+3. [`FileSessionStore`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/FileSessionStore.java)
+4. [`DefaultMemoryHooks`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/DefaultMemoryHooks.java)
+5. [`DiskMemoryService`](../clawkit-memory/src/main/java/com/clawkit/memory/impl/DiskMemoryService.java)
+6. [`InternalToolSuite`](../clawkit-engine/src/main/java/com/clawkit/engine/impl/InternalToolSuite.java)
+7. [`LadderedCompactor`](../clawkit-context/src/main/java/com/clawkit/context/impl/LadderedCompactor.java)
+
+配套测试至少各看一组：
+
+- `SessionServiceTest` / `FileSessionStoreTest`：搜索、摘要回退、损坏文件和版本边界；
+- `DefaultMemoryHooksTest` / `DiskMemoryServiceTest`：召回、提取门槛、去重、冲突和索引；
+- `AgentEngineTest` / `PromptAssemblyTest`：临时上下文不会写回事实 Session。
+
+阅读时始终追问：这条信息属于当前 Turn、当前 Session、跨 Session Memory，还是控制面事实？如果进程退出、用户 `/new` 或加载旧 Session，它应该留下还是消失？
+
+### 10.3 第三阶段：可靠性
 
 1. [`ActionDescriptor`](../clawkit-tools/src/main/java/com/clawkit/tools/action/ActionDescriptor.java)
 2. [`AttemptState`](../clawkit-reliability/src/main/java/com/clawkit/reliability/attempt/AttemptState.java)
@@ -1889,7 +2205,7 @@ stateDiagram-v2
 
 > 如果远端已经执行，但客户端没有收到结果，系统会怎么做？
 
-### 10.3 第三阶段：OPS 只读诊断
+### 10.4 第四阶段：OPS 只读诊断
 
 1. [`OpsCapabilityProfile`](../extensions/clawkit-ops-mcp/src/main/java/com/clawkit/ops/mcp/OpsCapabilityProfile.java)
 2. [`OpsMcpServer`](../extensions/clawkit-ops-mcp/src/main/java/com/clawkit/ops/mcp/OpsMcpServer.java)
@@ -1906,7 +2222,7 @@ stateDiagram-v2
 - 证据不足时为什么不调用模型？
 - 模型与确定性诊断如何分工？
 
-### 10.4 第四阶段：MVP-3
+### 10.5 第五阶段：MVP-3
 
 1. [`RepairPolicyGate`](../extensions/clawkit-ops-loop/src/main/java/com/clawkit/ops/loop/repair/RepairPolicyGate.java)
 2. [`ApprovalGrant`](../extensions/clawkit-ops-loop/src/main/java/com/clawkit/ops/loop/repair/ApprovalGrant.java)
@@ -1914,50 +2230,73 @@ stateDiagram-v2
 4. [`RepairOrchestrator`](../extensions/clawkit-ops-loop/src/main/java/com/clawkit/ops/loop/repair/RepairOrchestrator.java)
 5. [`OpsFixSession`](../extensions/clawkit-ops-loop/src/main/java/com/clawkit/ops/loop/repair/OpsFixSession.java)
 6. [`IndependentVerifier`](../extensions/clawkit-ops-loop/src/main/java/com/clawkit/ops/loop/repair/IndependentVerifier.java)
-7. [`RemoteIncidentRepairMain`](../extensions/clawkit-ops-delivery/src/main/java/com/clawkit/ops/delivery/RemoteIncidentRepairMain.java)
+7. [`OpsInvestigationFacade`](../extensions/clawkit-ops-delivery/src/main/java/com/clawkit/ops/delivery/OpsInvestigationFacade.java)
 8. [`clawkit-ops-fix-gateway`](../ops-fixtures/remote/clawkit-ops-fix-gateway)
+9. [`AppDownApproveFixtureTest`](../extensions/clawkit-ops-delivery/src/test/java/com/clawkit/ops/delivery/AppDownApproveFixtureTest.java)
+10. [`AppDownRejectFixtureTest`](../extensions/clawkit-ops-delivery/src/test/java/com/clawkit/ops/delivery/AppDownRejectFixtureTest.java)
+11. [`RejectedTerminalRenderTest`](../clawkit-cli/src/test/java/com/clawkit/cli/ops/RejectedTerminalRenderTest.java)
 
-目标是能从头讲完一次 `VERIFIED_SUCCESS`，并指出每一步防止什么风险。
+目标是能从头讲完一次 Fixture 内的 `VERIFIED_SUCCESS`，并指出每一步防止什么风险。独立的
+`RemoteIncidentRepairMain` 只保留为 fail-closed 兼容入口，不能作为远程写入或 A4 的实现入口。
 
 ---
 
 ## 11. 秋招项目故事怎么讲
 
-### 11.1 30 秒版本
+### 11.1 简历完整版本
 
-> 我做了一个运行在本地的个人 AI 运维助手。用户复用已有 SSH 配置连接自己的服务器，助手通过预定义只读工具查看服务、容器、HTTP 和日志；发现异常后进入结构化调查。模型负责解释证据，确定性策略决定动作是否允许；修复必须人工审批，执行前重新采证，最后由新的只读会话验证服务是否真的恢复。底层用 Java 21 Agent Runtime 统一管理模型、工具、权限和运行记录，重点解决远程写操作的结果未知、重复副作用和执行者自证成功问题。
+**Clawkit｜Java 智能体执行平台**
 
-### 11.2 三分钟版本
+基于 Java 21 自研的智能体平台，围绕任务执行、上下文记忆、工具安全与过程追踪构建通用底座，并在远程运维场景中探索分层自治。
 
-按照这个顺序讲：
+- 设计智能体核心执行引擎，统一调度模型、上下文、记忆与工具；按任务和轮次管理执行生命周期，承载命令行与飞书入口，支持父子任务预算共享与级联取消。
+- 分层管理临时上下文、会话状态、工作记忆与长期记忆，按相关性召回并注入模型上下文；采用分级压缩与关键锚点校验，重要约束丢失或压缩后仍超限时阻断执行。
+- 统一内置与外部工具的注册、风险元数据和执行入口，按任务过滤可见范围并在调用前二次校验；只读工具支持并行与受控重试，写工具需审批并进入副作用状态机。
+- 以追加事件记录模型、工具、审批和上下文压缩过程，由同一聚合逻辑生成实时摘要并支持离线回放；结合父子任务关联、版本兼容和敏感参数脱敏定位复杂执行链路。
+- 复用系统 SSH 配置接入远程工具，握手时校验协议、工具清单与能力指纹，不一致即拒绝；按任务临时挂载白名单只读能力，连接结束自动卸载。
+- 面向远程服务故障构建分层自治的运维闭环，从自动巡检、模型诊断到审批修复逐级放权；通过事件去重、执行前复查和独立验证，避免重复修复与误操作。
 
-1. **背景**：普通 Agent 工具调用缺少真实副作用的可靠性语义。
-2. **难点一**：所有工具必须走统一权限入口，不能让 Plan、MCP、SubAgent 产生旁路。
-3. **难点二**：远程超时后不能判断动作没发生，因此设计 Attempt Journal、durable intent 和 `OUTCOME_UNKNOWN`。
-4. **难点三**：执行命令成功不代表业务恢复，因此用新会话做独立验证。
-5. **运维落地**：opsro 只读、opsfix 只允许重启 order-api，gateway 和服务端双重校验。
-6. **验收**：用 Fixture、对抗 Case 和结构化 E2E 证据验证，而不是只看模型最终文本。
-7. **产品化**：REMOTE-0 已证明安全连接可行，当前重点从“再加能力”转向接入、Quick Check、调查和审批体验。
-8. **边界**：当前是面向个人和少量 Linux 服务的本地 CLI，写能力仍是测试环境中的固定动作，尚未宣称生产自动修复。
+这六条按照“平台主干—关键控制—场景落地”排列。前四条回答智能体本身怎样执行、怎样保留信息、怎样使用工具、怎样留下证据；第五条回答能力如何安全延伸到服务器；第六条回答这些能力如何组成有业务目标的运维闭环。
 
-### 11.3 简历表述示例
+### 11.2 30 秒版本
 
-可以写：
+> 我设计并实现了一个基于 Java 21 的智能体执行平台。核心引擎按任务和轮次统一组织模型、上下文、记忆和工具，并由命令行与飞书复用；上下文过长时通过分级压缩和关键锚点保护任务约束，工具调用则经过可见范围过滤、执行前复查和写操作审批。系统会把模型、工具和审批过程记录成可回放事件。在此基础上，我通过 SSH 接入受限的远程工具，并把运维能力拆成自动观察、诊断建议和审批修复三个层级，形成从发现异常到独立验证的闭环。
 
-- 基于 Java 21 和 Maven 多模块架构实现本地 Agent Runtime，统一模型调用、上下文管理、工具执行、权限审批与 RunEvent 观测链路。
-- 设计副作用动作状态机与持久化 Attempt Journal，通过 durable dispatch intent、目标互斥、结果未知锁定和启动恢复，阻止远程超时后的自动重复写。
-- 实现 opsro/opsfix 双身份远程运维闭环，使用 forced-command、MCP capability attestation、动作白名单和服务端二次校验限制远端权限。
-- 构建审批后 fresh precheck、快照绑定和独立 Verification，避免状态漂移及“命令成功但业务未恢复”的假修复。
-- 使用可重建 Docker Fixture、业务不变量和结构化 E2E 产物验证诊断及修复管线。
+这段话先说明它是通用智能体平台，再用运维证明平台能力可以承受真实工具和远程副作用。不要一开场只讲 SSH，否则面试官很容易把项目理解成“给模型套了一层远程命令”。
 
-不建议写：
+### 11.3 三分钟版本
 
-- “实现了生产级自动运维平台”；
-- “模型可自主解决未知线上事故”；
-- “诊断准确率 100%”；
-- “实现 exactly-once 远程写入”。
+按照下面的因果顺序讲，而不是逐个背模块名：
 
-最后一条尤其重要。当前系统通过持久化、互斥和禁止未知结果重试降低重复风险，但通用分布式环境下很难仅靠客户端保证 exactly-once。
+1. **项目目标**：聊天模型只能给答案，智能体还要跨多轮使用工具，因此需要一个负责执行生命周期、权限和事实记录的通用底座。
+2. **核心引擎**：`AgentEngine` 以 Run、Turn 和 Tool Call 组织任务，CLI 与飞书只负责输入输出；预算、截止时间和取消信号沿父子任务传播。
+3. **上下文与记忆**：Session 保存事实对话，Working Memory 保存当前任务状态，Long-term Memory 保存跨会话知识；每轮上下文重新组装，过长时按层级压缩并校验关键锚点。
+4. **工具安全**：模型看到工具前先按 Run Scope 过滤，`ToolCallExecutor` 执行前再次校验；只读调用可以并行与重试，写操作进入审批和副作用状态机。
+5. **运行观测**：模型、工具、审批和压缩产生结构化事件，实时摘要与事后回放共用同一个聚合器，因此可以还原复杂任务而不只相信最终文本。
+6. **远程接入**：复用 OpenSSH 配置建立连接，MCP 握手后核对工具集合和能力指纹；远程能力按任务临时挂载，连接结束即卸载。
+7. **分层自治**：A0 自动观察负责持续采证和事件合并，A1 模型诊断经确定性规则校准后形成建议，A2 修复必须人工审批、执行前重新采证并独立验证。
+8. **验收边界**：真实服务器已完成只读端到端链路；写操作闭环在可丢弃 Fixture 中验证。A3 Shadow 已有 Fixture-only 的零副作用决策与人工反事实记录，仍缺真实 dogfood 对账；A3 和 A4 都不能描述为生产自动修复。
+
+### 11.4 每条简历内容应该引出什么追问
+
+| 简历内容 | 面试官可能追问 | 回答必须落到的代码事实 |
+| --- | --- | --- |
+| 核心执行引擎 | Run 和 Turn 有什么区别？为什么需要级联取消？ | `AgentEngine.run`、`CancellationTree`、Provider/Tool/SubAgent 共用控制信号 |
+| 上下文与记忆 | Session、Context、Memory 为什么不能合并？压缩怎样避免丢约束？ | `ContextPipeline` 每轮重建；L0—L4；required anchor 丢失时 fail-closed |
+| 工具安全 | 把工具从提示词里隐藏不就够了吗？ | 模型可见列表过滤与 `ToolCallExecutor` 执行前校验是两道独立门禁 |
+| 运行观测 | 为什么不用普通日志？怎样保证回放结果一致？ | 结构化 RunEvent；实时和离线复用 `RunAccumulator`；观测数据不替代安全 Journal |
+| 远程 SSH | 为什么不直接开放 Shell？连接成功为什么还要验工具？ | forced-command、预定义 MCP 工具、profile/tool hash 校验、临时挂载与卸载 |
+| 分层自治 | 自动巡检和自动修复有什么区别？当前做到哪一级？ | Scheduler 与权限等级是两条轴；A0—A2 已闭环，A3 仅 Fixture 反事实，A4 No-Go |
+
+### 11.5 强叙事必须守住的事实边界
+
+- 上下文压缩和记忆机制已经完成代码建设与针对性测试，但尚无长会话稳定性数据；简历写设计和保护机制，不写“支撑百万 Token”或长期运行指标。
+- ReAct、两阶段推理、计划执行和 SubAgent 都有实现，但不是当前最有说服力的使用证据；面试中作为引擎扩展能力说明，不作为项目主卖点堆砌。
+- 飞书完成过真实端到端运行和基础体验优化，可以证明入口复用了同一引擎；当前是单一关联用户的轻量实现，不描述成多租户 IM 会话平台。
+- 真实服务器保持只读。审批修复、结果未知和独立验证已形成完整代码闭环，但真实写动作只在可丢弃 APP_DOWN Fixture 中验证。
+- 当前“分层自治”指 A0 观察、A1 建议、A2 审批执行已经落地；A3 已完成 Fixture-only Shadow，但缺真实 dogfood 对账；A4 有限自动化尚未开放，不提前写成成果。
+
+不建议写“生产级自动运维”“未知故障诊断准确率 100%”或“远程写入 exactly-once”。当前系统通过现场快照、持久化派发意图、目标互斥和未知结果阻断降低重复副作用风险，但不能仅靠客户端保证通用分布式环境中的 exactly-once。
 
 ---
 
@@ -2002,18 +2341,33 @@ RunEvent 主要用于观测；Journal 直接参与判断动作是否已派发。
 
 受限证据中存在可机械判断的容器停止状态。确定性协调器可以校准根因，模型负责解释。修复资格仍由 Policy Gate 决定，不能把这计作模型独立诊断成功。
 
-### 12.10 项目目前最大的不足是什么？
+### 12.10 为什么 Context、Session 和 Memory 不能合并？
+
+三者的事实责任和生命周期不同：Context 是每次模型调用前临时组装的视图，Session 保存连续对话中真实发生的消息，Memory 保存经过筛选、希望跨会话复用的信息。把它们混在一起，会让运行提醒、旧摘要和召回内容被反复写回，最终无法判断一条信息来自用户事实、模型推测还是系统临时注入。
+
+### 12.11 为什么上下文压缩还需要关键锚点？
+
+普通摘要关注“内容大意”，但 Agent 更需要保住目标、未完成步骤、已确认事实和安全约束。Clawkit 先为这些信息生成有来源约束的 canonical snapshot，再执行确定性清理、抽取或生成式摘要；压缩后校验 required anchor，丢失关键锚点或仍超出硬限制时停止 Run。这里优先保证约束完整性，而不是勉强继续回答。
+
+### 12.12 为什么实时摘要和离线回放共用一个聚合器？
+
+如果运行时统计和离线分析分别实现，字段含义和边界条件迟早会漂移。`FileRunRecorder` 在写事件时用 `RunAccumulator` 生成实时摘要，`RunReader` 回放历史事件时复用同一个聚合器，使两条路径遵守相同的状态迁移和统计口径。事件仍是事实源，摘要只是可重建视图。
+
+### 12.13 分层自治如何避免从定时巡检直接跳到自动修复？
+
+系统把触发方式和权限等级分开：Scheduler 只决定任务何时运行，A0—A4 决定任务最多能观察、建议还是执行。当前 A0 自动观察、A1 诊断建议和 A2 审批执行已经落地；Shadow 只记录不执行，有限自动化只允许单一白名单动作，两者都需要额外证据才能晋级。
+
+### 12.14 项目目前最大的不足是什么？
 
 可以坦诚回答：
 
-- 工程闭环已经强于产品体验：首次接入仍偏配置驱动，用户不应手工理解 YAML、合同哈希和 generation；
-- 远程查看与 OPS 调查在代码中已有复用基础，但用户入口和结果展示还没有完全连成一条自然流程；
-- 远端组件的安装检查、错误恢复和下一步引导还不够像成熟产品；
-- 主要验证环境仍是 Fixture，不是生产；
-- 首个写动作只有重启 order-api；
-- 自动修复策略尚未晋级；
-- 模型未知故障诊断能力与工程管线通过率需要分开评估；
-- 调度、Incident 去重和长期 Playbook 尚未实现。
+- 上下文和记忆机制有完整测试，但没有长期真实会话数据，不能把机制建设等同于长任务效果；
+- 飞书入口完成了端到端运行，但仍是轻量单用户关联，不是多租户会话平台；
+- 长期记忆以关键词召回为主，语义召回、来源引用、可信度和有效期仍不完整；
+- 真实服务器保持只读，写操作闭环主要在 Fixture 中验证，首个动作也只允许重启 `order-api`；
+- OPS-3A 已完成调度、事件去重、暂停、预算、冷却和恢复，但还缺真实墙钟持续运行证据；
+- A3 Shadow 已完成 Fixture-only 契约、100 例合成边界评测和人工反事实记录，但缺真实 dogfood 对账；A4 有限自动化仍未开放，模型未知故障能力也需要与工程管线通过率分开评估；
+- 产品体验仍在 dogfood，接入提示、调查结果密度和失败后的下一步引导还需要真实使用反馈。
 
 能准确说出边界，比声称“什么都做完了”更像真正的项目负责人。
 
@@ -2200,7 +2554,7 @@ REMOTE-0 已经证明本地 CLI 可以通过严格合同连接远端、挂载预
 → 给出 READY 或可执行的修复建议
 ```
 
-普通用户不手写 YAML、密钥路径和工具合同哈希。实现上复用 OpenSSH config、SSH Agent、known_hosts 和 `ssh -G` 的解析结果；Clawkit 只保存目标别名与非秘密元数据。详细 hash、generation、profile 和工具清单进入 `inspect`，不占据默认 `status`。当前剩余工作不是继续扩展 SSH 抽象，而是用真实远端首次接入验证提示是否足够清楚。
+普通用户不手写 YAML、密钥路径和工具合同哈希。实现上复用 OpenSSH config、SSH Agent、known_hosts 和 `ssh -G` 的解析结果；Clawkit 只保存目标别名与非秘密元数据。详细 hash、generation、profile 和工具清单进入 `inspect`，不占据默认 `status`。PRODUCT-1 的本地产品 E2E、跨模块合同测试和真实远端 v2 产品 E2E 已通过；后续只在 dogfood 中继续收集首次接入摩擦，不再扩展 SSH 抽象。
 
 ### 15.2 PRODUCT-2：把 Quick Check 和 OPS 调查连起来
 
@@ -2217,11 +2571,11 @@ REMOTE-0 已经证明本地 CLI 可以通过严格合同连接远端、挂载预
 
 REMOTE 负责“连到哪里、允许调用什么”，OPS Loop 负责“问题是什么、证据是否充分、下一步怎么办”。这是同一个产品的入口和核心，而不是两条竞争路线。
 
-其中 Investigation、持久 Incident、最近调查和继续处理已经接入 CLI；当前缺口是前半段 Quick Check，即在不创建 Incident 的情况下回答一次简单状态问题。
+这条链已经完成：自然语言意图层将 `QUICK_CHECK` 与 `INVESTIGATE_SERVICE` 分开；Quick Check 可以只返回简短状态而不创建 Incident，明确调查或严重异常则进入现有 OPS Workflow。工具范围同时被限制为 `REMOTE_READ_ONLY`，避免服务器问题误用本地文件、Git 或 Shell 猜测。当前工作不再是补功能入口，而是验证真实使用中的目标识别、证据表达和下一步提示。
 
 ### 15.3 PRODUCT-3：让审批闭环真正可用
 
-MVP-3 已证明审批修复的工程正确性，产品化需要让非作者也能在 30 秒内理解：
+PRODUCT-3 Phase 0—4 已将审批流程做成可独立验收的产品路径，非作者需要在 30 秒内看懂：
 
 - 发现了什么；
 - 为什么建议这个动作；
@@ -2230,25 +2584,93 @@ MVP-3 已证明审批修复的工程正确性，产品化需要让非作者也�
 - 执行后如何验证；
 - 失败或结果未知时谁来接管。
 
-随后进行至少 7 天个人真实使用，优先修复接入、错误提示、信息过载和恢复流程中的摩擦，再决定是否扩工具。
+当前 Phase 5 正在进行至少 7 天个人真实使用。`DogfoodLogger` 只记录脱敏任务、动作数、审批阅读时长和反馈；用户手动输入的 Fixture `shadow-review` 会独立记录不可变 decision/policy/evidence hash、反事实选择和零副作用计数；`/ops feedback` 追加用户主观感受。完成条件不是“再通过一轮单测”，而是形成连续使用记录和按影响排序的摩擦清单。真实 `test-server` 保持只读；受控写成功只在可丢弃 APP_DOWN Fixture 验证。
 
 ### 15.4 OPS-3 与 OPS-2B：持续观察后再分级自治
 
-OPS Loop 不会被放到一边。完成手动体验后，先做 OPS-3A 的持续只读观察、去重、冷却、暂停、预算和摘要；再让通过长期验证的单个 Action/Playbook 进入 OPS-2B Shadow。自治等级仍按以下顺序：
+如果 MVP-3 解决的是“人在场时，如何安全地执行一次修复”，那么 OPS-3A 要回答的是另一个问题：**人在不盯着屏幕时，系统能不能稳定地观察，而不把正常波动放大成事故？**
+
+这一步故意没有接到任何修复能力。持续触发会放大偶发故障、网络抖动和状态延迟；若把“检测到异常”直接连到 `restart_service`，一次不完整观测就可能变成一连串错误重启。因此 OPS-3A 先把自动化限制为“看、记、合并、报告”，用持续数据回答一个更基础的问题：它能否长时间保持克制。
+
+#### 15.4.1 一次异常在 Observe-only 中如何流动
+
+可以把它想成凌晨的一段值守记录：02:00 首次发现 `order-api` 停止，系统创建一条 ACTIVE Incident；02:01 同一异常再次出现，只增加 observationCount；02:03 网络中断，结果是 UNKNOWN，原 Incident 保持 ACTIVE；02:05 完整健康证据到达，Incident 才被关闭；02:06 服务再次抖动，因为仍在冷却窗口内，系统保留这次观察但不制造新 Incident。即使此时进程重启，Registry 和调度状态也会从磁盘恢复，而不是从零开始猜测。
+
+这段故事对应下面的执行链。它只接收可丢弃 Fixture 的 Discovery 结果；真实 `test-server` 不加入 scheduler，也不会被授予 Cron 或写权限：
+
+```mermaid
+flowchart TD
+    T["scheduler 触发 target"] --> G{"持久化门禁"}
+    G -->|"暂停 / 预算耗尽 / 同 target 忙"| SKIP["记录跳过原因\n不创建 run，不调用 Provider"]
+    G -->|"允许"| OBS["ObservationRunner\n只读 Discovery"]
+    OBS --> CLASSIFY{"ObservationToIncidentBridge\n确定性分类"}
+
+    CLASSIFY -->|"APP_DOWN"| FP["IncidentFingerprint\ntarget + service + profile + signal + version"]
+    FP --> REG["IncidentRegistry\n同 target 互斥 + 持久化"]
+    REG -->|"已有 ACTIVE"| MERGE["合并 observation\n不创建第二条 Incident"]
+    REG -->|"已关闭且在冷却期"| COOL["COOLDOWN_SKIPPED\n保留观察证据，不触发 Provider"]
+    REG -->|"首次或冷却结束"| CREATE["创建 ACTIVE Incident"]
+
+    CLASSIFY -->|"HEALTHY"| CLOSE["关闭匹配 ACTIVE\nHEALTHY_RECOVERED"]
+    CLASSIFY -->|"UNKNOWN"| KEEP["不关闭 ACTIVE\n不把未知伪装成恢复"]
+```
+
+代码上，[`ObservationAutomationCoordinator`](../extensions/clawkit-ops-loop/src/main/java/com/clawkit/ops/loop/automation/ObservationAutomationCoordinator.java) 把“允许执行”作为一次持久化提交：暂停、Discovery 预算、requested/started 和 in-flight 标记必须先落盘，才会调用 `ObservationRunner`。[`ObservationToIncidentBridge`](../extensions/clawkit-ops-loop/src/main/java/com/clawkit/ops/loop/automation/ObservationToIncidentBridge.java) 不使用模型自然语言做分类或去重；它只从当前 Evidence 得到 `APP_DOWN`、`HEALTHY` 或 `UNKNOWN`。[`IncidentRegistry`](../extensions/clawkit-ops-loop/src/main/java/com/clawkit/ops/loop/automation/IncidentRegistry.java) 保存 fingerprint 与 Incident 的关系，[`AutomationStateStore`](../extensions/clawkit-ops-loop/src/main/java/com/clawkit/ops/loop/automation/AutomationStateStore.java) 保存调度状态、预算和中断中的 run。二者都在损坏、未知 schema 或锁失败时停止继续运行，而不是猜测状态后继续。
+
+建议按这条顺序读源码：
+
+```text
+ObservationAutomationCoordinator：何时允许启动一次观察
+→ AutomationStateStore：暂停、预算和 in-flight 如何持久化
+→ ObservationToIncidentBridge：证据如何变成确定性信号
+→ IncidentFingerprint / IncidentRegistry：如何去重、关闭和冷却
+→ AutomationSoakTest：这些状态如何跨 72 个逻辑小时协作
+```
+
+这里有三个刻意保守的决定：
+
+1. **UNKNOWN 不是 HEALTHY。** 网络中断、证据过期或收集失败时，不关闭已有 Incident；否则短暂断网会掩盖真实故障。
+2. **HEALTHY 也不是“什么都没发生”。** 它只在确定性证据充分时关闭匹配的 ACTIVE Incident，并启动冷却窗口；随后再次 APP_DOWN 在窗口内只留下可追溯观察，不制造新 Incident 或 Provider 工作。
+3. **预算不是性能优化。** Discovery 与 Provider 预算分开持久化。任何预算不明、耗尽或落盘失败都先停在门外，防止故障时反而把外部依赖打满。
+
+#### 15.4.2 72 小时 soak 证明了什么，又没有证明什么
+
+OPS-3A A-D 已在可丢弃 Fixture 内完成。[`AutomationSoakTest`](../extensions/clawkit-ops-loop/src/test/java/com/clawkit/ops/loop/automation/AutomationSoakTest.java) 让可注入时钟前进 72 个逻辑小时，并真实读写 `AutomationStateStore` 与 `IncidentRegistry` 文件：稳定异常、恢复、抖动、暂停、重启与预算耗尽都经过同一条协调链。原始结果是 requested=68、Discovery=35、merged=22、failed=0、Provider=0、写调用=0。
+
+这些数字有价值，但不能被包装成比它们更强的结论：
+
+| 证据层级 | 已经证明 | 不能替代 |
+| --- | --- | --- |
+| 单元与并发测试 | 去重、锁、损坏 fail-closed、暂停和预算的局部不变量 | 跨时间的状态衔接 |
+| 加速 72 小时 Fixture soak | 状态落盘、重启恢复和多个异常阶段能在同一条链中协作 | 真实进程长时间存活、外部环境抖动 |
+| 下一步的真实墙钟 Fixture 运行 | scheduler 生命周期、文件系统与真实时间下的原始 run/evidence 记录 | 用户是否看得懂建议、是否会正确审批 |
+| PRODUCT-3 七天 dogfood | 真实任务、审批阅读时间、动作数与使用摩擦 | 自动修复策略本身的安全性 |
+
+因此当前结论不是“OPS-3A 已通过，所以可以自动修复”，而是“Observe-only 的功能闭环已通过，正在补权限升级所需的运行证据”。PRODUCT-3 dogfood 也不能被省略：OPS-3A 证明系统是否稳定克制，dogfood 证明人是否看得懂并愿意信任，两条证据链缺任何一条都不应晋级权限。
+
+#### 15.4.3 为什么先完成 Fixture Shadow，再保持 AUTO No-Go
+
+Shadow 的意思不是“后台偷偷修”，而是把系统本来会作出的动作**记录下来但不执行**，再让人审阅它是否过于激进、是否遗漏反例、是否能在每次判定中说明依据。当前已把这一步限制在可丢弃 Fixture：策略、决策和人工反事实选择均持久化，且所有记录的 `sideEffectCalls=0`；它不接入真实目标、不创建 ApprovalGrant，也不派发修复。
 
 ```text
 A0 Observe
 → A1 Recommend
-→ A2 Ask：当前 MVP-3
-→ A3 Shadow：只记录“如果自动化会怎么决定”
-→ A4 Limited Auto：Fixture / Canary 单动作
+→ A2 Ask：当前审批修复主链
+→ A3 Shadow：Fixture-only，只记录“如果自动化会怎么决定”
+→ A4 Limited Auto：No-Go
 ```
 
-当前仍是 No-Go for AUTO。测试用 `--auto-approve` 不能成为生产实现。
+第一个 Shadow 候选也被故意缩得很小：只有确定性证据确认的 `APP_DOWN → restart_service(order-api)`。它仍必须受 target/action allowlist、fresh precheck、TOCTOU、durable intent、目标互斥、结果未知 sticky 与独立 Verification 约束。模型只能解释，不得扩大授权；证据冲突、profile 漂移、预算耗尽、传输中断或模型反对时，一律保持 ASK。
 
-更安全的顺序是先让系统连续“看”，收集误报和重复触发数据，再允许它自动“动”。
+当前仍是 No-Go：A3 仅完成 Fixture Shadow，A4 AUTO 更不具备准入条件。历史测试用 `--auto-approve` 不能成为生产策略，当前独立远程 repair 启动器已 fail-closed。固定 100 例合成矩阵已经覆盖自恢复、证据缺失、错误目标、过期证据与传输中断等反例，并验证越权副作用为 0；但它不等于真实命中率或人工采纳率。未来评审 A4 时，还必须补齐真实 dogfood 对账、真实墙钟运行、安全门禁和独立验证。
 
-触发方式、远程能力和自治等级必须分开：Cron 自动触发只读日志分析仍然可以只是 A1，不能因为“持续运行”就默认获得写权限。
+触发方式、远程能力和自治等级必须分开：Cron 自动触发只读分析仍然可以只是 A1，不能因为“持续运行”就默认获得写权限。
+
+这段路线可以用下面 30 秒讲清楚：
+
+> 我没有把定时发现直接接到自动重启，而是先实现 Observe-only。系统用稳定 fingerprint 合并重复异常，用 HEALTHY/UNKNOWN 区分恢复和不确定，用持久化状态控制暂停、预算和重启恢复。加速 72 小时 Fixture soak 证明了这条链能跨阶段协作，但它不能替代真实墙钟运行和用户 dogfood。两类证据齐备后先进入只记录、不执行的 Shadow，最后才评审单动作 Limited Auto。因为一旦拥有写权限，错误就不再只是错误结论，而是外部副作用。
+
+一句话概括：**先让系统连续“看”，再让系统解释“本会怎么做”，最后才在可丢弃 Fixture 上验证它能否安全地“动”。**
 
 ---
 
@@ -2278,20 +2700,22 @@ A0 Observe
 
 ---
 
-## 17. 最后需要真正记住的十句话
+## 17. 最后需要真正记住的十二句话
 
-1. Clawkit 的核心不是聊天，而是可控的工具执行。
-2. 所有执行模式必须共用同一工具、权限和观测入口。
-3. 未知工具和未知状态都要保守拒绝。
-4. 模型建议不能代替确定性策略。
-5. 人工审批必须绑定具体 Incident、目标、动作和现场快照。
-6. 远程超时不代表动作没有发生。
-7. durable intent 必须先于真实副作用。
-8. `OUTCOME_UNKNOWN` 只能重新采证，不能自动重试。
-9. 执行成功不等于业务恢复，必须独立验证。
-10. 测试管线通过、模型诊断准确和生产自动修复是三种不同结论。
+1. Clawkit 首先是通用智能体执行平台，OPS Loop 是验证平台能力的垂直场景。
+2. 核心执行引擎按 Run 和 Turn 组织任务，命令行、飞书与领域入口不应复制主循环。
+3. ModelContext 是本轮临时视图，Session 是对话事实，Memory 是经过选择的跨会话知识。
+4. 上下文压缩首先要保住目标、事实和安全约束，保不住时宁可停止执行。
+5. 工具权限既要限制模型可见范围，也要在真正执行前再次校验。
+6. 运行事件用于还原过程，Attempt Journal 用于控制副作用，两者不能互相替代。
+7. 远程连接不是获得 Shell，而是为当前任务临时挂载经过核验的工具能力。
+8. 自动触发和自治权限是两条轴；定时巡检不等于自动修复。
+9. 模型可以解释证据和提出建议，但不能代替确定性策略决定写操作。
+10. 人工审批必须绑定具体 Incident、目标、动作和现场快照。
+11. 远程超时不代表动作没有发生，执行返回成功也不代表业务已经恢复。
+12. 当前落地的是观察、建议和审批执行三级，测试闭环不能被包装成生产有限自治。
 
-如果你能脱离文档，把这十句话的前因后果讲清楚，就已经掌握了这个项目最有价值的部分。
+如果你能脱离文档，把这十二句话的前因后果讲清楚，就已经掌握了这个项目最有价值的部分。
 
 ---
 

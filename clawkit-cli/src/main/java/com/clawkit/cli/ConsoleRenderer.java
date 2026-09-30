@@ -20,6 +20,17 @@ public class ConsoleRenderer {
     public static final String RED = "\033[31m";
     public static final String RESET = "\033[0m";
 
+    // PRODUCT-2: 默认隐藏工具执行细节，/verbose on 后显示
+    private volatile boolean verbose = false;
+
+    public void setVerbose(boolean verbose) {
+        this.verbose = verbose;
+    }
+
+    public boolean isVerbose() {
+        return verbose;
+    }
+
     static final String THINKING_BAR = "─".repeat(54);
 
     // ── Banner / Menu / Help ──────────────────────────────────────
@@ -289,11 +300,13 @@ public class ConsoleRenderer {
     // ── Tool event callbacks ──────────────────────────────────────
 
     public void onToolStart(String name, String argSummary) {
+        if (!verbose) return;
         String args = argSummary.isEmpty() ? "" : "  " + GRAY + argSummary + RESET;
         System.out.println("  [..] " + name + args);
     }
 
     public void onToolEnd(String name, boolean success, String detail) {
+        if (!verbose) return;
         String icon = success ? "OK" : "ER";
         String d = success ? detail : GRAY + detail + RESET;
         System.out.println("  [" + icon + "] " + name + "  " + d);

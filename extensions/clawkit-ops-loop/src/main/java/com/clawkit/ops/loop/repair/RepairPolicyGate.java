@@ -9,6 +9,7 @@ import com.clawkit.ops.loop.Diagnosis;
  * <p>Rules (MVP-3):
  * <ul>
  *   <li>Only APP_DOWN root cause → restart_service</li>
+ *   <li>APP_DOWN must remain ACTIVE with at least two current supporting evidence IDs</li>
  *   <li>Only order-api as target service</li>
  *   <li>DB_LOCK_WAIT → explicitly denied (restart won't help)</li>
  *   <li>Unknown action or service → fail closed</li>
@@ -66,6 +67,16 @@ public final class RepairPolicyGate {
         if (diagnosis.diagnosisStatus() == Diagnosis.DiagnosisStatus.INCONCLUSIVE) {
             return GateDecision.denied(
                 "diagnosis is INCONCLUSIVE: cannot authorize repair without a confirmed root cause");
+        }
+
+        // Rule 5: APP_DOWN is only a repair candidate while it is active and corroborated.
+        if (diagnosis.currentCondition() != Diagnosis.CurrentCondition.ACTIVE) {
+            return GateDecision.denied("APP_DOWN is not ACTIVE: cannot authorize a stale or recovered repair");
+        }
+        long distinctSupportingEvidence = diagnosis.supportingEvidence().stream().distinct().count();
+        if (distinctSupportingEvidence < 2) {
+            return GateDecision.denied(
+                "APP_DOWN requires at least two current supporting evidence IDs before approval");
         }
 
         return GateDecision.ALLOWED;

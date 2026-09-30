@@ -111,14 +111,19 @@ public final class RemoteDiscoveryWorkflow {
 
         // ── Diagnosis ──
         Diagnosis diagnosis;
+        DiagnosisProvenance diagnosisProvenance;
         boolean providerCalled = false;
         String diagnosisFailureCode = null;
 
         if (discovery.status() == DiscoveryStatus.COMPLETE) {
             String apiKey = config.apiKey();
             if (apiKey == null || apiKey.isBlank()) {
-                diagnosis = inconclusiveDiagnosis();
+                ReconciledDiagnosis reconciled = ReconciledDiagnosis.fromCandidate(
+                    inconclusiveDiagnosis(), discovery, clock.instant());
+                diagnosis = reconciled.diagnosis();
                 diagnosisFailureCode = "PROVIDER_NOT_CONFIGURED";
+                diagnosisProvenance = DiagnosisProvenance.signalsOnly(diagnosis,
+                    reconciled.signals(), diagnosisFailureCode);
             } else {
                 try {
                     String model = config.diagnosisModel() != null
@@ -134,44 +139,47 @@ public final class RemoteDiscoveryWorkflow {
                     providerCalled = true;
 
                     // ── Reconcile: deterministic signals override model root cause ──
-                    Instant now = clock.instant();
-                    List<Evidence> currentEvidence = discovery.bundle().evidence().stream()
-                        .filter(e -> e.collectionStatus() == Evidence.CollectionStatus.OBSERVED)
-                        .filter(e -> e.freshness() == Evidence.Freshness.CURRENT)
-                        .filter(e -> e.fact().path("success").asBoolean(false))
-                        .filter(e -> e.isCurrentAt(now))
-                        .toList();
-                    DiagnosticSignals signals = DiagnosticSignals.extract(currentEvidence);
-                    Diagnosis reconciled = DiagnosisReconciler.reconcile(
-                        modelDiagnosis, signals, currentEvidence, now);
+                    ReconciledDiagnosis reconciled = ReconciledDiagnosis.fromCandidate(
+                        modelDiagnosis, discovery, clock.instant());
+                    Diagnosis finalDiagnosis = reconciled.diagnosis();
+                    diagnosisProvenance = DiagnosisProvenance.modelReconciled(modelDiagnosis,
+                        finalDiagnosis, reconciled.signals());
 
                     // Log signal-model conflicts — never silently override
-                    if (!"INCONCLUSIVE".equals(signals.candidateRootCause())
-                        && !signals.candidateRootCause().equals(modelDiagnosis.rootCauseCode())) {
+                    if (!"INCONCLUSIVE".equals(reconciled.signals().candidateRootCause())
+                        && !reconciled.signals().candidateRootCause().equals(modelDiagnosis.rootCauseCode())) {
                         log.warn("[diagnosis] signal-model conflict: signal={} model={}",
-                            signals.candidateRootCause(), modelDiagnosis.rootCauseCode());
+                            reconciled.signals().candidateRootCause(), modelDiagnosis.rootCauseCode());
                     }
 
                     // Use reconciled diagnosis (signals provide rootCauseCode when deterministic)
-                    diagnosis = reconciled;
+                    diagnosis = finalDiagnosis;
                     if ("INCONCLUSIVE".equals(diagnosis.rootCauseCode())
                         && diagnosis.confidence() == 0.0) {
                         diagnosisFailureCode = "DIAGNOSIS_INCONCLUSIVE";
                     }
                 } catch (Exception e) {
                     log.error("Diagnosis failed: {}", e.getMessage());
-                    diagnosis = inconclusiveDiagnosis();
+                    ReconciledDiagnosis reconciled = ReconciledDiagnosis.fromCandidate(
+                        inconclusiveDiagnosis(), discovery, clock.instant());
+                    diagnosis = reconciled.diagnosis();
                     diagnosisFailureCode = "PROVIDER_ERROR";
+                    diagnosisProvenance = DiagnosisProvenance.signalsOnly(diagnosis,
+                        reconciled.signals(), diagnosisFailureCode);
                 }
             }
         } else {
-            diagnosis = inconclusiveDiagnosis();
+            ReconciledDiagnosis reconciled = ReconciledDiagnosis.fromCandidate(
+                inconclusiveDiagnosis(), discovery, clock.instant());
+            diagnosis = reconciled.diagnosis();
             diagnosisFailureCode = discovery.status() == DiscoveryStatus.TRANSPORT_FAILED
                 ? "TRANSPORT_FAILED" : "DISCOVERY_INCOMPLETE";
+            diagnosisProvenance = DiagnosisProvenance.signalsOnly(diagnosis,
+                reconciled.signals(), diagnosisFailureCode);
         }
 
         return new RemoteIncidentResult(discovery, diagnosis, providerCalled,
-            diagnosisFailureCode, clock.instant());
+            diagnosisFailureCode, clock.instant(), diagnosisProvenance);
     }
 
     private static DiscoveryProfile selectProfile(String name) {

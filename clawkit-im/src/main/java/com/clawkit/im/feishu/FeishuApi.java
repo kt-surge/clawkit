@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
  * <p>R4: Uses ObjectNode for request construction, validates all inputs,
  * enforces request timeout, throws structured {@link FeishuApiException}.
  */
-public class FeishuApi {
+public class FeishuApi implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(FeishuApi.class);
     private static final String BASE = "https://open.feishu.cn/open-apis";
@@ -49,6 +49,7 @@ public class FeishuApi {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
     }
+    @Override public void close() { http.close(); cachedToken=null; tokenExpiresAt=null; }
 
     // ── Token ──
 

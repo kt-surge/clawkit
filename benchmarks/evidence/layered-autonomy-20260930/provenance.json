@@ -1,0 +1,24 @@
+{
+  "experimentDate": "2026-09-30",
+  "gitHeadAtRun": "fe0500f35159a8cb520ea72908b36d6e7f4add67",
+  "sourceFingerprint": "12191eea20d876b2152ed4bc94208fea0e0e15349008d182bb0633d59048a6ea",
+  "scenarioSpecSha256": "2f8dbe78ca8311b7d4acfe00fd07219eceb8a1dd69f1d559a3c41ba13e04c9a4",
+  "sourceInputArchiveSha256": "ff458e05b69ab915d27f43551d7bffa7e7b8826c353ac535fa61c4ac93932e24",
+  "rawCapturesPublished": false,
+  "rawCapturesRetainedLocally": true,
+  "originalFilesSha256": {
+    "report.md": "3736ba31ba290f783c363c23dc4f24c80f76f61e30a36d90b5b93000288256d0",
+    "analysis.md": "d05882a40417f1416747f101a2d8ba827fa64d025a76534803c97c7610b38535",
+    "summary.json": "e4dfbcbd919d61d3c765949ea178ddd577c21f0ce4f3f6c8729b8e6da6dc72ed",
+    "frozen-plan.json": "0760c8269b2537237f224d4c49742980851e5791bb71ed04053426b1ac805b25",
+    "audit.json": "aa9c1a726ed890c2324f8dd8db44c33d0c691a52def7344798658e79a4fa7b4d"
+  },
+  "publishedFilesSha256": {
+    "report.md": "3736ba31ba290f783c363c23dc4f24c80f76f61e30a36d90b5b93000288256d0",
+    "analysis.md": "d05882a40417f1416747f101a2d8ba827fa64d025a76534803c97c7610b38535",
+    "summary.json": "decd5bd8ece2ea76aa5d502f2ca707cf7e09bc36bc7fe18a7e1f6aa1844ab04c",
+    "frozen-plan.json": "b1a8f6121bdd91f9e22c3697a48133eb11a6aeedb341a06ca47b4ffc7ebc49e2",
+    "audit.json": "84d96b1ebfe389f90d4bc0179097816f54e8dae42547b74c8f75d57f49d34705"
+  },
+  "publicationTransform": "CRLF converted to LF only; content and counts unchanged"
+}

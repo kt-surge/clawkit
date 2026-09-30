@@ -17,6 +17,21 @@
     <dependencies>
         <dependency>
             <groupId>com.clawkit</groupId>
+            <artifactId>clawkit-ops-mcp</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.clawkit</groupId>
+            <artifactId>clawkit-provider</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.clawkit</groupId>
+            <artifactId>clawkit-observability</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.clawkit</groupId>
             <artifactId>clawkit-ops-loop</artifactId>
             <version>${project.version}</version>
         </dependency>

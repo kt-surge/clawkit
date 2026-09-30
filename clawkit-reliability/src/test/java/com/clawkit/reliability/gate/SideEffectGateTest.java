@@ -41,6 +41,37 @@ class SideEffectGateTest {
     private SideEffectGate gate;
     private FileActionAttemptStore store;
 
+    @Test void domainPrecheckHoldsTargetMutexAndThrowsBeforeDispatch() {
+        try (var domainStore=new FileActionAttemptStore(dir.resolve("domain"))) {
+            var coordinator=new ActionAttemptCoordinator(domainStore,null,null);
+            var called=new AtomicInteger();
+            var custom=new SideEffectGate(coordinator,null,attempt -> {
+                assertEquals(AttemptState.PRECHECKING,domainStore.activeOnTarget(attempt.targetKey()).orElseThrow().state());
+                throw new IllegalStateException("evidence unavailable");
+            });
+            var result=custom.execute(descriptor("compose:test",VerificationMode.WORKFLOW,List.of()),"c","repair",META,null,"run",() -> {
+                called.incrementAndGet(); return ok("dispatched");
+            });
+            assertEquals(0,called.get()); assertEquals(EffectCertainty.NOT_DISPATCHED,result.effectCertainty());
+            assertEquals(AttemptState.CANCELLED_NO_EFFECT,domainStore.byId(result.attemptId()).orElseThrow().state());
+        }
+    }
+
+    @Test void cancellationDuringFreshDomainPrecheckPreventsDurableIntentAndBody() {
+        try (var domainStore=new FileActionAttemptStore(dir.resolve("cancel-domain"))) {
+            var control=com.clawkit.reliability.CancellationTree.unbounded();
+            var called=new AtomicInteger();
+            var custom=new SideEffectGate(new ActionAttemptCoordinator(domainStore,null,null),null,attempt -> {
+                control.cancel(); return new SideEffectGate.PrecheckOutcome(true,"fresh evidence collected");
+            });
+            var result=custom.execute(descriptor("compose:test",VerificationMode.WORKFLOW,List.of()),"c","repair",META,control,"run",() -> {
+                called.incrementAndGet(); return ok("dispatched");
+            });
+            assertEquals(0,called.get()); assertEquals(EffectCertainty.NOT_DISPATCHED,result.effectCertainty());
+            assertEquals(AttemptState.CANCELLED_NO_EFFECT,domainStore.byId(result.attemptId()).orElseThrow().state());
+        }
+    }
+
     private SideEffectGate gate() {
         if (gate == null) {
             store = new FileActionAttemptStore(dir.resolve("rel"));

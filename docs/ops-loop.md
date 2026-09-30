@@ -480,6 +480,8 @@ terminate_fixture_session(case_id)
 
 ## 13. OPS-2B：有限自动修复
 
+**2026-09-30 路线更新：** 用户已确认 CLI 与飞书通知、Compose 无状态服务和限定启动／重启范围。[分层自治实施合同](layered-autonomy-implementation-plan.md)将隔离开发拆为 P0—P4；固定一周个人 dogfood 不再作为隔离自动修复开发的前置。下述 A3/A4 状态与历史验收记录保留；旧 `AutoRemediationPolicy` 构造器仍仅允许 Fixture Shadow，真实远程写入口未开放。新 `ops-loop/managed` 使用独立 ActionPolicy 和具名处置合同，策略授权区别于人工批准，两者共用可靠执行链。P0—P4 的持续控制、CLI、本地安装包及冻结隔离评测已交付；12 场景四组评测完整保留模型失败，不能用历史 20/20 拼接新结论。使用合同见 [managed-operations](managed-operations.md)，评测口径见 [autonomy-evaluation](autonomy-evaluation.md)，逐项状态及证据见 TODO；真实目标试用另属 P5。
+
 长期方向改为“持续评估 + 分级自治”，自动化按单个 Action/Playbook 提升，不整体切换 AUTO。触发方式、能力范围和自治等级是三个独立维度：Cron 自动发现可以仍然只读，人工触发也可以调用已晋级的有限动作。
 
 进入条件增加产品门禁：PRODUCT-2/3 已经证明用户能理解调查、审批和异常终态，并积累至少一周个人真实使用记录。没有稳定手动体验时，不用 Shadow/AUTO 掩盖交互问题。
@@ -494,7 +496,7 @@ A0 Observe
   -> A4 Limited Auto
 ```
 
-当前 OPS MVP-3 属于 A2；E2E `--auto-approve` 只是 Fixture 测试入口，不是生产 A4。后续先记录 A3 Shadow 判断与人工审批是否一致，再评审 Fixture A4。
+当前 OPS MVP-3 属于 A2；历史 E2E `--auto-approve` 只属于 Fixture 测试语义，当前独立远程 repair 启动器已 fail-closed，不是生产 A4。后续先记录 A3 Shadow 判断与人工审批是否一致，再评审 Fixture A4。
 
 - 统计按 Case、Action、Playbook、模型和版本分组。
 - 越权和假修复始终为 0。

@@ -3,12 +3,37 @@ package com.clawkit.cli;
 import static com.clawkit.cli.ClawkitApp.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import com.clawkit.memory.MemoryType;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class ClawkitAppTest {
+
+    @Test
+    void shouldUseClawkitOperationsBanner() {
+        assertThat(PRODUCT_NAME).isEqualTo("CLAWKIT");
+        assertThat(PRODUCT_TAGLINE).contains("AI assistant")
+            .contains("code");
+    }
+
+    @Test
+    void shouldPrintNonStreamingFinalReply() {
+        var bytes = new ByteArrayOutputStream();
+        printFinalReply("你好，我是 CLAWKIT。", new PrintStream(bytes));
+
+        assertThat(bytes.toString()).contains("你好，我是 CLAWKIT。");
+    }
+
+    @Test
+    void shouldExplainEmptyFinalReplyInsteadOfShowingBlankScreen() {
+        var bytes = new ByteArrayOutputStream();
+        printFinalReply("  ", new PrintStream(bytes));
+
+        assertThat(bytes.toString()).contains("没有收到有效回答，请重试");
+    }
 
     // ─── resolveCommand ──────────────────────────────────────────────
 
@@ -69,6 +94,11 @@ class ClawkitAppTest {
     @Test
     void shouldResolveMenu() {
         assertThat(resolveCommand("/")).isEqualTo("menu");
+    }
+
+    @Test
+    void shouldResolveVerboseCommand() {
+        assertThat(resolveCommand("/verbose")).isEqualTo("verbose");
     }
 
     @Test
@@ -251,5 +281,55 @@ class ClawkitAppTest {
     @Test
     void shouldReturnEmptyWhenNoMdFile(@TempDir Path tempDir) {
         assertThat(readProjectContext(tempDir)).isEmpty();
+    }
+
+    // ─── displayConnectionState ────────────────────────────────────────
+
+    @Test
+    void shouldDisplayReadyStateInChinese() {
+        assertThat(displayConnectionState(
+            com.clawkit.tools.remote.RemoteConnectionState.READY))
+            .isEqualTo("正常");
+    }
+
+    @Test
+    void shouldDisplayDisconnectedStateInChinese() {
+        assertThat(displayConnectionState(
+            com.clawkit.tools.remote.RemoteConnectionState.DISCONNECTED))
+            .isEqualTo("未连接");
+    }
+
+    @Test
+    void shouldDisplayFailedStateInChinese() {
+        assertThat(displayConnectionState(
+            com.clawkit.tools.remote.RemoteConnectionState.FAILED))
+            .isEqualTo("连接失败");
+    }
+
+    @Test
+    void shouldDisplayConnectingStateInChinese() {
+        assertThat(displayConnectionState(
+            com.clawkit.tools.remote.RemoteConnectionState.CONNECTING))
+            .isEqualTo("正在连接");
+    }
+
+    @Test
+    void shouldNotContainEnglishInConnectionStateLabels() {
+        for (var state : com.clawkit.tools.remote.RemoteConnectionState.values()) {
+            String label = displayConnectionState(state);
+            assertThat(label).doesNotContain("READY", "DISCONNECTED", "FAILED",
+                "CONNECTING", "ATTESTING", "DEGRADED", "CLOSED");
+        }
+    }
+
+    @Test
+    void promptShouldShowLocalModeWithoutConnection() {
+        assertThat(ClawkitApp.interactionPrompt(null)).isEqualTo("[本地]> ");
+    }
+
+    @Test
+    void promptShouldShowServerModeWithActiveTarget() {
+        assertThat(ClawkitApp.interactionPrompt("test-server"))
+            .isEqualTo("[服务器:test-server]> ");
     }
 }

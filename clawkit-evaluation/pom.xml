@@ -16,6 +16,21 @@
     <dependencies>
         <dependency>
             <groupId>com.clawkit</groupId>
+            <artifactId>clawkit-ops-delivery</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.clawkit</groupId>
+            <artifactId>clawkit-ops-loop</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.clawkit</groupId>
+            <artifactId>clawkit-ops-mcp</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.clawkit</groupId>
             <artifactId>clawkit-engine</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -64,6 +79,14 @@
     </dependencies>
 
     <profiles>
+        <profile>
+            <id>autonomy-evaluation</id>
+            <build><plugins><plugin>
+                <groupId>org.codehaus.mojo</groupId><artifactId>exec-maven-plugin</artifactId><version>3.4.1</version>
+                <configuration><mainClass>com.clawkit.evaluation.autonomy.AutonomyBenchmark</mainClass></configuration>
+                <executions><execution><id>isolated-autonomy-evaluation</id><phase>verify</phase><goals><goal>java</goal></goals></execution></executions>
+            </plugin></plugins></build>
+        </profile>
         <profile>
             <id>benchmark</id>
             <build>

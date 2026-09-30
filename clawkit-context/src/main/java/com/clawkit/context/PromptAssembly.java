@@ -25,7 +25,11 @@ public final class PromptAssembly {
         }
 
         if (skillCatalog != null && !skillCatalog.isEmpty()) {
-            sb.append("\n\n## Available Skills\n\n").append(skillCatalog.toPrompt());
+            sb.append("\n\n## Available Skills\n\n")
+                .append("Only load a skill when the user's request clearly matches its description. ")
+                .append("For greetings, identity questions, feature introductions, or casual chat, ")
+                .append("answer directly without loading any skill.\n\n")
+                .append(skillCatalog.toPrompt());
         }
 
         if (activeSkills != null && !activeSkills.isEmpty()) {

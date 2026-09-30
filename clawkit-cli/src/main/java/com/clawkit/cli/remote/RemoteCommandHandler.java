@@ -1,8 +1,10 @@
 package com.clawkit.cli.remote;
 
 import com.clawkit.cli.ConsoleRenderer;
+import com.clawkit.tools.Tool;
 import com.clawkit.tools.ToolMount;
 import com.clawkit.tools.ToolRegistry;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -67,26 +69,53 @@ public class RemoteCommandHandler {
     private void cmdStatus() {
         var snapshot = service.lastSnapshot();
         if (snapshot.isEmpty()) {
-            println("  No active connection.");
+            println("  当前没有已连接的服务器。");
+            List<String> ids = store.list();
+            if (ids.isEmpty()) {
+                println("  还没有登记服务器。可输入 /remote add --from-ssh <SSH别名> 添加。");
+                return;
+            }
+            println("  已登记的服务器：");
+            for (String id : ids) {
+                println("    - " + id + " (未连接)");
+            }
+            if (ids.size() == 1) {
+                println("  下一步: 输入 [连接 " + ids.getFirst()
+                    + "] 进行连接, 或输入 /remote doctor " + ids.getFirst() + " 检查连接。");
+            } else {
+                println("  下一步: 输入 [连接 <服务器名称>],"
+                    + " 或用 /remote doctor <服务器名称> 检查连接。");
+            }
             return;
         }
         var s = snapshot.get();
-        String scope = "read-only"; // all current profiles are read-only
-        println("  [" + s.targetId() + " · " + scope + "]");
-        println("  state:     " + s.state());
+        println("  服务器:    " + s.targetId() + " (只读)");
+        println("  连接状态:  " + displayState(s.state()));
         if (s.attestation() != null) {
             var a = s.attestation();
-            println("  profile:   " + a.capabilityProfile());
+            println("  能力范围:  " + a.capabilityProfile());
             if (!s.mountedTools().isEmpty()) {
-                println("  tools (" + s.mountedTools().size() + "): "
+                println("  可用工具 (" + s.mountedTools().size() + " 个): "
                     + String.join(", ", s.mountedTools()));
             }
-            println("  latency:   connect=" + a.connectLatencyMs()
-                + "ms attest=" + a.attestationLatencyMs() + "ms");
+            println("  耗时:      连接 " + a.connectLatencyMs()
+                + " 毫秒, 校验 " + a.attestationLatencyMs() + " 毫秒");
         }
         if (s.error() != null) {
-            println("  error:     " + s.error().code() + " — " + s.error().safeMessage());
+            println("  错误:      " + s.error().code() + " - " + s.error().safeMessage());
         }
+    }
+
+    private static String displayState(com.clawkit.tools.remote.RemoteConnectionState state) {
+        return switch (state) {
+            case DISCONNECTED -> "未连接";
+            case CONNECTING -> "正在连接";
+            case ATTESTING -> "正在校验服务器";
+            case READY -> "连接正常";
+            case DEGRADED -> "连接可用，但部分检查失败";
+            case FAILED -> "连接失败";
+            case CLOSED -> "已关闭";
+        };
     }
 
     private void cmdList() {
@@ -269,33 +298,35 @@ public class RemoteCommandHandler {
 
     private void cmdConnect(String targetId) {
         if (targetId.isEmpty()) {
-            println("  Usage: /remote connect <targetId>");
+            System.out.println("  用法: 连接 <服务器名称>");
             return;
         }
         if (!store.exists(targetId)) {
-            println("  Target not found: " + targetId);
+            System.out.println("  未找到服务器: " + targetId);
+            System.out.println("  可输入 /remote list 查看已登记服务器。");
             return;
         }
-        println("  Connecting to " + targetId + "...");
+        System.out.println("  正在连接 " + targetId + "...");
         try {
-            var attestation = service.connect(targetId);
-            println("  [" + targetId + " · read-only] READY");
-            println("  Profile: " + attestation.capabilityProfile());
-            println("  Tools: " + attestation.toolNames().size() + " — "
-                + String.join(", ", attestation.toolNames()));
+            service.connect(targetId);
+            System.out.println("  连接成功。");
+            System.out.println("  已切换到服务器模式: " + targetId);
+            System.out.println("  现在可以输入 [检查服务器] 查看服务状态。");
         } catch (IOException e) {
-            println("  Connection failed: " + e.getMessage());
+            System.out.println("  连接失败: 远端程序没有正常启动。");
+            System.out.println("  下一步: 输入 /remote doctor " + targetId + " 查看详细原因。");
         }
     }
 
     private void cmdDisconnect() {
         String active = service.activeTargetId();
         if (active == null) {
-            println("  No active connection.");
+            println("  当前没有已连接的服务器。");
             return;
         }
         service.disconnect();
-        println("  Disconnected from " + active);
+        System.out.println("  已断开与 " + active + " 的连接。");
+        System.out.println("  已切换回本地模式。");
     }
 
     private void cmdDoctor(RemoteCommandParser.ParsedCommand cmd) {
@@ -327,11 +358,64 @@ public class RemoteCommandHandler {
             println("  No remote tools mounted.");
             return;
         }
-        println("  Mounted remote tools (" + mount.get().toolNames().size() + "):");
+        long readOnlyCount = mount.get().toolNames().stream()
+            .filter(registry::isReadOnly)
+            .count();
+        println("  这些工具来自当前服务器的 MCP tools/list：");
+        println("  共 " + mount.get().toolNames().size() + " 个，其中只读 " + readOnlyCount
+            + " 个；具体权限、描述和参数均来自运行时工具元数据。");
+        println("");
         for (String name : mount.get().toolNames()) {
             var tool = registry.lookup(name);
-            String readonly = tool.map(t -> t.isReadOnly() ? " [RO]" : " [RW]").orElse(" [?]");
-            println("    - " + name + readonly);
+            String readonly = tool.map(t -> t.isReadOnly() ? " [只读]" : " [需确认]").orElse(" [?]");
+            String shortName = shortToolName(name);
+            String description = tool.map(t -> stripRemoteDescriptionPrefix(t.description()))
+                .orElse("MCP 未提供工具描述");
+            String inputs = tool.map(t -> summarizeInputSchema(t.inputSchema()))
+                .orElse("未知");
+            println("  " + shortName + readonly);
+            println("    工具名: " + name);
+            println("    MCP 描述: " + description);
+            println("    输入参数: " + inputs);
+            println("");
+        }
+    }
+
+    static String shortToolName(String name) {
+        int separator = name.lastIndexOf("__");
+        return separator >= 0 ? name.substring(separator + 2) : name;
+    }
+
+    static String stripRemoteDescriptionPrefix(String description) {
+        if (description == null || description.isBlank()) return "MCP 未提供工具描述";
+        if (description.startsWith("[MCP:remote:")) {
+            int end = description.indexOf("] ");
+            if (end >= 0 && end + 2 < description.length()) {
+                return description.substring(end + 2);
+            }
+        }
+        return description;
+    }
+
+    static String summarizeInputSchema(String schema) {
+        if (schema == null || schema.isBlank()) return "无";
+        try {
+            JsonNode root = Tool.MAPPER.readTree(schema);
+            JsonNode properties = root.path("properties");
+            if (!properties.isObject() || properties.isEmpty()) return "无";
+
+            java.util.Set<String> required = new java.util.HashSet<>();
+            JsonNode requiredNode = root.path("required");
+            if (requiredNode.isArray()) {
+                requiredNode.forEach(node -> required.add(node.asText()));
+            }
+
+            java.util.List<String> fields = new java.util.ArrayList<>();
+            properties.fieldNames().forEachRemaining(field ->
+                fields.add(field + (required.contains(field) ? "（必填）" : "（可选）")));
+            return String.join("、", fields);
+        } catch (Exception ignored) {
+            return "由 MCP Schema 定义";
         }
     }
 

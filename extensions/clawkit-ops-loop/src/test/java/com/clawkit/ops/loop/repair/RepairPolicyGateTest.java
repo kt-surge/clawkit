@@ -114,6 +114,32 @@ class RepairPolicyGateTest {
         assertThat(decision.reason()).contains("CONNECTION_EXHAUSTION");
     }
 
+    @Test
+    void appDownWithoutTwoSupportingEvidenceIdsShouldBeDenied() {
+        Diagnosis d = new Diagnosis("APP_DOWN", 0.95,
+            List.of("service-status"), List.of(), List.of(), List.of(),
+            "RESTART_SERVICE", false, "1", Diagnosis.DiagnosisStatus.CONFIRMED,
+            Diagnosis.CurrentCondition.ACTIVE, null, Diagnosis.ResolutionAttribution.NONE);
+
+        GateDecision decision = RepairPolicyGate.evaluate(d, restartOrderApiSuggestion());
+
+        assertThat(decision.denied()).isTrue();
+        assertThat(decision.reason()).contains("two current supporting evidence");
+    }
+
+    @Test
+    void recoveredAppDownShouldBeDeniedBeforeApproval() {
+        Diagnosis d = new Diagnosis("APP_DOWN", 0.95,
+            List.of("service-status", "http-probe"), List.of(), List.of(), List.of(),
+            "RESTART_SERVICE", false, "1", Diagnosis.DiagnosisStatus.CONFIRMED,
+            Diagnosis.CurrentCondition.RECOVERED, null, Diagnosis.ResolutionAttribution.SELF_RECOVERED);
+
+        GateDecision decision = RepairPolicyGate.evaluate(d, restartOrderApiSuggestion());
+
+        assertThat(decision.denied()).isTrue();
+        assertThat(decision.reason()).contains("not ACTIVE");
+    }
+
     // ── helpers ──
 
     private static Diagnosis appDownDiagnosis() {

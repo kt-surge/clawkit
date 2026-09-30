@@ -170,6 +170,7 @@ public final class RemoteDiscoveryMain {
 
         // ── Diagnosis Gate ──
         Diagnosis diagnosis;
+        DiagnosisProvenance diagnosisProvenance;
         boolean providerCalled = false;
         String diagnosisFailureCode = null;
 
@@ -178,10 +179,12 @@ public final class RemoteDiscoveryMain {
             if (apiKey == null || apiKey.isBlank()) {
                 // API key missing — keep Discovery, diagnose as INCONCLUSIVE
                 System.err.println("CLAWKIT_API_KEY not set — diagnosis skipped");
-                diagnosis = new Diagnosis("INCONCLUSIVE", 0.0,
-                    List.of(), List.of(), List.of(), List.of(),
-                    "ESCALATE", false);
+                ReconciledDiagnosis reconciled = ReconciledDiagnosis.fromCandidate(
+                    inconclusiveDiagnosis(), discovery, clock.instant());
+                diagnosis = reconciled.diagnosis();
                 diagnosisFailureCode = "PROVIDER_NOT_CONFIGURED";
+                diagnosisProvenance = DiagnosisProvenance.signalsOnly(diagnosis,
+                    reconciled.signals(), diagnosisFailureCode);
             } else {
                 try {
                     LLMConfig llmConfig = LLMConfig.builder()
@@ -193,8 +196,14 @@ public final class RemoteDiscoveryMain {
                         llmProvider, llmConfig.model(), clock);
 
                     Duration diagnosisDeadline = Duration.ofSeconds(120);
-                    diagnosis = gate.diagnose(discovery, null, diagnosisDeadline);
+                    Diagnosis modelDiagnosis = gate.diagnose(discovery, null, diagnosisDeadline);
                     providerCalled = true;
+
+                    ReconciledDiagnosis reconciled = ReconciledDiagnosis.fromCandidate(
+                        modelDiagnosis, discovery, clock.instant());
+                    diagnosis = reconciled.diagnosis();
+                    diagnosisProvenance = DiagnosisProvenance.modelReconciled(modelDiagnosis,
+                        diagnosis, reconciled.signals());
 
                     if ("INCONCLUSIVE".equals(diagnosis.rootCauseCode())
                         && diagnosis.confidence() == 0.0) {
@@ -202,25 +211,29 @@ public final class RemoteDiscoveryMain {
                     }
                 } catch (Exception e) {
                     System.err.println("diagnosis failed: " + e.getMessage());
-                    diagnosis = new Diagnosis("INCONCLUSIVE", 0.0,
-                        List.of(), List.of(), List.of(), List.of(),
-                        "ESCALATE", false);
+                    ReconciledDiagnosis reconciled = ReconciledDiagnosis.fromCandidate(
+                        inconclusiveDiagnosis(), discovery, clock.instant());
+                    diagnosis = reconciled.diagnosis();
                     diagnosisFailureCode = "PROVIDER_ERROR";
+                    diagnosisProvenance = DiagnosisProvenance.signalsOnly(diagnosis,
+                        reconciled.signals(), diagnosisFailureCode);
                 }
             }
         } else {
             // Discovery incomplete or transport failed — skip Provider
-            diagnosis = new Diagnosis("INCONCLUSIVE", 0.0,
-                List.of(), List.of(), List.of(), List.of(),
-                "ESCALATE", false);
+            ReconciledDiagnosis reconciled = ReconciledDiagnosis.fromCandidate(
+                inconclusiveDiagnosis(), discovery, clock.instant());
+            diagnosis = reconciled.diagnosis();
             diagnosisFailureCode = discovery.status() == DiscoveryStatus.TRANSPORT_FAILED
                 ? "TRANSPORT_FAILED" : "DISCOVERY_INCOMPLETE";
+            diagnosisProvenance = DiagnosisProvenance.signalsOnly(diagnosis,
+                reconciled.signals(), diagnosisFailureCode);
         }
 
         // ── Aggregate result ──
         RemoteIncidentResult result = new RemoteIncidentResult(
             discovery, diagnosis, providerCalled, diagnosisFailureCode,
-            clock.instant());
+            clock.instant(), diagnosisProvenance);
 
         // ── Atomic persist ──
         try {
@@ -256,6 +269,11 @@ public final class RemoteDiscoveryMain {
             throw new ConfigException("missing required env: " + name);
         }
         return v;
+    }
+
+    private static Diagnosis inconclusiveDiagnosis() {
+        return new Diagnosis("INCONCLUSIVE", 0.0,
+            List.of(), List.of(), List.of(), List.of(), "ESCALATE", false);
     }
 
     private static String nextArg(String[] args, int i) {

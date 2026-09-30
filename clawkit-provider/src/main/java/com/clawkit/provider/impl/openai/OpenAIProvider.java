@@ -195,7 +195,8 @@ public class OpenAIProvider implements LLMProvider {
             try {
                 response = objectMapper.readValue(sendResult.body(), OpenAIResponse.class);
             } catch (IOException e) {
-                throw new LLMException("解析 LLM 响应失败: " + e.getMessage(), e);
+                throw new LLMException("解析 LLM 响应失败",e,null,sendResult.retryCount(),
+                    com.clawkit.provider.RejectedModelResponse.bounded("RESPONSE_JSON",sendResult.body(),TokenUsage.EMPTY));
             }
 
             if (log.isDebugEnabled()) {
@@ -203,7 +204,12 @@ public class OpenAIProvider implements LLMProvider {
                     sendResult.model(), sendResult.id(), sendResult.retryCount());
             }
 
-            Message result = toMessage(response);
+            Message result;
+            try { result=toMessage(response); }
+            catch (LLMException e) {
+                throw new LLMException(e.getMessage(),e,e.providerError(),sendResult.retryCount(),
+                    com.clawkit.provider.RejectedModelResponse.bounded("TOOL_ARGUMENTS",sendResult.body(),toTokenUsage(response.usage())));
+            }
             long elapsed = System.currentTimeMillis() - startMs;
             log.info("[LLM] {} {}ms, {} msgs → {} chars{}",
                 config.model(), elapsed, messages.size(),

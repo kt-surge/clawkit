@@ -212,6 +212,24 @@ class RemoteDoctorServiceTest {
     // ── Error classification ──────────────────────────────────────────
 
     @Test
+    void degradedReportIsNotRenderedAsFailed() {
+        Instant now = Instant.parse("2026-07-31T00:00:00Z");
+        var report = new RemoteDoctorReport("test-server",
+            RemoteDoctorReport.DoctorOverallStatus.DEGRADED,
+            List.of(new RemoteDoctorReport.DoctorCheck(
+                RemoteDoctorReport.DoctorStage.SSH_AGENT,
+                RemoteDoctorReport.DoctorCheckStatus.WARN,
+                "SSH_AGENT_NOT_DETECTED", "SSH Agent not detected", null,
+                Map.of(), Duration.ZERO)),
+            now, now);
+
+        String text = RemoteDoctorService.renderText(report, false);
+
+        assertThat(text).contains("[test-server]  DEGRADED");
+        assertThat(text).doesNotContain("[test-server]  FAILED");
+    }
+
+    @Test
     void shouldClassifyHostKeyUnknown() {
         assertThat(RemoteDoctorService.classifySshError(
             "Host key verification failed."))

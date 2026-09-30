@@ -188,6 +188,18 @@ public class ToolCallExecutor {
         ToolMetadata meta = metadataFor(call.name(), ctx);
         ToolExecutionRequest req = ToolExecutionRequest.from(call,
             new ToolExecutionScope(ctx.runId(), ctx.turnNumber(), null, null, ctx.control()));
+
+        // PRODUCT-2: 范围门禁必须早于动作描述、审批和执行。
+        // 即使模型点名了隐藏工具，也不能触发任何后续处理。
+        var scope = ctx.toolScope();
+        if (!isToolAllowed(call.name(), scope)
+            || (scope == com.clawkit.tools.RunToolScope.REMOTE_READ_ONLY && !meta.isReadOnly())) {
+            return singleAttempt(ToolExecutionResult.blocked(
+                call.id(), call.name(),
+                "Tool '" + call.name() + "' is not allowed in " + scope + " scope",
+                elapsedMs(start), meta));
+        }
+
         boolean sideEffect = !meta.isReadOnly() || !meta.sideEffects().isEmpty();
         com.clawkit.tools.action.ActionDescriptor descriptor =
             sideEffect ? describeAction(call, req, ctx) : null;
@@ -544,6 +556,17 @@ public class ToolCallExecutor {
 
     private boolean isReadOnly(String name) {
         return registry.isReadOnly(name);
+    }
+
+    /** PRODUCT-2: 工具范围白名单检查。即使模型生成隐藏工具名也会被拦截。 */
+    public static boolean isToolAllowed(String toolName, com.clawkit.tools.RunToolScope scope) {
+        if (scope == null || scope == com.clawkit.tools.RunToolScope.ALL) return true;
+        return switch (scope) {
+            case ALL -> true;
+            case NO_TOOLS -> false;
+            case LOCAL_ONLY -> !toolName.startsWith("mcp__remote_");
+            case REMOTE_READ_ONLY -> toolName.startsWith("mcp__remote_");
+        };
     }
 
     /** 通过 Registry.lookup() 获取 metadata，isReadOnly() 作为回退 */

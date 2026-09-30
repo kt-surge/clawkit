@@ -44,13 +44,16 @@ import picocli.CommandLine.Option;
 
 @Command(
     name = "clawkit",
-    description = "A minimal AI coding assistant",
+    description = "A local AI operations assistant",
     mixinStandardHelpOptions = true,
-    versionProvider = BuildInfo.class
+    versionProvider = BuildInfo.class,
+    subcommands = {com.clawkit.cli.ops.AutonomyCommand.class}
 )
 public class ClawkitApp implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(ClawkitApp.class);
+    static final String PRODUCT_NAME = "CLAWKIT";
+    static final String PRODUCT_TAGLINE = "your local AI assistant — code + servers";
 
     @Option(names = {"-m", "--model"},
         description = "Model name (default: deepseek-v4-flash)")
@@ -92,6 +95,9 @@ public class ClawkitApp implements Runnable {
     private RemoteCommandHandler remoteCommandHandler;
     private OpsInvestigationFacade opsFacade;
     private OpsCommandHandler opsCommandHandler;
+    private boolean verbose = false;
+    private com.clawkit.cli.intent.IntentClassifier intentClassifier;
+    private com.clawkit.cli.intent.IntentHandler intentHandler;
 
     @Override
     public void run() {
@@ -161,7 +167,16 @@ public class ClawkitApp implements Runnable {
 
         // Create OPS interaction + command handler (needs LineReader)
         var opsInteraction = new JLineInvestigationInteraction(reader);
+        // PRODUCT-3 阶段 5: dogfood 使用日志（~/.clawkit/dogfood/usage.jsonl）
+        opsInteraction.setDogfoodLogger(new com.clawkit.cli.ops.DogfoodLogger(
+            Path.of(System.getProperty("user.home"), ".clawkit")));
         this.opsCommandHandler = new OpsCommandHandler(opsFacade, remoteTargetStore, opsInteraction);
+
+        // PRODUCT-2: 用户目的判断层 — 在进入 engine 前做受限意图分类
+        this.intentClassifier = new com.clawkit.cli.intent.IntentClassifier(
+            ctx.providerGateway());
+        this.intentHandler = new com.clawkit.cli.intent.IntentHandler(
+            remoteTargetStore, remoteService, engine, remoteCommandHandler, opsCommandHandler);
 
         this.commandHandlers = new CliCommandHandlers(engine, sessionService, skillLoader,
             mcpManager, registry, memoryService, runReader, reader,
@@ -181,12 +196,15 @@ public class ClawkitApp implements Runnable {
 
         printBanner(effectiveConfig.model(), registry.count(), resolvedWorkDir.toString());
 
+        // PRODUCT-2: 启动后显示服务器概况
+        printServerOverview();
+
         boolean shouldExit = false;
         try {
         while (!shouldExit) {
             String input;
             try {
-                input = reader.readLine("> ");
+                input = reader.readLine(interactionPrompt(remoteService.activeTargetId()));
             } catch (UserInterruptException e) {
                 // Ctrl+C while idle — clear line, continue
                 System.out.println("\n  Press Enter or type /exit to quit.");
@@ -202,21 +220,26 @@ public class ClawkitApp implements Runnable {
                 continue;
             }
 
-            // REMOTE-0: Check for narrow-format NL connection intents
-            var intent = remoteIntentRouter.resolve(input);
-            if (intent.intent() != RemoteIntentRouter.Intent.NONE) {
-                handleRemoteIntent(intent);
+            // PRODUCT-2: 用户目的判断 — 受限模型调用，不提供工具
+            // 分类必须成功才能执行；失败时显示追问，绝不进入带全部工具的引擎
+            var classifiedIntent = intentClassifier.classify(input,
+                remoteTargetStore.list(), remoteService.activeTargetId());
+            if (classifiedIntent != null
+                && classifiedIntent != com.clawkit.cli.intent.ClassifiedIntent.NONE) {
+                if (intentHandler.handle(classifiedIntent, input)) {
+                    continue;
+                }
+            }
+            // 分类失败 → 显示追问，继续循环（不进入 engine）
+            if (classifiedIntent == null
+                || classifiedIntent == com.clawkit.cli.intent.ClassifiedIntent.NONE) {
+                System.out.println();
+                System.out.println("  我没能确定你想做什么，请换一种说法，或者输入 /help 查看可用操作。");
+                System.out.println();
                 continue;
             }
 
-            // OPS-PRODUCT-LOOP-1: Check for narrow-format NL ops investigation intents
-            var opsTarget = OpsCommandParser.resolveNaturalLanguage(input,
-                new java.util.HashSet<>(remoteTargetStore.list()));
-            if (opsTarget != null) {
-                opsCommandHandler.handle("investigate " + opsTarget + " order-api");
-                continue;
-            }
-
+            // 只有 IntentHandler 未处理时才进入 engine（当前 handle 总返回 true）
             if (!engine.tryAcquire()) {
                 System.out.println(ConsoleRenderer.GRAY + "  Engine busy (IM is processing)...\n" + ConsoleRenderer.RESET);
                 continue;
@@ -234,11 +257,7 @@ public class ClawkitApp implements Runnable {
                 for (var ch : imChannels) {
                     if (ch.isRunning()) ch.finalizeMirror(result);
                 }
-                if (result.startsWith("[")) {
-                    System.out.println("\n" + result + "\n");
-                } else {
-                    System.out.println("\n");
-                }
+                printFinalReply(result, System.out);
             } catch (Exception e) {
                 String diagnosticId = CliErrorRenderer.renderUnexpected(e);
                 log.error("[{}] Engine error: {}", diagnosticId, e.getMessage(), e);
@@ -251,11 +270,20 @@ public class ClawkitApp implements Runnable {
         }
 
         } finally {
+            if (opsCommandHandler != null) opsCommandHandler.close();
             if (mcpManager != null) mcpManager.shutdown();
             if (remoteService != null) remoteService.close();
         }
         log.info("clawkit exiting normally.");
         System.out.println("Goodbye.");
+    }
+
+    static String interactionPrompt(String activeTargetId) {
+        if (activeTargetId == null || activeTargetId.isBlank()) {
+            return "[本地]> ";
+        }
+        String safeTarget = activeTargetId.replaceAll("[\\p{Cntrl}\\r\\n]", "");
+        return "[服务器:" + safeTarget + "]> ";
     }
 
     private void printContext(AgentEngine engine) {
@@ -384,6 +412,21 @@ public class ClawkitApp implements Runnable {
             case "config" -> printConfig();
             case "remote" -> remoteCommandHandler.handle(args);
             case "ops" -> opsCommandHandler.handle(args);
+            case "verbose" -> {
+                String arg = args.strip().toLowerCase();
+                if ("on".equals(arg) || "true".equals(arg)) {
+                    verbose = true;
+                    renderer.setVerbose(true);
+                    System.out.println("  详细模式已开启。工具执行过程将完整显示。");
+                } else if ("off".equals(arg) || "false".equals(arg)) {
+                    verbose = false;
+                    renderer.setVerbose(false);
+                    System.out.println("  详细模式已关闭。");
+                } else {
+                    System.out.println("  用法: /verbose on | off");
+                    System.out.println("  当前: " + (verbose ? "开启" : "关闭"));
+                }
+            }
             default -> System.out.println("未知命令，输入 / 查看菜单。\n");
         }
         return false;
@@ -648,13 +691,9 @@ public class ClawkitApp implements Runnable {
         System.out.println();
         System.out.println(boxLine(W, "═".repeat(W), '╔', '╗'));
         System.out.println(boxLine(W, ""));
-        System.out.println(boxLine(W, center("_       _      _", W)));
-        System.out.println(boxLine(W, center("_ __ ___ (_)_ __ (_) ___| | __ ___      __", W)));
-        System.out.println(boxLine(W, center("| '_ ` _ \\| | '_ \\| |/ __| |/ _` \\ \\ /\\ / /", W)));
-        System.out.println(boxLine(W, center("| | | | | | | | | | | (__| | (_| |\\ V  V /", W)));
-        System.out.println(boxLine(W, center("|_| |_| |_|_|_| |_|_|\\___|_|\\__,_| \\_/\\_/", W)));
+        System.out.println(boxLine(W, center(PRODUCT_NAME, W)));
         System.out.println(boxLine(W, ""));
-        System.out.println(boxLine(W, center("your local AI coding companion", W)));
+        System.out.println(boxLine(W, center(PRODUCT_TAGLINE, W)));
         System.out.println(boxLine(W, center("v" + BuildInfo.version(), W)));
         System.out.println(boxLine(W, ""));
         System.out.println(boxLine(W, "", '╠', '╣'));
@@ -677,12 +716,69 @@ public class ClawkitApp implements Runnable {
         System.out.println(boxLine(W, "  /exit     quit             /help   all commands"));
         System.out.println(boxLine(W, "═".repeat(W), '╚', '╝'));
         System.out.println();
-        System.out.println("  Try \"explain this project\" or \"fix the NPE in UserService.java\"");
+        System.out.println("  Try \"/remote list\" or \"investigate test-server order-api\"");
         System.out.println();
+    }
+
+    /** PRODUCT-2: 启动后显示简要概况。 */
+    private void printServerOverview() {
+        List<String> ids = remoteTargetStore.list();
+        var snapshot = remoteService.lastSnapshot();
+
+        System.out.println();
+        System.out.println("  处理本地项目    管理远程服务器");
+        System.out.println();
+
+        if (snapshot.isPresent()) {
+            var s = snapshot.get();
+            System.out.println("  当前服务器: " + s.targetId());
+            System.out.println("  连接状态:   " + displayConnectionState(s.state()));
+            System.out.println();
+            return;
+        }
+
+        if (ids.isEmpty()) {
+            System.out.println("  还没有添加服务器。");
+            System.out.println("  输入 /remote add --from-ssh <SSH别名> 添加。");
+            System.out.println();
+            return;
+        }
+
+        System.out.println("  已登记服务器: " + ids.size() + " 台");
+        System.out.println("  当前连接:     无");
+        System.out.println();
+        System.out.println("  试试输入:");
+        for (String id : ids) {
+            System.out.println("    连接 " + id);
+        }
+        System.out.println("    解释一下这个项目");
+        System.out.println();
+    }
+
+    static String displayConnectionState(com.clawkit.tools.remote.RemoteConnectionState state) {
+        return switch (state) {
+            case DISCONNECTED -> "未连接";
+            case CONNECTING -> "正在连接";
+            case ATTESTING -> "正在校验";
+            case READY -> "正常";
+            case DEGRADED -> "连接可用，但部分检查失败";
+            case FAILED -> "连接失败";
+            case CLOSED -> "已关闭";
+        };
     }
 
     static String boxLine(int width, String content) {
         return boxLine(width, content, '║', '║');
+    }
+
+    static void printFinalReply(String result, java.io.PrintStream out) {
+        out.println();
+        if (result == null || result.isBlank()) {
+            out.println("  没有收到有效回答，请重试。");
+        } else {
+            out.println(result);
+        }
+        out.println();
     }
 
     static String boxLine(int width, String content, char left, char right) {

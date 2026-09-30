@@ -55,6 +55,13 @@ public final class DiagnosisReconciler {
             .filter(item -> item.fact().path("success").asBoolean(false))
             .filter(item -> item.isCurrentAt(evaluatedAt))
             .map(Evidence::evidenceId).forEach(supporting::add);
+        evidence.stream()
+            .filter(item -> signals.relevantEvidence().contains(item.evidenceId()))
+            .filter(item -> item.collectionStatus() == Evidence.CollectionStatus.OBSERVED)
+            .filter(item -> item.freshness() == Evidence.Freshness.CURRENT)
+            .filter(item -> item.fact().path("success").asBoolean(false))
+            .filter(item -> item.isCurrentAt(evaluatedAt))
+            .map(Evidence::evidenceId).forEach(supporting::add);
 
         if ("INCONCLUSIVE".equals(signals.candidateRootCause())) {
             // Fallback: detect APP_DOWN directly from evidence

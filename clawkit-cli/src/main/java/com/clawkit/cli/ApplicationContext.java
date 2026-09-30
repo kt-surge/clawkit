@@ -5,6 +5,7 @@ import com.clawkit.engine.ThinkingMode;
 import com.clawkit.engine.impl.AgentEngine;
 import com.clawkit.memory.impl.DiskMemoryService;
 import com.clawkit.observability.RunReader;
+import com.clawkit.engine.ProviderGateway;
 import com.clawkit.provider.LLMProvider;
 import com.clawkit.tools.ToolRegistry;
 import com.clawkit.context.SkillLoader;
@@ -38,5 +39,6 @@ public record ApplicationContext(
     EffectiveConfig effectiveConfig,
     RemoteConnectionService remoteService,
     RemoteTargetStore remoteTargetStore,
-    OpsInvestigationFacade opsFacade
+    OpsInvestigationFacade opsFacade,
+    ProviderGateway providerGateway
 ) {}

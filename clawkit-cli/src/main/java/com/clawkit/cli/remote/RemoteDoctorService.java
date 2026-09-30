@@ -525,9 +525,12 @@ public class RemoteDoctorService {
 
     public static String renderText(RemoteDoctorReport report, boolean verbose) {
         StringBuilder sb = new StringBuilder();
-        String icon = report.status() == RemoteDoctorReport.DoctorOverallStatus.READY
-            ? "READY" : "FAILED";
-        sb.append("  [").append(report.targetId()).append("]  ").append(icon).append("\n\n");
+        String status = switch (report.status()) {
+            case READY -> "READY";
+            case DEGRADED -> "DEGRADED";
+            case FAILED -> "FAILED";
+        };
+        sb.append("  [").append(report.targetId()).append("]  ").append(status).append("\n\n");
 
         for (var check : report.checks()) {
             String ci = switch (check.status()) {

@@ -18,12 +18,23 @@ public record RemoteIncidentResult(
     Diagnosis diagnosis,
     boolean providerCalled,
     String diagnosisFailureCode,
-    Instant completedAt
+    Instant completedAt,
+    DiagnosisProvenance diagnosisProvenance
 ) {
     public RemoteIncidentResult {
         if (discovery == null) throw new IllegalArgumentException("discovery required");
         if (diagnosis == null) throw new IllegalArgumentException("diagnosis required");
         if (completedAt == null) throw new IllegalArgumentException("completedAt required");
+        diagnosisProvenance = diagnosisProvenance == null
+            ? DiagnosisProvenance.notRecorded(diagnosis) : diagnosisProvenance;
+    }
+
+    /** Compatibility constructor for artifacts written before provenance existed. */
+    public RemoteIncidentResult(DiscoveryResult discovery, Diagnosis diagnosis,
+                                boolean providerCalled, String diagnosisFailureCode,
+                                Instant completedAt) {
+        this(discovery, diagnosis, providerCalled, diagnosisFailureCode, completedAt,
+            diagnosis == null ? null : DiagnosisProvenance.notRecorded(diagnosis));
     }
 
     /** Convenience: was the diagnosis gated (not called)? */

@@ -53,3 +53,10 @@ archunit_store/
 # Logs
 logs/
 *.log
+
+# Local experiment captures and packages
+/tmp/
+
+# This console is a maintained static page, not generated build output
+!ops-console/dist/
+!ops-console/dist/index.html

@@ -61,6 +61,32 @@ class OpsCommandParserTest {
     }
 
     @Test
+    void shouldParseFeedback() {
+        var cmd = OpsCommandParser.parse("feedback inc-test-abc yes no HIGH 信息缺失");
+        assertThat(cmd.subCommand()).isEqualTo(OpsCommandParser.SubCommand.FEEDBACK);
+        assertThat(cmd.question()).isEqualTo("inc-test-abc yes no HIGH 信息缺失");
+    }
+
+    @Test
+    void shouldParseFixtureOnlyObserveCommandWithoutTarget() {
+        var cmd = OpsCommandParser.parse("observe fixture healthy");
+        assertThat(cmd.subCommand()).isEqualTo(OpsCommandParser.SubCommand.OBSERVE_FIXTURE);
+        assertThat(cmd.question()).isEqualTo("healthy");
+        assertThat(cmd.targetId()).isNull();
+        assertThat(OpsCommandParser.parse("observe fixture").question()).isEqualTo("status");
+    }
+
+    @Test
+    void shouldParseDogfoodStatusWithoutAcceptingOtherArguments() {
+        assertThat(OpsCommandParser.parse("dogfood").subCommand())
+            .isEqualTo(OpsCommandParser.SubCommand.DOGFOOD_STATUS);
+        assertThat(OpsCommandParser.parse("dogfood status").subCommand())
+            .isEqualTo(OpsCommandParser.SubCommand.DOGFOOD_STATUS);
+        assertThat(OpsCommandParser.parse("dogfood clear").subCommand())
+            .isEqualTo(OpsCommandParser.SubCommand.HELP);
+    }
+
+    @Test
     void shouldParseHelp() {
         assertThat(OpsCommandParser.parse("help").subCommand())
             .isEqualTo(OpsCommandParser.SubCommand.HELP);

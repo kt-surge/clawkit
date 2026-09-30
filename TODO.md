@@ -15,12 +15,41 @@
 
 ## 当前代码事实
 
+### 当前主线：分层自治运维首轮交付（2026-09-30）
+
+用户已确认定位与范围：Linux Docker Compose、CLI 与飞书通知、指定无状态服务启动／重启。长期需求/技术取舍/模块合同/评测口径统一见 [分层自治实施合同](docs/layered-autonomy-implementation-plan.md)，逐项状态只在本节维护。首轮隔离环境开发不再以七天个人 dogfood 为前置；旧 PRODUCT/OPS 章节作为历史与复用依据，不自动代表新主线完成。
+
+- **[x] AUTONOMY-P0：当前源码基线与合同冻结** — 2026-09-30 完成当前代码核对、技术调研、需求与实施合同；`mvn -B -ntp clean verify` 退出码 0，14 个 Reactor 项目 SUCCESS。汇总当前 158 份 Surefire XML：1420 项，0 failure、0 error、2 skipped（1418 项执行；远程 E2E 为 opt-in，未作为本次真实远程验证）。原始日志 `tmp/product-autonomy-baseline-20260930.log`。Docker Desktop 服务端 29.2.1 可用；`git diff --check` 通过。未启用真实远程写入口。
+- **[x] AUTONOMY-P1：Agent 自主决定与限定合同** — 2026-09-30 新增 `ops-loop/managed` 应用登记、四类结构化决定、启动/重启处置流程和独立的权限/资格合同；使用现有 AgentEngine、ObservingProviderGateway、ToolCallExecutor，按 run 仅暴露五项具名只读采证及内存提交工具。候选动作需要新鲜的服务/健康/业务/依赖证据，反证不能靠漏引绕过；模型不生成权限或 Shell。本阶段无修复工具与派发。15 项新增合同测试通过；`mvn -B -ntp -pl extensions/clawkit-ops-loop -am test` 的 10 个 Reactor 项目 SUCCESS，ops-loop 336 项、0 failure/0 error、1 skipped（默认跳过付费模型冒烟）。另以 opt-in 实际调用 DeepSeek `deepseek-v4-flash`：2 次请求、4511 actual Token、4 项受控观察，提交 `START_STOPPED_V1`，无拒绝；**观察为 test double，仅证明实际模型采证/提交协议，不计入容器恢复或模型成功率**。原始轨迹 `tmp/autonomy-p1-live-20260930-01/{metadata,outcome}.json` 及 `runs/`；日志 `tmp/autonomy-p1-tests.log`、`tmp/autonomy-p1-live.log`、`tmp/autonomy-p1-regression.log`。
+- **[x] AUTONOMY-P2：隔离 Compose 自主修复闭环** — 2026-09-30 已实现 `ManagedRepairExecutor`：人工批准和策略授权分别记录，均经过私有 Registry → ToolCallExecutor → SideEffectGate → 原 Attempt journal；现场采证与授权在目标互斥下复查，授权先落盘再派发，取消/撤销再检查。新增本地 Linux `IsolatedComposeClient`，固定 Docker context/daemon、项目/服务/Compose 文件哈希及完整容器 ID，禁止远程 context、错误目标、可写持久挂载、原生重启竞争和配置漂移；只对该容器 start/restart，不新建、不操作依赖。`IndependentManagedVerifier` 每个样本新建只读会话，要求至少连续三次服务/健康/业务成功；HTTP 不跟随重定向，响应及等待有界；未知结果保持 sticky，失败/中断持久化 ASK，重启不重新派发。真实模型+真实容器实验 `tmp/autonomy-p2-live-20260930-03/` 通过：3 次模型请求、9238 actual Token、一次启动派发、3 个连续验证样本（首末约 9.87 秒）、外部 JSON 业务判定通过、重复派发被拒绝、项目清理退出码 0。调试首轮 `...-01/` 在模型调用前因 Windows 参数传递失败，原始失败保留；修正后 `...-02/` 和依赖健康语义核对后的 `...-03/` 分别保留，不合并为正式成功率。**阶段补齐**：持续发现/归并与决定消费、真实 running-unhealthy 重启、自恢复/维护/期望停机/依赖异常/结果未知/验证失败端到端、只读挂载配置内容漂移检查均完成；该阶段验收时 P3 CLI 和 P4 冻结评测尚未完成；当前交付见下文 P3/P4。合同与实际模型原始日志见 `tmp/autonomy-p2-tests.log`、`tmp/autonomy-p2-live*.log`。相关模块与依赖回归的 12 个 Reactor 项目 SUCCESS（`tmp/autonomy-p2-regression.log`）；新增 11 项修复合同测试、3 项容器边界测试、2 项门禁回归通过，最后的派发后降级投影失败复验见 `tmp/autonomy-p2-repair-tests.log`。`git diff --check` 通过。
+
+  持续装配：`ManagedIncidentController/Store` 复用固定延迟调度，每应用工作区进程租约、异常归并、有限重判、补证与等待截止时间、审批/拒绝/暂停/停止、重启交接；Snapshot + pendingEvent 补偿事件投影。普通产品保存标准证据/决定/用量，原始模型轨迹仅隔离评测显式开启。外部暂停在慢 precheck 后也阻止派发；已知未派发的自恢复须新会话持续验证，未知结果始终人工交接。
+
+  实际模型+实际容器补证：`tmp/autonomy-controller-live-20260930-01/` 五个开发冒烟场景通过，6 次实际请求/20983 actual Token；running-unhealthy 一次重启、3 次独立连续样本（首末约 9.65 秒）和外部精确 JSON 判定通过；依赖故障 MODEL ESCALATE/零重启；维护和期望停机均零模型/零修复；受控“实际动作后响应丢失”保留 OUTCOME_UNKNOWN，进程重开零新模型/零新派发。`...-02/` 只补两项剩余验证，5 次实际请求/18705 actual Token：短暂故障 MODEL WAIT 后独立恢复、零修复；实际重启后重新注入故障，12 个验证样本仍未恢复，VERIFICATION_FAILED/ESCALATED、持久化降级且零后续重启。两次 owned 项目清理均退出 0，并独立确认无残余容器。**以上是开发冒烟，不是冻结样本、线上效果或正式成功率**；未与历史 20/20 拼接。
+
+  验证：`tmp/autonomy-p2-controller-regression.log` 的相关模块及依赖 12 个 Reactor 项目 SUCCESS；最后摘要日志改动复验 `tmp/autonomy-p2-controller-final-tests.log` 通过，17 项决定、15 项控制器、11 项执行、4 项容器边界合同测试全绿，付费容器冒烟默认 opt-in 跳过。首次真机主链与失败原始日志继续保留。`git diff --check` 通过。
+- **[x] AUTONOMY-P3：CLI、通知与安装包** — 2026-09-30 实现 `clawkit autonomy` 登记／检查／分级授权／持续运行／状态／事件／交接／人工 Inbox／暂停恢复停止。应用登记默认 ASK，自动策略需明确目标范围审阅，审阅与版本归档；MODEL 无提权入口。通知通过独立租约及有界重试 Outbox，六项受控传输合同覆盖重复、响应丢失、SDK 去重窗口、并发和永久失败，未向真实飞书发送。Java 21 本地安装包包含 JAR、Windows/POSIX 启动器、说明和隔离夹具，ZIP 解压后的 help/version/autonomy help/无模型状态检查通过。
+
+  P3 阶段解压包实际模型／容器验证 `tmp/autonomy-p3-product-live-20260930-03/`：3 次请求、9959 actual Token；策略与人工授权分别一次实际重启、各三次独立连续样本及外部精确 JSON 业务判定。健康重复触发未增加动作／决定；待审批、暂停／恢复、批准回执、停止及无控制进程状态通过；恢复后显示最新采集的中文健康／业务事实，原模型原因通过 `--details` 展开。owned 项目清理退出 0、无残余。包与 SHA256 在 `tmp/autonomy-p3-package-20260930-02/`，JAR `d6b960f1631a3d67b406b98710025119d98f3fa7ca00b4a4121c92c2b3c4a26a`。首次 helper 参数解析失败保留于 `tmp/autonomy-p3-product-live-01.log`，前一版产品开发冒烟 4 请求／12609 Token 保留于 `...-02/`，不并入正式率。相关包完整构建 `tmp/autonomy-p3-package-build.log` 13 个 Reactor SUCCESS，最后展示／采集时间合同复验 `tmp/autonomy-p3-observation-build.log` SUCCESS；控制器 17、登记 5、通知 6、CLI 4 项通过，付费容器实验独立执行。使用合同见 [managed-operations](docs/managed-operations.md)。该阶段本地包未发布，P4 尚未完成；最终交付见下文 P4。
+- **[x] AUTONOMY-P4：可复现评测与证据归档** — 2026-09-30 完成 `AutonomyBenchmark`、冻结场景及独立证据审计。正式运行 `tmp/autonomy-p4-frozen-20260930-01/`：12 场景／8 类／四组／每场景每组一次，48/48 实例全部记录，39 PASS、1 FAIL、8 MODEL_OR_PROTOCOL_FAILURE，0 INCOMPLETE／NOT_RUN。CLAWKIT 分层处置 10/12，规则 11/12，普通 Agent 9/12，移除处置指导 9/12；三个模型组使用相同实际模型／工具／权限／预算，基线采证差异事前声明。**本轮没有证明 Agent 优于规则或达到商用稳定性**。CLAWKIT 两个模型失败均未修复、转交人工，全部失败保留；规则在短暂故障中提前重启，记 FAIL，不因外部恢复改为成功。见 [评测说明](docs/autonomy-evaluation.md) 与 `tmp/autonomy-p4-frozen-20260930-01/analysis.md`。
+
+  分母与用量：各组事前合资格自主恢复均为 2/4；CLAWKIT 普通启动／重启恢复 2/2、执行挑战正确交接 2/2，未知结果即使外部恢复也不计自主成功。整轮 68 次实际模型请求／231956 actual Token，CLAWKIT 22 次／86210 Token，缺失用量为零，原始费用不可得为 null。独立审计 `audit.json` 通过：16 次实际派发、12 个具有连续三次独立验证和外部精确 JSON 样本的恢复事件、7 项实际派发后的控制器重构无重派发检查；五个收到但无法解析的响应均明确输出长度截断，原始内容及实际用量保留。模型／协议失败共八个，不全部归于截断。未观测到重复动作或假恢复仅适用于本轮样本。
+
+  复现输入：源码运行期间指纹不变；`source-inputs.zip` 保存 754 份与冻结哈希一致的源码／构建／夹具／场景／脚本输入，另有镜像 digest、原始模型轨迹、授权／Attempt／验证状态及逐实例报告。owned 项目清理退出 0，独立 `cleanup-audit.json` 确认零残余容器。三轮开发冒烟 `tmp/autonomy-p4-smoke-20260930-01`—`03` 独立保留，不并入正式率；它们暴露的工具字段说明、坏响应留档与分类问题在冻结前统一修复。冻结失败未补跑替换。
+
+  最后全量 `mvn -B -ntp clean verify` 14 个 Reactor SUCCESS，169 份 XML 共 1495 项、0 failure／0 error、5 skipped（1490 项执行，真实模型／容器 opt-in 与普通合同分开），原始日志 `tmp/autonomy-final-clean-verify-20260930-02.log`。最终产品包 `tmp/autonomy-final-package-20260930-01/clawkit-0.1.0-windows.zip`，ZIP SHA256 `bdbc881d75ece0ea2d8d9cb7c996dba22c99ffbd2e971d49ec10e0f133a63cff`，JAR SHA256 `0b1eaf3370caf5bc56469477472f0660845acaf954e655e59bf184f4a4c732bf`；解压实际产品冒烟 `tmp/autonomy-final-product-live-20260930-01/` 通过，3 请求／9984 actual Token、策略与人工各一次重启／三次独立样本、外部 JSON 判定、完整生命周期、owned 清理零残余；无真实通知。最终 clean 构建与实测包 5165 个 JAR 条目字节全部一致，证明文件 `tmp/autonomy-final-package-content-check.json`；整体 JAR 哈希因 ZIP 时间戳不同而变化。README、产品方向、使用说明、评测说明及本节状态已同步；本地包未发布。
+
+  后续优化：优先改善模型原生思考、输出预算和结构化提交的配合，再增加有界诊断证据与更强规则对照；使用新版本、新冻结运行保留本轮负面结果，不据此扩大真实目标写权限。这是首轮之后的工作，不计作本轮完成成果。
+- **[ ] AUTONOMY-P5：真实目标试用（首轮之外）** — 待用户选择非生产目标并确认部署与动作范围后实施；不复用已有 `test-server` 写权限或定时任务。
+
+下列“截至 2026-08-04”记录保留为历史代码事实，不代表 2026-09-30 已重新完成全部验收。
+
 截至 2026-08-04：
 
 - 全量回归覆盖所有模块并通过（`mvn test -pl extensions/clawkit-ops-delivery -am` 全绿）。
 - PRODUCT-3 审批体验闭环 Phase 0–4 已交付：
   - 新增 `FixSession` 接口（ops-loop），解耦 `OpsFixSession` 使夹具可注入。
-  - 新增 `AppDownApproveFixtureTest`（15 夹具测试）覆盖 8 条审批决策路径（批准成功/拒绝/取消/自恢复/漂移/执行失败/结果未知/验证失败）。
+  - 新增 `AppDownApproveFixtureTest`（16 夹具测试）覆盖 8 条审批决策路径（批准成功/拒绝/取消/自恢复/漂移/执行失败/结果未知/验证失败）；结果未知同时覆盖 I/O 与运行时派发异常。
   - 新增 `AppDownRejectFixtureTest`（6 夹具测试）。
   - 新增 `RejectedTerminalRenderTest`（15 渲染冒烟测试，覆盖拒绝/取消/成功/自恢复/失败/人工处理 6 种终端格式）。
   - 新增 `DogfoodLogger`（脱敏使用日志 → `~/.clawkit/dogfood/usage.jsonl`）。
@@ -43,7 +72,11 @@
 
 ## 当前执行顺序
 
-当前不再扩展新的 Runtime 底层抽象，也不继续以工具数量和测试数量推动路线。产品方向见 [docs/product-direction.md](docs/product-direction.md)，当前顺序固定为：
+2026-09-30 首轮 AUTONOMY-P0 → P1 → P2 → P3 → P4 已完成：当前基线、自主决策与限定合同、隔离自主闭环、产品包和可复现评测均有验收证据。P5 真实目标试用是独立后续里程碑。底座保持现有主线，阶段验收见 [实施合同](docs/layered-autonomy-implementation-plan.md#6-分阶段实现与退出条件)。
+
+### 历史执行顺序（2026-08-04 至 2026-09-20）
+
+以下保留旧 PRODUCT/OPS 状态与来源；其中七天 dogfood/先 Shadow 后 AUTO 的开发顺序不再阻塞本轮隔离实现。真实目标的安全授权与已有回归合同继续有效。
 
 1. **[x] PRODUCT-0：产品方向冻结**：明确目标用户是管理少量 Linux 服务的个人开发者；Remote 是可信入口，Ops Loop 是查看、调查、处置和验证的核心问题解决流程。
 2. **[x] PRODUCT-1：服务器接入体验**：已交付 OpenSSH config/Agent/known_hosts 复用、导入向导、doctor、简洁 status 和高级 inspect；普通路径不手写 YAML、key path 或工具 hash。真实远端 v2 产品 E2E 作为非阻塞 dogfood 证据保留。
@@ -53,7 +86,7 @@
    Phase 0–4 已完成（2026-08-04）：8 条审批路径夹具覆盖 + 6 种中文终端渲染 + 统一 /ops 入口 + 脱敏使用日志基础设施。Phase 5（7 天 dogfood）等待真实使用数据。真实远端 test-server 保持只读，未开放写权限。
 5. **[~] D0 / P0-D 外部证据收口**：只保留 Windows `-it` 人工 smoke 和首个 Release，不阻塞 PRODUCT-1/2 的本地开发。
 6. **[ ] P2 最小产品度量**：只记录首次连接、首次有效结果、调查耗时、Provider 成本和人工决策等真实使用字段；多模型路由、Prompt caching 等不进入当前主线。
-7. **[~] OPS-3A Observe-only**：在手动调查体验稳定后，推进持续发现、去重、冷却和预算；修复仍保持 ASK。2026-08-04 起按用户明确授权与 PRODUCT-3 dogfood 并行，但仅限可丢弃 Fixture 的持续只读发现，不接入真实服务器 Cron，不新增写权限。
+7. **[~] OPS-3A Observe-only**：在手动调查体验稳定后，推进持续发现、去重、冷却和预算；修复仍保持 ASK。2026-08-04 起按用户明确授权与 PRODUCT-3 dogfood 并行，但仅限可丢弃 Fixture 的持续只读发现，不接入真实服务器 Cron，不新增写权限。2026-09-19 已接入 `/ops observe fixture <start|status|pause|resume|app-down|healthy|unknown|stop>`：固定 `fixture-app-down`，仅写本地 `fixture://` 证据和 Registry/State，不接收 remote target、不加载 Provider、不进入审批或修复。
 8. **[ ] OPS-2B Shadow 与有限自治**：只有 PRODUCT-3 的真实使用和 OPS-3A 数据足够后，才为单一固定动作积累 Shadow 数据并评审 Fixture AUTO。
 
 已完成里程碑：OPS-0A、OPS-0B、OPS MVP-1、OPS MVP-2、OPS MVP-3 和 REMOTE-0。它们继续作为产品安全底座和回归基线，不在当前顺序中重复展开。
@@ -181,7 +214,7 @@
   - `JLineInvestigationInteraction` 新增 `formatNeedsHumanTerminal()`（"⚠ 需要人工处理"）。
   新增测试：
   - E1 执行失败（2 个）：`execFailureReturnsFailedNoEffect`（FAILED_NO_EFFECT, restartCalls=1, 含"未产生远端副作用"）、`execFailureIncidentPersisted`。
-  - E2 结果未知（2 个）：`outcomeUnknownReturnsNeedsHuman`（NEEDS_HUMAN, restartCalls=1, 含"结果未知""可能已部分执行"）、`outcomeUnknownContinueIsSticky`（continue 不自动重试 restartCalls=0）。
+  - E2 结果未知（3 个）：`outcomeUnknownReturnsNeedsHuman`（NEEDS_HUMAN, restartCalls=1, 含"结果未知""可能已部分执行"）、`outcomeUnknownContinueIsSticky`（continue 后原修复会话计数仍为 1）、`runtimeFailureAfterDispatchAlsoBecomesStickyOutcomeUnknown`（运行时派发异常同样锁定为未知结果且不重派）。
   - V1 验证失败（2 个）：`verifyFailureReturnsNeedsHuman`（NEEDS_HUMAN, restartCalls=1, verifySession≥1, 验证摘要非空且不声称成功）、`verifyFailureDoesNotClaimSuccess`（status≠RESOLVED, summary 不含"恢复"）。
   - 渲染冒烟（1 个）：`needsHumanTerminalShowsWarning`。
   验证：ops-delivery 全量 BUILD SUCCESS（15 个夹具测试 0 失败）；全模块 12/12 SUCCESS。
@@ -211,6 +244,16 @@
   ✅ 2026-08-02 — 首次日常对话发现两个真实问题：模型已返回回答但命令行未显示，以及普通问候误加载飞书技能。已修复最终回答显示，并限制问候、身份和功能介绍直接回答；全量测试通过。
   ✅ 2026-08-02 — “查看状况”“服务器连接情况”曾误入通用模型，导致翻查本地项目并反复执行不适用的 shell 命令。现已改为直接展示已登记服务器和当前连接状态；未连接时给出明确的连接或检查命令。
   验收：形成原始使用日志和优先级清单；首次连接、首次有效结果和审批理解指标达到产品方向文档目标后，再启动 OPS-3A/OPS-2B。
+
+## SSH 后续方向（不进入当前主线）
+
+这些方向只在 PRODUCT-3 dogfood 证明存在真实使用摩擦后再启动。当前 `test-server` 始终只读，任何 SSH 演进都不得扩大写权限。
+
+- **[ ] LLM 调用受控远程命令能力（不是任意 SSH Shell）**：补齐固定 MCP 工具覆盖不到的通用只读操作，例如受限的文件、进程、网络、日志与运行环境查看；诊断只是其中一个场景。用户先显式选择已登记 target；模型只负责理解意图、选择模板、生成结构化参数并解释结果，至多提出候选动作，不能把原始 Shell 文本直接交给 SSH。实际执行前必须展示规范化的命令与风险级别并取得用户确认。服务端使用独立 profile 和受限 dispatcher，只接收版本化的命令模板及结构化参数，拒绝管道、重定向、命令替换、环境注入和未登记服务名；输出遵守超时、大小上限、脱敏和 `run://` 证据引用。只读命令走 `opsro`；任何有副作用的通用命令必须映射为具名 `ActionDescriptor`，进入既有审批、Attempt Journal、fresh precheck 和独立验证链，不能传递原始 Shell 文本或获得交互式终端、SFTP、sudo。验收：Fixture 覆盖允许的只读命令、全部禁用语法和参数越界、取消/超时/断连清理、目标隔离、审计与脱敏；副作用命令必须证明审批前零执行、结果未知后零自动重试与独立验证；真实 `test-server` 仅做批准后的只读验证，写路径仍保持零调用。
+
+- **[ ] 多目标 SSH/MCP 会话缓存与显式切换**：当前 `RemoteConnectionService` 只允许一个 `activeTargetId` 和一个活动 `session`；在确认存在跨服务器频繁切换的真实需求后，演进为按 `targetId` 管理多个健康会话，并支持“保持多台在线、单台当前选中”的体验。`ConcurrentHashMap<targetId, RemoteSession>` 仅用于线程安全会话表，不能替代生命周期和并发设计。验收：用户可显式连接 A、B 两个已登记只读目标，再切换当前 target 时不重复 SSH/MCP 握手；每个 Run 在开始时绑定 target，切换焦点不得影响进行中的 Run；工具名、权限、证据引用、取消、超时和 generation 均按 target 隔离；同一 target 重复建连去重，断线/空闲回收/重连后旧调用失效；退出时关闭全部 session 和 mount。先以 Fixture 验证多会话与并发清理，再在真实 `test-server` 做只读切换验证，写调用始终为零。
+
+- **[ ] SSH 高级配置档与有效配置诊断（不是应用内 SSH 配置中心）**：保留 OpenSSH config、Agent、证书、ProxyJump 和 known_hosts 作为连接事实来源；CLAWKIT 只展示 `doctor` 解析后的有效配置及其来源，并为连接超时、请求超时、输出上限和保活策略提供少量版本化、受上限约束的档位。`StrictHostKeyChecking=yes`、公钥认证、禁用 PTY/转发/本地启动命令/ControlMaster、固定受限 MCP 启动命令等继续由安全策略强制，不能被 UI、YAML 或模型降低；不引入密码、私钥文本、自动接受 host key、任意 startup command 或数据库式全量 SSH 配置编辑。验收：doctor 能区分“OpenSSH 继承值”和“CLAWKIT 强制值”；允许的档位均经过边界、超时、断线和 ProxyJump Fixture 验证；禁止项无论用户配置、模型输入还是 legacy endpoint 都无法绕过；真实环境仅做只读连接验证。
 
 ## Ops MVP 范围与取舍
 
@@ -539,7 +582,7 @@ P1-A 的前三项（失败分类、智能截断、任务感知 compact）直接�
 
 - **[~] PA-2 工具结果智能截断**（tools）
   已落地：`ReducedToolOutput` 契约、扩展统计与事件字段、Bash stats 从 envelope 派生、BoundedOutputCollector 行数/WARN 采集。
-  剩余：`ReducedToolOutput` 尚未成为生产唯一事实源；Grep streaming + before/after context、WARN 最终保留、Log/Relation reducer 与 fixture 未完成。日志/PostgreSQL 实际 adapter 随 OPS-0A/0B 接入。
+  剩余：`ReducedToolOutput` 尚未成为生产唯一事实源；Grep streaming + before/after context、WARN 最终保留、Log/Relation reducer 与 fixture 未完成。日志/PostgreSQL 实际 adapter 随 OPS-0A/0B 接入。仅当真实 20+ Turn/Dogfood 证明工具原文导致上下文膨胀时，再增加“结构化工具结果摘要投影”：原文保留在审计和 `run://` 证据中，模型只接收带 target/run/时间、状态/错误码/效果确定性、截断标记及证据引用的有界摘要；必须保留未解决 ERROR、BLOCKED、超时、结果未知/部分执行，不能只留“最近 5 条”。摘要缓存按会话、target、结果 revision 和预算策略失效，避免新结果写入期间读到旧摘要。
   验收门禁保持：Bash/Grep/Log/Relation 截断后关键内容不丢失，且 stats、envelope、模型可见文本和事件一致。
 
 - **[x] PA-3 任务感知 compact**（context / engine / ops）
@@ -565,6 +608,12 @@ P1-A 的前三项（失败分类、智能截断、任务感知 compact）直接�
   生成式 map-reduce、L4 结构化失败；决策计入输出预留、安全余量、required anchor 和剩余 run
   token 预算，事件可回放 level/reason/duration/discard ranges。剩余门禁：用真实 20+ turn workload
   冻结完成率、cache-miss token、摘要调用成本和 P95 对比；在此之前不宣称成本收益。
+- **[ ] Tier 3 历史连续性保留**（context，完成上述基线后评估）。
+  当前 L2 在达到 token 目标时可直接淡出 Tier 3；补充“语义价值”决策：先确定性识别被驱逐 Turn 中的用户决策、确认/反证事实、错误、审批边界与未完成检查。无价值的重复进度/旧日志可直接丢弃；有价值的 Turn 生成带来源 turn range、run/evidence 引用和 revision 的有界 `History Digest`，按范围缓存，只在新增或变更时失效。结构化 Digest 无法表达复杂关系时才调用 LLM 摘要；摘要不得成为事实来源，required anchor 仍由 canonical snapshot 独立保护。
+  验收：20+ Turn 真实 workload 对比“直接淡出 / 结构化 Digest / LLM 摘要”的任务完成率、关键事实召回、错误延续率、额外 token、P95 与摘要失真；未证明连续性收益前不默认增加模型摘要调用。
+- **[ ] 历史 Session 混合召回门**（engine / session，先积累跨 Session Dogfood）。
+  当前每个 Run 都用 BM25 检索已保存 Session，正分候选会被自动回注。补充正则强信号（继续/上次/回顾、Session/run/Incident ID、错误码、路径、目标名）作为 boost，与 BM25 的 top-1 分数阈值、top-1/top-2 分差共同决定是否自动注入；无强信号且分数弱时不把历史摘要带入上下文，保留 `session_context` 显式搜索/加载。禁止为这一步额外调用 LLM 分类；不记录原始用户 query 到指标。
+  验收：固定跨 Session 问题集比较当前 always-recall 与混合门的召回精度、遗漏率、额外 context token 和任务完成率；覆盖“未说上次但带 C-007/路径/Incident ID”“说继续但无命中”“弱关键词重合”三类反例。
 - **[ ] 多模型路由**。
 - **[ ] Prompt caching**。
 - **[ ] 可重置的 Bash session 复用**。
@@ -709,10 +758,12 @@ ops-fixtures/
 
 ### OPS-2B：有限自动修复
 
-- **[ ] OPS-2B0：单动作 Shadow Policy**（ops / policy）
-  **长期方向，当前 No-Go for AUTO。** 自治等级使用 `A0 Observe / A1 Recommend / A2 Ask / A3 Shadow / A4 Limited Auto`；新增版本化 `AutoRemediationPolicy`、`policyHash`、适用环境、Action/target allowlist、预算与持久化降级状态。Shadow 只记录“本可自动执行”的判定，真实修复仍走 ASK；生产路径不得复用 E2E `--auto-approve`。
+- **[~] OPS-2B0：单动作 Shadow Policy**（ops / policy）
+  **长期方向，当前 No-Go for AUTO。** 自治等级使用 `A0 Observe / A1 Recommend / A2 Ask / A3 Shadow / A4 Limited Auto`；新增版本化 `AutoRemediationPolicy`、`policyHash`、适用环境、Action/target allowlist、预算与持久化降级状态。Shadow 只记录“本可自动执行”的判定，真实修复仍走 ASK；生产路径不得复用历史 E2E `--auto-approve`，当前独立远程 repair 启动器也保持 fail-closed。
   首个且唯一候选固定为确定性证据确认的 `APP_DOWN → restart_service(serviceId=order-api)`；模型只负责解释，不参与放宽授权。模型明确反对、证据冲突/缺失/过期、状态漂移、profile 漂移、预算耗尽或结果未知时一律保持/降级 ASK。
   验收：至少 100 次 Shadow 判定，覆盖 APP_DOWN 正例及自恢复、DB_LOCK_WAIT、证据缺失、目标错误、过期证据和传输中断等负例；假阳性修复、越权副作用、重复副作用和未验证成功均为 0。
+
+  **2026-09-20 进展：** Fixture-only 的版本化 `AutoRemediationPolicy`、确定性 `policyHash`、纯 `ShadowPolicyGate`、不可变 policy/decision 存储、共享额度锁和 CLI `shadow` 回放已实现；固定 100 例合成矩阵输出 `20 eligible / 47 ask / 30 rejected / 3 expired`，`sideEffectCalls=0`。`shadow-review <approve|reject|defer>` 只能记录与原 decision、policy、evidence 哈希绑定的人工**反事实**选择，不产生 ApprovalGrant、修复或验证。该进展仅证明 Fixture 契约与持久化边界；真实 dogfood、脱敏人工选择对账和原始样本指标仍未完成，因此保持 A4 No-Go。
 
 - **[ ] OPS-2B1：Fixture AUTO 与自动降级**（ops / policy）
   仅在 Fixture 对上述单一 Action/target 晋级 AUTO；`maxAttempts=1`，保留 fresh precheck、TOCTOU、durable intent、目标互斥、结果未知 sticky 和独立 Verification，底层 opsfix 权限不随 AUTO 扩大。
@@ -724,8 +775,10 @@ ops-fixtures/
 
 ### OPS-3：持续 Loop 与经验复利
 
-- **[ ] OPS-3A：Observe-only Discovery Automation**（ops / scheduling）
-  **2026-07-27 重评结论：先于 Fixture AUTO 落地，但只自动发现、诊断、报告和生成建议，修复仍保持 ASK。** 从手动触发升级为 Cron/外部 Probe/健康告警触发；新增持久化 Incident Registry、fingerprint 去重、ACTIVE Incident 合并、关闭后冷却、同目标 Discovery 互斥、暂停/取消、deadline、Provider/Discovery 日预算和重启恢复。
+- **[~] OPS-3A：Observe-only Discovery Automation**（ops / scheduling）
+  **2026-07-27 重评结论：先于 Fixture AUTO 落地，但只自动发现、诊断、报告和生成建议，修复仍保持 ASK。** 已完成 Fixture A0 运行切片：持久化 Incident Registry、确定性 fingerprint 去重、ACTIVE Incident 合并、关闭后冷却、同目标互斥、暂停/恢复、Discovery/Provider 预算、重启恢复和 72 逻辑小时加速 soak。2026-09-19 将其接入 CLI 的固定 Fixture 入口；首次异常只创建一次 Incident，后续合并不重复消耗 Provider。Fixture A0 明确关闭诊断，状态记为 `DIAGNOSIS_DISABLED_OBSERVE_ONLY`，Provider 预算固定为 0。
+  已验证：`/ops observe fixture` 不接受 target 参数；运行器只产生 `fixture://` 证据；每次完成观测追加 `observation-timeline.jsonl`，保存结果、开关状态、证据引用及一一对应的白名单事实投影，供后续 Console 回放；Fixture 运行标识使用 UUID，重启后同一 ACTIVE Incident 仍合并但不会复用证据引用；`/ops observe fixture replay` 即使 loop 已停止也只读回放经过 Fixture 合约校验的最近事件；timeline reader 与 `ops-console/dist/index.html` 均会拒绝未知事件、重复 run/证据、证据跨 run、跨 target、事实错配和时间倒序，Console 还要求事件数与状态中的“完成 + 合并”一致；活动 loop 禁止导出，`stop` 排空后可执行 `snapshot`，在唯一且不覆盖的目录中复制 state、registry、timeline，并由带自身校验页脚的 manifest 绑定三者的精确字节数和 SHA-256；Console 一次选择同一目录的四份文件，先拒绝缺失、文件名错误、修改或跨批次混搭，再验证状态与 Registry 页脚及时间线语义，页面没有网络、调度或修复能力；真实 CLI 重启烟测为请求/启动 2/2、完成/合并/失败 1/1/0、单一 ACTIVE Incident、Provider 0/0，随后生成 `fixture-snapshot-933b58f6-5a73-4749-9b72-5982b4016aa0`，Console 接受原快照并拒绝错误文件名与单字符篡改；2026-09-20 新增 `/ops observe fixture soak`：隔离运行 72 逻辑小时当前 CLI Fixture profile，输出同一 snapshot 目录的可选自校验报告；真实 CLI 样本 `fixture-snapshot-386d7067-818d-44fb-86af-f1815328087d` 为请求/启动 68/68、完成/合并/失败 22/46/0、1 个 ACTIVE Incident、Provider 0/0，Console 接受五文件并显示“加速时间 · 非自然墙钟”；UNKNOWN 只落 COLLECTION_FAILED Fixture 证据，绝不关闭 ACTIVE Incident。启动、状态、健康恢复、暂停、停止、snapshot、soak 和 CLI 退出均覆盖测试；关闭先排空已开始的观察再释放本地存储。简历/面试主手册已明确保留“本地智能体平台”总叙事，A0—A2 作为运维场景闭环，不把 Fixture 结果写成生产运行。
+  未完成：不接入真实服务器 Cron/外部 Probe/告警，不启用 Provider 诊断、通知 Outbox 或真实 Incident Delivery；这些能力必须在独立的 Fixture 证据与安全评审后再推进。
   验收：仅在 Fixture 连续运行 72 小时；不重复轰炸、不并发处理同一目标，暂停后不创建新任务，重启后不重复通知，预算耗尽后停止 Provider 调用，进行中的写 Attempt 不被重新派发。
 
 - **[ ] OPS-3B：Playbook State**（ops / memory）

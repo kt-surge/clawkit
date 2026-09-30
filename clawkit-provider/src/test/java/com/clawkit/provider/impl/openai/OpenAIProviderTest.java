@@ -76,6 +76,24 @@ class OpenAIProviderTest {
         provider = new OpenAIProvider(config, millis -> { }, System::currentTimeMillis);
     }
 
+    @Test void invalidToolArgumentsRetainReceivedResponseAndActualUsageWithoutExecutionOrLoggingRawText() {
+        String raw="""
+            {"id":"rejected-1","model":"deepseek-chat","choices":[{"message":{"role":"assistant","content":null,
+            "tool_calls":[{"id":"call-1","type":"function","function":{"name":"submit_decision","arguments":"{private-response"}}]},
+            "finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}
+            """;
+        responseQueue.add(new StubResponse(200,raw));
+        try { provider.generate(List.of(Message.user("investigate")),List.of()); throw new AssertionError("invalid arguments must fail closed"); }
+        catch (LLMException e) {
+            assertThat(e.rejectedResponse()).isNotNull();
+            assertThat(e.rejectedResponse().rawResponse()).isEqualTo(raw);
+            assertThat(e.rejectedResponse().usage().totalTokens()).isEqualTo(12);
+            assertThat(e.rejectedResponse().truncated()).isFalse();
+            assertThat(e.getMessage()).doesNotContain("private-response");
+            assertThat(e.rejectedResponse().toString()).doesNotContain("private-response");
+        }
+    }
+
     // === Test 1: 纯文本回复 ===
     @Test
     void shouldReturnTextResponse() {

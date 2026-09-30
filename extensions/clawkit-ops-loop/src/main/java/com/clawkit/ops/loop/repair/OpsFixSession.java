@@ -40,7 +40,7 @@ import java.util.stream.Collectors;
  * <p>State machine: NEW → STARTING → INITIALIZING → READY → DRAINING → CLOSED
  * (any state → FAILED).
  */
-public final class OpsFixSession implements AutoCloseable {
+public final class OpsFixSession implements FixSession {
 
     private static final Logger log = LoggerFactory.getLogger(OpsFixSession.class);
     private static final String PROTOCOL_VERSION = "2024-11-05";
