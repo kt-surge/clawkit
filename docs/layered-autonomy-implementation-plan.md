@@ -372,3 +372,5 @@ R3 改动保持总量 30000 Token / 6 模型请求 / 12 工具和既有权限、
 用户另外允许新版再运行一个同范围周期。新版三次实际请求合计 16788 actual Token，结构化诊断与 INVESTIGATE 决定接受，0 提交拒绝、0 修复 Attempt；建议补充 HEALTH/BUSINESS/DEPENDENCIES，控制随后已停止，事件保留待补证。模型一项缺口描述将日志称为截断，实际 LOGS 来源质量为 COMPLETE，此文字误述与真实质量均保留；合同接受不等于语义准确或根因命中。两次仅为每候选一次的接入烟测，模型输出与采样时间不同，不能据请求/Token 差异归因或宣称稳定改善。公开脱敏元数据及私有输入哈希见 [接入记录](../benchmarks/evidence/remote-autonomy-readonly-20261001.json)。
 
 R2 服务端新合同、完整目标证明与独立业务探测仍未实现部署；[审阅清单](../examples/autonomy/remote-order-api-repair-review.json)继续为草稿。当前交付不能写成远程自治修复、长期生产运行、业务 MTTR 改善或模型准确率提升。
+
+源码 `1426febb1592fbc77b5ba40a1cd8f3556db8c63a` 已推送；该提交的 [CI](https://github.com/kt-surge/clawkit/actions/runs/36887478219) 包含 clean verify、Runtime baseline compare 与 Docker smoke，和 [CodeQL](https://github.com/kt-surge/clawkit/actions/runs/36887477931) 均成功。本地最终 clean verify 为 14 reactor 项目、180 suites、1561 项（6 跳过），0 失败/错误。Windows ZIP 通过解压入口与文件哈希检查，build-manifest 绑定源码提交及 75 项文件；打包时无已跟踪文件改动。后续仅更新交付说明时，包按新提交重新生成并保留旧候选与已测 JAR 哈希。
