@@ -8,7 +8,8 @@ param(
     [Parameter(Mandatory=$true)][string]$PackageDir,
     [Parameter(Mandatory=$true)][string]$OutputDir,
     [string]$DockerContext="desktop-linux",
-    [string]$Model="deepseek-v4-flash"
+    [string]$Model="deepseek-v4-flash",
+    [ValidateSet('layered-autonomy','diagnostic-autonomy')][string]$FixtureProfile='layered-autonomy'
 )
 $ErrorActionPreference="Stop"
 Set-StrictMode -Version Latest
@@ -17,7 +18,11 @@ $packageRoot=(Resolve-Path -LiteralPath $PackageDir).Path
 $outputRoot=[System.IO.Path]::GetFullPath($OutputDir)
 if (Test-Path -LiteralPath $outputRoot) { throw "Use a fresh output directory; never overwrite previous failures." }
 New-Item -ItemType Directory -Path $outputRoot | Out-Null
-$fixture=(Resolve-Path -LiteralPath (Join-Path $packageRoot "ops-fixtures/layered-autonomy/compose.yaml")).Path
+$fixtureRelative="ops-fixtures/$FixtureProfile/compose.yaml"
+$fixture=(Resolve-Path -LiteralPath (Join-Path $packageRoot $fixtureRelative)).Path
+$service=if($FixtureProfile -eq 'diagnostic-autonomy') { 'api' } else { 'orders' }
+$dependencyService=if($FixtureProfile -eq 'diagnostic-autonomy') { 'dependency' } else { 'catalog' }
+$businessPath=if($FixtureProfile -eq 'diagnostic-autonomy') { '/business' } else { '/orders' }
 $jar=(Resolve-Path -LiteralPath (Join-Path $packageRoot "clawkit.jar")).Path
 $java=(Get-Command java -ErrorAction Stop).Source
 $docker=(Get-Command docker -ErrorAction Stop).Source
@@ -91,14 +96,20 @@ function New-LoopbackPort {
     try { return $listener.LocalEndpoint.Port } finally { $listener.Stop() }
 }
 function Assert-Business([int]$Port) {
-    $result=Invoke-RestMethod -Uri "http://127.0.0.1:$Port/orders" -TimeoutSec 3
-    if ($result.service -ne 'orders' -or $result.orderId -ne 'sample-001' -or $result.status -ne 'accepted' -or @($result.PSObject.Properties).Count -ne 3) {
+    $result=Invoke-RestMethod -Uri "http://127.0.0.1:$Port$businessPath" -TimeoutSec 3
+    $matches=if($FixtureProfile -eq 'diagnostic-autonomy') {
+        $result.role -eq 'api' -and $result.status -eq 'accepted' -and @($result.PSObject.Properties).Count -eq 2
+    } else {
+        $result.service -eq 'orders' -and $result.orderId -eq 'sample-001' -and $result.status -eq 'accepted' -and @($result.PSObject.Properties).Count -eq 3
+    }
+    if (-not $matches) {
         throw "Independent exact business JSON oracle failed"
     }
     return $true
 }
 function Inject-Fault([int]$Port) {
-    $null=Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$Port/__fixture/fault" -ContentType application/json -Body '{"seconds":3600}' -TimeoutSec 3
+    $body=if($FixtureProfile -eq 'diagnostic-autonomy') { '{"mode":"application"}' } else { '{"seconds":3600}' }
+    $null=Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$Port/__fixture/fault" -ContentType application/json -Body $body -TimeoutSec 3
 }
 function Repair-Evidence($Snapshot,[string]$ExpectedSource) {
     $repair=Read-SharedJson (Join-Path (Join-Path $stateRoot 'orders/controller') $Snapshot.current.repair.artifact)
@@ -121,23 +132,29 @@ try {
     while ($ordersPort -eq $catalogPort) { $catalogPort=New-LoopbackPort }
     $env:AUTONOMY_ORDERS_PORT=[string]$ordersPort
     $env:AUTONOMY_CATALOG_PORT=[string]$catalogPort
+    $env:DIAGNOSTIC_API_PORT=[string]$ordersPort
+    $env:DIAGNOSTIC_DEPENDENCY_PORT=[string]$catalogPort
     Write-Json 'metadata.json' @{ evidenceKind='ACTUAL_MODEL_ACTUAL_CONTAINERS_EXTRACTED_PRODUCT_DEVELOPMENT_SMOKE'; project=$project; context=$DockerContext;
         model=$Model; packageJar=$jar; jarSha256=(Get-FileHash -LiteralPath $jar -Algorithm SHA256).Hash.ToLowerInvariant(); fixture=$fixture;
-        perDecisionProviderCalls=6; perDecisionTokens=30000; perIncidentDecisions=3; providerRetries=0; notificationEnabled=$false; startedAt=[DateTime]::UtcNow.ToString('o') }
+        fixtureProfile=$FixtureProfile; perDecisionProviderCalls=6; perDecisionTokens=30000; perIncidentDecisions=3;
+        maximumProviderCalls=36; maximumDecisionTokens=180000; providerRetries=0; notificationEnabled=$false; startedAt=[DateTime]::UtcNow.ToString('o') }
     $owned=$true
     $null=Invoke-Owned -Executable $docker -Arguments @('--context',$DockerContext,'compose','-f',$fixture,'-p',$project,'up','-d','--wait','--wait-timeout','60') -Name 'setup' -TimeoutSeconds 120
     $null=Assert-Business $ordersPort
-    $null=Invoke-Package -Arguments @('register','orders','--compose',$fixture,'--context',$DockerContext,'--project',$project,'--service','orders','--dependencies','catalog','--stateless',
-        '--health',"http://127.0.0.1:$ordersPort/health",'--business',"http://127.0.0.1:$ordersPort/orders",'--marker','accepted','--interval','2') -Name 'register'
+    $null=Invoke-Package -Arguments @('register','orders','--compose',$fixture,'--context',$DockerContext,'--project',$project,'--service',$service,'--dependencies',$dependencyService,'--stateless',
+        '--health',"http://127.0.0.1:$ordersPort/health",'--business',"http://127.0.0.1:$ordersPort$businessPath",'--marker','accepted','--interval','2') -Name 'register'
     $null=Invoke-Package -Arguments @('check','orders') -Name 'config-check'
     $registration=Read-SharedJson (Join-Path $stateRoot 'orders/registration.json')
     if ($registration.policy.mode -ne 'ASK' -or $null -ne $registration.review) { throw "Registration did not default to ASK" }
 
     $null=Invoke-Package -Arguments @('policy','orders','limited-auto','--actions','start,restart','--minutes','30','--confirm-reviewed','--review-note','Disposable package fixture target and reviewed action scope confirmed') -Name 'qualified-policy'
     Inject-Fault $ordersPort
-    $null=Invoke-Package -Arguments @('run','orders','--once','--model',$Model) -Name 'automatic-run' -TimeoutSeconds 180
-    $auto=Read-Snapshot
-    if ($auto.current.state -ne 'RECOVERED') { throw "Automatic package path did not recover" }
+    $controlProcess=Start-OwnedProcess -Executable $java -Arguments @('-Dfile.encoding=UTF-8','-jar',$jar,'autonomy','run','orders','--state-dir',$stateRoot,'--model',$Model)
+    $auto=Wait-Incident 'RECOVERED'
+    $null=Invoke-Package -Arguments @('stop','orders') -Name 'automatic-stop'
+    $null=Finish-OwnedProcess $controlProcess 'automatic-controller' 30
+    $controlProcess.Process.Dispose()
+    $controlProcess=$null
     $automaticEvidence=Repair-Evidence $auto 'POLICY'
     $null=Assert-Business $ordersPort
     Write-Json 'automatic-oracle.json' @{ recovered=$true; businessExactMatch=$true; evidence=$automaticEvidence }
@@ -197,7 +214,7 @@ try {
         $controlProcess.Process.Dispose()
     }
     if ($owned) {
-        if ($project -notmatch '^clawkit-autonomy-package-[a-f0-9]{12}$' -or $fixture -ne [System.IO.Path]::GetFullPath((Join-Path $packageRoot 'ops-fixtures/layered-autonomy/compose.yaml'))) { throw "Cleanup ownership check failed" }
+        if ($project -notmatch '^clawkit-autonomy-package-[a-f0-9]{12}$' -or $fixture -ne [System.IO.Path]::GetFullPath((Join-Path $packageRoot $fixtureRelative))) { throw "Cleanup ownership check failed" }
         $null=Invoke-Owned -Executable $docker -Arguments @('--context',$DockerContext,'compose','-f',$fixture,'-p',$project,'down','--remove-orphans') -Name 'cleanup' -TimeoutSeconds 30
         $remaining=Invoke-Owned -Executable $docker -Arguments @('--context',$DockerContext,'ps','-a','--filter',"label=com.docker.compose.project=$project",'--format','{{.ID}}') -Name 'ownership-after-cleanup'
         if (-not [string]::IsNullOrWhiteSpace($remaining.stdout)) { throw "Owned project has residual containers" }

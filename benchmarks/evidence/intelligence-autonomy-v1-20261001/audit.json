@@ -1,0 +1,302 @@
+{
+  "actualTokens": 765453,
+  "sharedParameters": [
+    "{\"temperature\":0.0,\"maxTokens\":4096,\"stream\":false,\"reasoningMode\":\"DISABLED\"}"
+  ],
+  "auditAt": "2026-10-01T06:26:12.9618019Z",
+  "auditPassed": true,
+  "apiCost": null,
+  "instances": 40,
+  "unavailableUsage": 2,
+  "actualModels": [
+    "deepseek-flash"
+  ],
+  "providerRequests": 112,
+  "relationPairs": 6,
+  "sharedToolSets": 1,
+  "failedRelationPairs": 0,
+  "dispatches": 2,
+  "sourceFiles": 2222,
+  "detail": [
+    {
+      "actualTokens": 27636,
+      "id": "dependency-no_knowledge-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 4
+    },
+    {
+      "actualTokens": 28520,
+      "id": "service-exit-generic_agent-1",
+      "actions": 0,
+      "result": "FAIL",
+      "requests": 4
+    },
+    {
+      "actualTokens": 27272,
+      "id": "historical-clawkit-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 4
+    },
+    {
+      "actualTokens": 26783,
+      "id": "oom-clawkit-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 4
+    },
+    {
+      "actualTokens": 27243,
+      "id": "configuration-clawkit-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 4
+    },
+    {
+      "actualTokens": 0,
+      "id": "application-strong_rules-1",
+      "actions": 1,
+      "result": "PASS",
+      "requests": 0
+    },
+    {
+      "actualTokens": 4146,
+      "id": "truncated-generic_agent-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 2
+    },
+    {
+      "actualTokens": 28080,
+      "id": "historical-generic_agent-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 4
+    },
+    {
+      "actualTokens": 0,
+      "id": "conflict-strong_rules-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 0
+    },
+    {
+      "actualTokens": 28826,
+      "id": "missing-generic_agent-1",
+      "actions": 0,
+      "result": "FAIL",
+      "requests": 4
+    },
+    {
+      "actualTokens": 0,
+      "id": "truncated-strong_rules-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 0
+    },
+    {
+      "actualTokens": 20860,
+      "id": "stale-clawkit-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 3
+    },
+    {
+      "actualTokens": 22510,
+      "id": "stale-generic_agent-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 3
+    },
+    {
+      "actualTokens": 20948,
+      "id": "stale-no_knowledge-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 3
+    },
+    {
+      "actualTokens": 0,
+      "id": "dependency-strong_rules-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 0
+    },
+    {
+      "actualTokens": 27762,
+      "id": "oom-generic_agent-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 4
+    },
+    {
+      "actualTokens": 0,
+      "id": "service-exit-strong_rules-1",
+      "actions": 1,
+      "result": "PASS",
+      "requests": 0
+    },
+    {
+      "actualTokens": 30084,
+      "id": "conflict-generic_agent-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 4
+    },
+    {
+      "actualTokens": 27500,
+      "id": "truncated-clawkit-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 4
+    },
+    {
+      "actualTokens": 27868,
+      "id": "application-clawkit-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 4
+    },
+    {
+      "actualTokens": 26951,
+      "id": "dependency-clawkit-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 4
+    },
+    {
+      "actualTokens": 27499,
+      "id": "historical-no_knowledge-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 4
+    },
+    {
+      "actualTokens": 0,
+      "id": "configuration-strong_rules-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 0
+    },
+    {
+      "actualTokens": 0,
+      "id": "stale-strong_rules-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 0
+    },
+    {
+      "actualTokens": 29450,
+      "id": "application-no_knowledge-1",
+      "actions": 0,
+      "result": "FAIL",
+      "requests": 4
+    },
+    {
+      "actualTokens": 29510,
+      "id": "truncated-no_knowledge-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 4
+    },
+    {
+      "actualTokens": 0,
+      "id": "oom-strong_rules-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 0
+    },
+    {
+      "actualTokens": 0,
+      "id": "service-exit-no_knowledge-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 1
+    },
+    {
+      "actualTokens": 28463,
+      "id": "conflict-clawkit-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 4
+    },
+    {
+      "actualTokens": 27798,
+      "id": "application-generic_agent-1",
+      "actions": 0,
+      "result": "FAIL",
+      "requests": 4
+    },
+    {
+      "actualTokens": 28074,
+      "id": "oom-no_knowledge-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 4
+    },
+    {
+      "actualTokens": 27318,
+      "id": "missing-no_knowledge-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 4
+    },
+    {
+      "actualTokens": 28462,
+      "id": "dependency-generic_agent-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 4
+    },
+    {
+      "actualTokens": 25274,
+      "id": "missing-clawkit-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 4
+    },
+    {
+      "actualTokens": 29487,
+      "id": "conflict-no_knowledge-1",
+      "actions": 0,
+      "result": "FAIL",
+      "requests": 4
+    },
+    {
+      "actualTokens": 0,
+      "id": "missing-strong_rules-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 0
+    },
+    {
+      "actualTokens": 28956,
+      "id": "configuration-no_knowledge-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 4
+    },
+    {
+      "actualTokens": 24421,
+      "id": "service-exit-clawkit-1",
+      "actions": 0,
+      "result": "MODEL_OR_PROTOCOL_FAILURE",
+      "requests": 4
+    },
+    {
+      "actualTokens": 0,
+      "id": "historical-strong_rules-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 0
+    },
+    {
+      "actualTokens": 27752,
+      "id": "configuration-generic_agent-1",
+      "actions": 0,
+      "result": "PASS",
+      "requests": 4
+    }
+  ]
+}

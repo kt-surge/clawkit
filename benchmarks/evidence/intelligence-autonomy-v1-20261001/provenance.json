@@ -1,0 +1,44 @@
+{
+  "experimentDate": "2026-10-01",
+  "gitHeadAtRun": "86d0b9504f9ababf30792f27722e6fe6366e7d77",
+  "sourceFingerprint": "64df2ec29302387d2731efb4d415b3dcaa6f1f2480ce6a2dfa90f8ea92edd04a",
+  "scenarioSpecSha256": "d1b9d58e359dcce48fb9db67176cb6cb21eed66cfd772e2f47f3d92e7d140a3a",
+  "sourceInputArchiveSha256": "10c01b9fe46ce24fd3dbb55d190fef2f7be28d9cc9bb9fe86a6e2d6a61ad66d3",
+  "sourceInputEntries": 2222,
+  "requestedModel": "deepseek-v4-flash",
+  "returnedModels": [
+    "deepseek-flash"
+  ],
+  "modelSettings": {
+    "maxOutputTokens": 4096,
+    "reasoningMode": "DISABLED"
+  },
+  "java": "21.0.4",
+  "dockerServer": "29.2.1",
+  "rawCapturesPublished": false,
+  "rawCapturesRetainedLocally": true,
+  "originalFilesSha256": {
+    "report.md": "fa4a2856fd7d5b44a0a6ed24cf52cd3f9e831f9a5e0ee4b6dfa277352033c8ee",
+    "summary.json": "a0ab4cc86fca24e7b9f3f6850170510bbab5fc81b0dc29c4877c7a065a509856",
+    "instances.jsonl": "460fb1728fad57f30ed0f86ff97b1c74038319fea9ec6a92380ce38907cbee01",
+    "frozen-plan.json": "66a103e96e0087836d62b63bf98fd224161454fc373d74acbae4870736f0bbcd",
+    "audit.json": "0805cb44664b418129f8b218f3ad51ab2608269d20f6c0ce236a0d85a663deb8",
+    "relations.json": "8b208fc45b54aa102cb80b5b0809e31da3209def737e20a05906c5f9f788acd5",
+    "image-provenance.json": "0aa5a7e9df74a1f53aad0ba84b307b0fa8bd91f39578861d7115f5ca6eb9c344",
+    "source-integrity.json": "caa982957750bc79e7040e8bd4ad91f1fa8a6aa5e28d48e801291fb66d5ab7f8",
+    "cleanup-audit.json": "d9953279c2e2927ccd2c886b3215500035378c7d3c619c7a0cd2c536d6f1fe2c"
+  },
+  "publishedFilesSha256": {
+    "report.md": "fa4a2856fd7d5b44a0a6ed24cf52cd3f9e831f9a5e0ee4b6dfa277352033c8ee",
+    "summary.json": "4ae2201360b5656642a914793b63672ab2384ea4f946515f90ff31184a3c7b9b",
+    "instances.jsonl": "460fb1728fad57f30ed0f86ff97b1c74038319fea9ec6a92380ce38907cbee01",
+    "frozen-plan.json": "2d93316931b67d70961648d4904810faa39fd50adf3350acb3c5631a3616072e",
+    "audit.json": "6d44dfd9921accbd2aefe087a625c85dd7244875ea83c512dc9794f7020af6f3",
+    "relations.json": "8067c68dae4fcc7a97337ea360dbfbbde94ca490351f1077be3a7a0e7c95c517",
+    "image-provenance.json": "555ed34a179ffd28dbf647762d8579d8b24711b7d3f1d9ded778557d0a5e4013",
+    "source-integrity.json": "45f920b4c9c7b7cba279b35c8c025bc4af4e6e3a395a9ce2eedb3d4c0af0df75",
+    "cleanup-audit.json": "fd4c0bdce8351debd1eeae9f5c4b086c73b933a60f0d896161725b9e292d599f"
+  },
+  "publicationTransform": "CRLF converted to LF only; original reports and counts unchanged",
+  "knowledgeReviewKind": "BENCHMARK_FIXTURE_REPLAY_AND_CONTROLLED_REVIEW_NOT_REAL_HUMAN_REVIEW"
+}
