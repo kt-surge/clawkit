@@ -64,7 +64,9 @@ mvn -B -ntp -pl clawkit-evaluation -am -Pautonomy-evaluation verify `
 
 ## 新一轮：多源诊断与知识消融
 
-协议为 `benchmarks/intelligence-autonomy-v1.json`，夹具为 `ops-fixtures/intelligence-autonomy`。冻结前完成开发冒烟，正式运行拒绝复用输出目录；旧 P4 保持原样。10 个场景、四组、每组每场景一次，共 40 个实例。订单/库存依赖、配置 v4/v3 和 96 MiB/384 MiB OOM 为新配置组合；故障家族与开发样本相同，不能据此宣称跨故障模板泛化。
+当前协议为 `benchmarks/intelligence-autonomy-v2.json`，夹具为 `ops-fixtures/intelligence-autonomy`。冻结前完成开发冒烟，正式运行拒绝复用输出目录；旧 P4 与 v1 保持原样。10 个场景、四组、每组每场景一次，共 40 个实例。订单/库存依赖、配置 v4/v3 和 96 MiB/384 MiB OOM 为新配置组合；故障家族与开发样本相同，不能据此宣称跨故障模板泛化。
+
+v1 完成全部 40 实例并通过原始用量、权限、外部业务与源码审计；CLAWKIT 组 10 次均为模型或协议失败。调查确认其指导错误地要求在同一响应提交诊断和终止决定，而 Runtime 要求终止工具独占批次。v2 修正指导为先提交诊断，接受后另轮独立提交决定；保留 Runtime 门禁、场景、模型和预算。v2 是同场景的协议修复复验，不是新增留出集；v1 原始报告和失败成本均不改写。
 
 四组为 CLAWKIT（多源诊断与知识）、强规则、普通 Agent、CLAWKIT 无知识。模型组共享初始发现、全部采证/检索工具合同、模型设置、120 秒/6 请求/12 工具/30000 Token 和执行权限。普通 Agent 使用通用指导；无知识组只移除知识内容，保留 CLAWKIT 指导。强规则读取全部来源并优先检查反证，不隐藏日志、变更、资源或缺失情况。按需采证次数可能不同，完整工具轨迹保留。所有组使用同一产品授权、现场复查与独立业务验证；比较不是不受约束的 Agent。
 
@@ -77,10 +79,11 @@ $env:CLAWKIT_INTELLIGENCE_EVALUATION='true'
 mvn -B -ntp -pl clawkit-evaluation -am -Pintelligence-evaluation verify `
   '-Dintelligence.repo=D:/Agent/miniclaw' `
   '-Dintelligence.mode=frozen' `
+  '-Dintelligence.spec=intelligence-autonomy-v2.json' `
   '-Dintelligence.model=deepseek-v4-flash' `
   '-Dintelligence.output=D:/Agent/miniclaw/tmp/intelligence-frozen-new'
 ```
 
-正式全局上限 180 请求、900000 Token，开始前预留完整单任务预算，额度不足保留 NOT_RUN。`smoke` 模式只选应用异常/依赖异常两类，共八实例，模型最多 36 请求/180000 Token。异常来源是覆盖真实容器的受控观测，配置错误为夹具模拟，OOM 为实际 cgroup 杀进程，逐实例标明。
+正式全局上限 180 请求、900000 Token，开始前预留完整单任务预算，额度不足保留 NOT_RUN。`smoke` 模式只选应用异常/依赖异常两类，共八实例，模型最多 36 请求/180000 Token。`protocol-smoke` 仅选 CLAWKIT 的一项 OOM 交接，最多 6 请求/30000 Token，用于检查终止提交协议；它不进入正式分数。异常来源是覆盖真实容器的受控观测，配置错误为夹具模拟，OOM 为实际 cgroup 杀进程，逐实例标明。
 
 事件关联另用六个事前标记的事件对验证固定拓扑与时间窗，保留一个直接依赖正例和五个独立/跨环境/超窗负例；来源与其他目标绑定是受控数据，不能作为真实 Alertmanager 或共同根因推断的准确率。`relations.json` 与模型结果分开。三次精确健康/业务 JSON 外部检查、动作 journal、全部失败原始交换、源码哈希和清理回执持续留存。

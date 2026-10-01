@@ -70,6 +70,7 @@ $benchmarkDir=Join-Path $winDir 'benchmarks'
 New-Item -ItemType Directory -Force $benchmarkDir | Out-Null
 Copy-Item (Join-Path $repoRoot 'benchmarks/layered-autonomy-v1.json') $benchmarkDir
 Copy-Item (Join-Path $repoRoot 'benchmarks/intelligence-autonomy-v1.json') $benchmarkDir
+Copy-Item (Join-Path $repoRoot 'benchmarks/intelligence-autonomy-v2.json') $benchmarkDir
 Copy-Item (Join-Path $repoRoot 'benchmarks/evidence') $benchmarkDir -Recurse
 $examplesDir=Join-Path $winDir 'examples/autonomy'
 New-Item -ItemType Directory -Force $examplesDir | Out-Null
