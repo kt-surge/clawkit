@@ -219,12 +219,12 @@ public final class ManagedIncidentController implements AutoCloseable {
     }
     public record ProviderUsage(Instant startedAt,Instant completedAt,com.clawkit.provider.TokenUsage usage,String failureType) {}
     public record DecisionRecord(OpsDecisionAgent.Origin origin,OpsDecision decision,List<DecisionEvidence> evidence,
-            List<String> rejectedSubmissions,List<ProviderUsage> providerUsage,String failureType,DiagnosticReport diagnosis,List<OpsKnowledge.Reference> knowledgeReferences) {
-        public DecisionRecord { knowledgeReferences=knowledgeReferences==null ? List.of() : List.copyOf(knowledgeReferences); }
+            List<String> rejectedSubmissions,List<ProviderUsage> providerUsage,String failureType,DiagnosticReport diagnosis,List<OpsKnowledge.Reference> knowledgeReferences,List<String> triggerReferences) {
+        public DecisionRecord { knowledgeReferences=knowledgeReferences==null ? List.of() : List.copyOf(knowledgeReferences); triggerReferences=triggerReferences==null ? List.of() : List.copyOf(triggerReferences); }
         static DecisionRecord from(OpsDecisionAgent.Outcome outcome) {
             return new DecisionRecord(outcome.origin(),outcome.decision(),outcome.evidence(),outcome.rejectedSubmissions(),
                 outcome.providerExchanges().stream().map(e -> new ProviderUsage(e.startedAt(),e.completedAt(),
-                    e.usage(),e.failureType())).toList(),outcome.failureType(),outcome.diagnosis(),outcome.knowledgeReferences());
+                    e.usage(),e.failureType())).toList(),outcome.failureType(),outcome.diagnosis(),outcome.knowledgeReferences(),outcome.triggerReferences());
         }
     }
 

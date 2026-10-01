@@ -17,6 +17,7 @@ import picocli.CommandLine.Model.CommandSpec;
     "登记和管理隔离 Linux Compose 服务的分层自治闭环。",
     "操作：register, policy, check, diagnose, diagnosis, change-import, metrics, run, status, events, approve, reject, command-result, handoff, notifications, pause, resume, stop。",
     "知识：postmortem, cases, case-review, case-revoke, knowledge-import, knowledge-list, knowledge-search, knowledge-replay, knowledge-review, knowledge-revoke。",
+    "告警：alert-bind, alert-disable, alert-import, alert-listen, alerts, relations, relation-revoke。",
     "登记默认需审批；policy limited-auto 需要 --confirm-reviewed 和 --review-note。"})
 public final class AutonomyCommand implements Callable<Integer> {
     @Spec CommandSpec spec;
@@ -47,6 +48,7 @@ public final class AutonomyCommand implements Callable<Integer> {
     @Option(names="--query",description="知识检索症状（最多 200 字符）") String query;
     @Option(names="--replay-id",description="本地已保存、通过正反例回放的记录 ID") String replayId;
     @Option(names="--cause",description="人工确认的案例根因类别") DiagnosticReport.Cause confirmedCause;
+    @Option(names="--port",defaultValue="8778",description="Alertmanager 本机接收端口，0 可选择空闲端口") int alertPort;
     @Option(names="--model",description="运行所用模型") String model;
     @Option(names="--base-url",description="模型 API endpoint") String baseUrl;
     @Option(names="--protocol",description="模型协议") String protocol;
@@ -141,6 +143,26 @@ public final class AutonomyCommand implements Callable<Integer> {
                     service.knowledge(applicationId).reviewCase(argument,confirmedCause,operation.equals("case-revoke"),operator(),reviewNote);
                     out.println(operation.equals("case-revoke") ? "案例已撤销；引用该案例的流程不再生效。" : "案例人工审阅已记录；未增加动作权限。");
                 }
+                case "alert-bind" -> { service.bindAlerts(applicationId,System.getenv("CLAWKIT_ALERT_TOKEN")); out.println("已绑定登记中的环境/服务/容器身份；使用 alert-listen 启动本机接收。"); }
+                case "alert-disable" -> { service.disableAlerts(); out.println("告警来源已关闭；历史消息与关联保留。"); }
+                case "alert-import" -> { require(input,"--input（Alertmanager webhook v4 JSON）"); var result=service.importAlerts(input);
+                    out.println("新增 "+result.added()+"，重复投递 "+result.duplicates()+"，待复核 "+result.pendingReview()+"；接收不代表已调查或恢复。"); }
+                case "alert-listen" -> {
+                    try(var receiver=service.listenAlerts(alertPort)) {
+                        out.println("本机告警接收："+receiver.endpoint()+"；需 Bearer 凭据。另一终端运行已登记应用的 run 消费；Ctrl+C 停止接收。"); out.flush();
+                        while(!Thread.currentThread().isInterrupted()) Thread.sleep(500);
+                    }
+                }
+                case "alerts" -> {
+                    for(var e:service.triggers().snapshot().entries()) out.println(e.trigger().eventId()+"  "+e.state()+"  应用="
+                        +(e.trigger().applicationId()==null ? "待确认" : e.trigger().applicationId())+"  投递="+e.deliveries()+"  事件="+e.incidentId()
+                        +(details ? "  "+e.detail()+"  "+e.trigger().summary() : ""));
+                }
+                case "relations" -> {
+                    for(var r:service.triggers().snapshot().relations()) out.println(r.id()+"  "+r.state()+"  "+r.leftIncidentId()+" ↔ "+r.rightIncidentId()+"  "+r.reason());
+                    out.println("关联只说明登记依赖与时间接近；各应用权限、审批及执行状态独立。");
+                }
+                case "relation-revoke" -> { require(argument,"关联 ID"); require(reviewNote,"--review-note"); service.triggers().revokeRelation(argument,reviewNote); out.println("关联已撤销并保留理由。"); }
                 case "status", "handoff" -> render(service.status(applicationId),out,details);
                 case "events" -> { for (var event:service.events(applicationId,limit)) render(event,out,details); }
                 case "notifications" -> {

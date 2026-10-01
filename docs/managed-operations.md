@@ -150,6 +150,37 @@ docker --context desktop-linux compose -f .\ops-fixtures\layered-autonomy\compos
 
 有/无知识的受控运行时对照仅验证相同工具、模型参数、预算和记录合同；实际诊断收益留待新版本冻结评测，不从这些门禁测试推算成功率。
 
+### 可选 Alertmanager 告警接入与关联
+
+接入默认关闭。先登记应用，再用环境变量提供 32..256 字符的独立接入凭据，并绑定这个应用。凭据只保存哈希，不放进命令参数或告警正文。多个应用可逐一绑定；每次绑定或关闭来源都会更新配置版本，旧版本尚未消费的消息进入待核对状态。
+
+```powershell
+# 在启动接收器的终端中设置；不要使用模型或飞书密钥
+$env:CLAWKIT_ALERT_TOKEN=[guid]::NewGuid().ToString('N')+[guid]::NewGuid().ToString('N')
+.\clawkit.cmd autonomy alert-bind orders --state-dir .\demo-state
+.\clawkit.cmd autonomy alert-listen orders --state-dir .\demo-state --port 8778
+```
+
+接收器前台运行，仅监听 `127.0.0.1` 的 `POST /alertmanager`。Alertmanager 的同机进程使用相同凭据发送 Bearer 请求；配置片段见 [接收器示例](../examples/autonomy/alertmanager.yaml)。告警标签必须包含与登记完全一致的 `clawkit_environment` 和 `clawkit_service`。未知目标、截断内容和异常时间进入待核对，不根据告警里的应用 ID、URL 或命令创建目标。
+
+另一个终端启动既有控制会话。接收器只入库；当前服务仍需现场采证，由同一授权与执行链决定调查、审批或有限自主处理。应用暂停/停止时消息保留，不开始新处置。
+
+```powershell
+.\clawkit.cmd autonomy run orders --state-dir .\demo-state
+.\clawkit.cmd autonomy alerts orders --state-dir .\demo-state --details
+.\clawkit.cmd autonomy relations orders --state-dir .\demo-state
+.\clawkit.cmd autonomy relation-revoke orders <关系ID> --state-dir .\demo-state --review-note '独立调查不支持此关系'
+.\clawkit.cmd autonomy alert-disable orders --state-dir .\demo-state
+# 也可由本地用户导入同一 webhook v4 格式文件
+.\clawkit.cmd autonomy alert-import orders --state-dir .\demo-state --input .\alert.json
+```
+
+`alerts` 和 `relations` 展示整个控制工作区的来源记录。相同来源、指纹、开始时间和状态构成重复投递，保留投递次数；恢复先到时，迟到的同次 firing 不会重新打开。来源 resolved 仅表示上游通知恢复，不关闭内部事件、不作为业务恢复证据。诊断记录保留读到的来源事件 ID；重复消息沿用已有事件，不重复调用模型或派发动作。
+
+关联与去重分别记录：两个独立事件只有在相同环境/daemon、已登记且身份一致的直接依赖关系、开始时间相距不超过两分钟时，才生成可撤销关系。通知分组 `groupKey` 不证明共同根因。每个应用保持自己的事件、授权和审批；关联不能代替任何一个应用的许可。停止接入不停止已开始的控制会话。
+
+首版每批最多 32 条、正文 64 KiB、消息回溯 24 小时；来源存储最多 256 条事件、256 条关系和 2 MiB 快照，达到上限即拒绝新写入并留待人工处理。默认不归档原始告警正文，只保留脱敏字段与正文哈希。当前验证覆盖本机 HTTP、重复/乱序/伪造目标、跨环境关联与持续入口；尚未部署真实 Alertmanager 验证，飞书卡片和真实送达另行验收。
+
 ## 5. 在夹具中注入故障
 
 仅对上面本次创建的试用夹具使用以下入口。该入口不属于 Agent 工具，也不用于实际应用。

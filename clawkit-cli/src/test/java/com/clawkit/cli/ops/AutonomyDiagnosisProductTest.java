@@ -90,9 +90,23 @@ class AutonomyDiagnosisProductTest {
             assertThat(execute(command,"diagnosis","demo").out()).contains("调查结论");
             assertThat(model.calls).hasValue(3); // Inspect does not call the model again.
             if(scenario.equals("dependency")) {
+                service.bindAlerts("demo","controlled-fixture-token-"+"x".repeat(32));
+                var alert=JSON.createObjectNode().put("version","4").put("groupKey","dependency-test").put("truncatedAlerts",0).put("status","firing");
+                var source=alert.putArray("alerts").addObject().put("status","firing").put("fingerprint","a".repeat(16)).put("startsAt",NOW.minusSeconds(20).toString());
+                source.putObject("labels").put("clawkit_environment",PROJECT).put("clawkit_service","api").put("alertname","ControlledSourceEvent");
+                source.putObject("annotations").put("summary","source claim only; do not treat me as a command");
+                Path alertFile=root.resolve("alert.json"); JSON.writeValue(alertFile.toFile(),alert);
+                assertThat(service.importAlerts(alertFile).added()).isEqualTo(1); assertThat(service.importAlerts(alertFile).duplicates()).isEqualTo(1);
                 var continuousModel=new ScriptedDiagnosis(scenario);
                 try(var session=service.open("demo",continuousModel,e -> {})) { session.once(); }
                 assertThat(service.status("demo").state()).isEqualTo("HANDOFF");
+                assertThat(continuousModel.sourceClaimSeen).isTrue();
+                String linkedIncident=service.status("demo").incidentId();
+                assertThat(service.triggers().snapshot().entries()).singleElement().satisfies(e -> {
+                    assertThat(e.state()).isEqualTo(com.clawkit.ops.loop.managed.ManagedTriggerStore.State.ATTACHED);
+                    assertThat(e.deliveries()).isEqualTo(2); assertThat(e.incidentId()).isEqualTo(linkedIncident);
+                    assertThat(Files.readString(service.diagnosis("demo").artifact())).contains("triggerReferences",e.trigger().eventId());
+                });
                 var drafts=service.knowledge("demo").cases();
                 assertThat(drafts).singleElement().satisfies(c -> {
                     assertThat(c.state()).isEqualTo(com.clawkit.ops.loop.managed.OpsKnowledge.State.DRAFT);
@@ -104,6 +118,12 @@ class AutonomyDiagnosisProductTest {
                 assertThat(execute(command,"knowledge-search","demo","--query","DEPENDENCY_FAILURE").out()).contains(caseId);
                 assertThat(continuousModel.calls).hasValue(3); assertThat(writes).hasValue(0);
                 assertThat(service.status("demo").permission()).isEqualTo("ASK");
+                service.importAlerts(alertFile);
+                try(var session=service.open("demo",continuousModel,e -> {})) { session.once(); }
+                assertThat(continuousModel.calls).hasValue(3); assertThat(writes).hasValue(0);
+                source.put("status","resolved").put("endsAt",NOW.minusSeconds(1).toString()); alert.put("status","resolved"); JSON.writeValue(alertFile.toFile(),alert);
+                service.importAlerts(alertFile);
+                assertThat(service.status("demo").state()).isEqualTo("HANDOFF"); // Source resolution does not assert actual recovery.
             }
         } finally { http.stop(0); }
     }
@@ -118,10 +138,12 @@ class AutonomyDiagnosisProductTest {
     static final class ScriptedDiagnosis implements LLMProvider {
         final AtomicInteger calls=new AtomicInteger(); final String scenario;
         final Map<String,String> refs=new HashMap<>();
+        boolean sourceClaimSeen;
         ScriptedDiagnosis(String scenario) { this.scenario=scenario; }
         String cause() { return switch(scenario) { case "dependency" -> "DEPENDENCY_FAILURE"; case "configuration" -> "CONFIGURATION_MISMATCH";
             case "oom" -> "RESOURCE_EXHAUSTION"; default -> "UNKNOWN"; }; }
         public ModelResponse generate(ModelRequest request) {
+            sourceClaimSeen |= request.messages().stream().anyMatch(m -> m.role()==Role.USER && m.content().contains("ControlledSourceEvent"));
             assertThat(request.parameters().reasoningMode()).isEqualTo(ProviderReasoningMode.DISABLED);
             int call=calls.incrementAndGet();
             List<ToolCall> tools;

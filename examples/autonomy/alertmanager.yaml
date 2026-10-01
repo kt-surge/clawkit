@@ -1,0 +1,19 @@
+# Merge into an existing, same-host Alertmanager configuration.
+# The credentials file contains the same separate token used by alert-bind.
+# Alert labels must match a registered application's environment and service.
+route:
+  receiver: clawkit-local
+  group_by: [clawkit_environment, clawkit_service, alertname]
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 5m
+receivers:
+  - name: clawkit-local
+    webhook_configs:
+      - url: http://127.0.0.1:8778/alertmanager
+        send_resolved: true
+        max_alerts: 32
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /path/to/clawkit-alert-token

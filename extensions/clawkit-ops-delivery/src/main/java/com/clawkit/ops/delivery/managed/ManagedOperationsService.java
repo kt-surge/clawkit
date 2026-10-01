@@ -43,13 +43,22 @@ public final class ManagedOperationsService {
     private final ManagedRegistrationStore registrations;
     private final CommandExecutor commands;
     private final Clock clock;
+    private final Path stateRoot;
     public ManagedOperationsService(Path stateRoot,CommandExecutor commands,Clock clock) throws IOException {
-        registrations=new ManagedRegistrationStore(stateRoot,clock); this.commands=Objects.requireNonNull(commands); this.clock=clock;
+        this.stateRoot=stateRoot.toAbsolutePath().normalize(); registrations=new ManagedRegistrationStore(stateRoot,clock); this.commands=Objects.requireNonNull(commands); this.clock=clock;
     }
     public static ManagedOperationsService local(Path stateRoot) throws IOException {
         return new ManagedOperationsService(stateRoot,new ProcessCommandExecutor(),Clock.systemUTC());
     }
     public List<String> applications() throws IOException { return registrations.applications(); }
+    public ManagedTriggerStore triggers() throws IOException { return new ManagedTriggerStore(stateRoot.resolve("external-alerts"),clock); }
+    public void bindAlerts(String id,String token) throws Exception { triggers().bind(registrations.read(id),token); }
+    public void disableAlerts() throws Exception { triggers().disable(); }
+    public ManagedTriggerStore.IngestResult importAlerts(Path input) throws Exception {
+        byte[] bytes; try(var stream=Files.newInputStream(input)) { bytes=stream.readNBytes(65537); }
+        return new AlertmanagerInput(triggers(),clock).accept(bytes);
+    }
+    public AlertmanagerReceiver listenAlerts(int port) throws Exception { return new AlertmanagerReceiver(triggers(),clock,port); }
     public ManagedKnowledgeStore knowledge(String id) throws IOException {
         registrations.read(id); return new ManagedKnowledgeStore(registrations.directory(id).resolve("knowledge"),clock);
     }
@@ -216,6 +225,7 @@ public final class ManagedOperationsService {
     }
     public final class RunningSession implements AutoCloseable {
         private final String id;
+        private final IsolatedComposeClient.Target pinnedTarget;
         private final FileRunRecorder recorder;
         private final ComposeManagedAdapter adapter;
         private final ManagedRepairExecutor executor;
@@ -230,7 +240,7 @@ public final class ManagedOperationsService {
         private volatile String failure;
         private volatile ManagedIncidentStore.Mode appliedMode;
         private RunningSession(String id,ManagedRegistrationStore.Registration config,LLMProvider provider,Consumer<EventView> sink,NotificationConfiguration notifications) throws Exception {
-            this.id=id; var target=config.target(); Path directory=registrations.directory(id); queue=inbox(id);
+            this.id=id; var target=config.target(); pinnedTarget=target; Path directory=registrations.directory(id); queue=inbox(id);
             recorder=new FileRunRecorder(directory);
             adapter=observer(id,target);
             var verifier=new IndependentManagedVerifier(clock,IndependentManagedVerifier.Settings.defaults(),d -> Thread.sleep(d.toMillis()));
@@ -243,7 +253,17 @@ public final class ManagedOperationsService {
             try {
                 controller=new ManagedIncidentController(() -> current(id,target).application(),() -> current(id,target).policy(),
                     () -> observer(id,target),(app,observations,control,context) -> {
-                        var outcome=agent.decide(app,observations,control,context);
+                        var claims=new ArrayList<TriggerEnvelope>();
+                        try { var triggerStore=triggers(); var snapshot=triggerStore.snapshot(); var resolved=snapshot.entries().stream()
+                            .filter(e -> e.state()==ManagedTriggerStore.State.SOURCE_RESOLVED).map(e -> e.trigger().episodeId()).collect(java.util.stream.Collectors.toSet());
+                            for(var e:snapshot.entries()) {
+                            if(claims.size()>=8) break;
+                            if(id.equals(e.trigger().applicationId()) && Set.of(ManagedTriggerStore.State.QUEUED,ManagedTriggerStore.State.ATTACHED).contains(e.state())
+                                    && e.trigger().phase()==TriggerEnvelope.Phase.FIRING && !resolved.contains(e.trigger().episodeId())
+                                    && triggerStore.current(e.trigger(),current(id,target))) claims.add(e.trigger());
+                        } } catch(IOException e) { throw new UncheckedIOException(e); }
+                        var sourceContext=new OpsDecisionAgent.DecisionContext(context.incidentId(),context.decisionNumber(),context.previousDecision(),context.baseline(),claims);
+                        var outcome=agent.decide(app,observations,control,sourceContext);
                         try { diagnoses(id).save(app,outcome,clock.instant()); }
                         catch (Exception e) { org.slf4j.LoggerFactory.getLogger(ManagedOperationsService.class)
                             .warn("Diagnostic view projection unavailable: {}",e.getClass().getSimpleName()); }
@@ -274,6 +294,7 @@ public final class ManagedOperationsService {
         public void once() throws Exception {
             incidents(id).requestMode(ManagedIncidentStore.Mode.RUNNING,clock.instant());
             controller.tick();
+            consumeAlerts(false);
             if (notifier!=null) pollDelivery();
         }
         private void pollDelivery() {
@@ -284,10 +305,23 @@ public final class ManagedOperationsService {
             if (closed.get()) return;
             try {
                 var requested=incidents(id).requestedMode();
-                if (requested==appliedMode) return;
+                if (requested==appliedMode) { if(requested==ManagedIncidentStore.Mode.RUNNING) consumeAlerts(true); return; }
                 appliedMode=controller.synchronizeRequestedMode();
                 if (appliedMode==ManagedIncidentStore.Mode.STOPPED) stopRequested=true;
             } catch (Exception e) { failure="lifecycle unavailable: "+e.getClass().getSimpleName(); try { controller.pause(); } catch (Exception ignored) {} }
+        }
+        private void consumeAlerts(boolean observe) throws Exception {
+            var store=triggers(); var queued=store.queued(id); if(queued.isEmpty()) return;
+            if(incidents(id).requestedMode()!=ManagedIncidentStore.Mode.RUNNING) return;
+            boolean due=queued.stream().anyMatch(e -> { try { return store.current(e.trigger(),current(id,pinnedTarget)); }
+                catch(Exception ignored) { return false; } });
+            if(observe && due) controller.tick();
+            var incident=controller.status().current();
+            for(var entry:queued) {
+                var registered=registrations.read(id); boolean drift=!registered.target().equals(pinnedTarget) || !store.current(entry.trigger(),registered);
+                String incidentId=incident==null || incident.terminal() ? null : incident.id();
+                store.complete(entry.trigger().eventId(),drift ? null : incidentId,drift);
+            }
         }
         private void pollCommands() {
             if (closed.get()) return;
