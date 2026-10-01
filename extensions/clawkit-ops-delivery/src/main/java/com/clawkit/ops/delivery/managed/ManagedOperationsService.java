@@ -287,18 +287,27 @@ public final class ManagedOperationsService {
             this.id=id; var target=config; pinnedTarget=target; Path directory=registrations.directory(id); queue=inbox(id);
             recorder=new FileRunRecorder(directory);
             try { adapter=observer(id,target); }
-            catch(Exception e) { recorder.close(); lifecycle.shutdown(); humanCommands.shutdown(); delivery.shutdown(); throw e; }
-            ManagedFixAdapter fix=config.remote()==null ? (ComposeManagedAdapter)adapter : (app,playbook) ->
-                new ManagedFixAdapter.ExecutionReport(com.clawkit.tools.action.EffectCertainty.NOT_DISPATCHED,"remote observation source has no qualified repair contract");
-            var verifier=new IndependentManagedVerifier(clock,IndependentManagedVerifier.Settings.defaults(),d -> Thread.sleep(d.toMillis()));
-            executor=new ManagedRepairExecutor(directory.resolve("execution"),clock,recorder,verifier);
-            var agent=new OpsDecisionAgent(provider,directory.resolve("agent"),recorder,clock,OpsDecisionAgent.Limits.defaults(),
-                OpsDecisionAgent.Guidance.REVIEWED_PLAYBOOKS,OpsDecisionAgent.ModelSettings.multisourceDefaults(),OpsDecisionAgent.Profile.MULTISOURCE,knowledge(id));
-            notificationTransport=notifications==null ? null : new ManagedFeishuTransport(notifications.appId(),notifications.secret());
-            notifier=notifications==null ? null : new ManagedLifecycleNotifier(directory.resolve("notifications"),config.application(),
-                notifications.chatId(),notificationTransport,clock);
+            catch(Exception e) {
+                lifecycle.shutdown(); humanCommands.shutdown(); delivery.shutdown();
+                closeAfterFailure(e,recorder); throw e;
+            }
+            ManagedRepairExecutor openedExecutor=null;
+            ManagedFeishuTransport openedNotification=null;
+            JdkAutomationTaskScheduler openedScheduler=null;
+            ManagedIncidentController openedController=null;
             try {
-                controller=new ManagedIncidentController(() -> current(id,target).application(),() -> current(id,target).policy(),
+                ManagedFixAdapter fix=config.remote()==null ? (ComposeManagedAdapter)adapter : (app,playbook) ->
+                    new ManagedFixAdapter.ExecutionReport(com.clawkit.tools.action.EffectCertainty.NOT_DISPATCHED,"remote observation source has no qualified repair contract");
+                var verifier=new IndependentManagedVerifier(clock,IndependentManagedVerifier.Settings.defaults(),d -> Thread.sleep(d.toMillis()));
+                executor=openedExecutor=new ManagedRepairExecutor(directory.resolve("execution"),clock,recorder,verifier);
+                var knowledge=knowledge(id);
+                var agent=new OpsDecisionAgent(provider,directory.resolve("agent"),recorder,clock,OpsDecisionAgent.Limits.defaults(),
+                    OpsDecisionAgent.Guidance.REVIEWED_PLAYBOOKS,OpsDecisionAgent.ModelSettings.multisourceDefaults(),OpsDecisionAgent.Profile.MULTISOURCE,knowledge);
+                notificationTransport=openedNotification=notifications==null ? null : new ManagedFeishuTransport(notifications.appId(),notifications.secret());
+                notifier=notifications==null ? null : new ManagedLifecycleNotifier(directory.resolve("notifications"),config.application(),
+                    notifications.chatId(),notificationTransport,clock);
+                openedScheduler=new JdkAutomationTaskScheduler(1);
+                controller=openedController=new ManagedIncidentController(() -> current(id,target).application(),() -> current(id,target).policy(),
                     () -> observer(id,target),(app,observations,control,context) -> {
                         var claims=new ArrayList<TriggerEnvelope>();
                         try { var triggerStore=triggers(); var snapshot=triggerStore.snapshot(); var resolved=snapshot.entries().stream()
@@ -316,7 +325,7 @@ public final class ManagedOperationsService {
                             .warn("Diagnostic view projection unavailable: {}",e.getClass().getSimpleName()); }
                         return outcome; // Controller's decision artifact remains authoritative.
                     },fix,executor,verifier,
-                    incidents(id),new JdkAutomationTaskScheduler(1),ManagedIncidentController.Settings.defaults(),clock,event -> {
+                    incidents(id),openedScheduler,ManagedIncidentController.Settings.defaults(),clock,event -> {
                         if (notifier!=null) {
                             try { notifier.enqueue(event); } catch (IOException e) { throw new UncheckedIOException(e); }
                         }
@@ -327,9 +336,12 @@ public final class ManagedOperationsService {
                         }
                         if (!event.kind().equals("OBSERVATION_MERGED")) sink.accept(new EventView(event.id(),event.at(),event.kind(),event.state().name(),event.incidentId(),event.detail()));
                     });
-                controller.configureKnowledge(knowledge(id));
-            } catch (Exception e) { executor.close(); adapter.close(); recorder.close(); lifecycle.shutdown(); humanCommands.shutdown(); delivery.shutdown();
-                if (notificationTransport!=null) notificationTransport.close(); throw e; }
+                controller.configureKnowledge(knowledge);
+            } catch (Exception e) {
+                lifecycle.shutdown(); humanCommands.shutdown(); delivery.shutdown();
+                closeAfterFailure(e,openedController,openedScheduler,openedExecutor,adapter,recorder,openedNotification);
+                throw e;
+            }
         }
         public void start() throws Exception {
             if (!started.compareAndSet(false,true)) throw new IllegalStateException("control session already started");
@@ -387,6 +399,13 @@ public final class ManagedOperationsService {
             lifecycle.shutdown(); humanCommands.shutdown(); delivery.shutdown();
             try { controller.close(); }
             finally { try { executor.close(); } finally { adapter.close(); recorder.close(); if (notificationTransport!=null) notificationTransport.close(); } }
+        }
+    }
+    private static void closeAfterFailure(Exception failure,AutoCloseable... resources) {
+        for(var resource:resources) {
+            if(resource==null) continue;
+            try { resource.close(); }
+            catch(Exception closing) { if(closing!=failure) failure.addSuppressed(closing); }
         }
     }
     private static ScheduledExecutorService worker(String name) {

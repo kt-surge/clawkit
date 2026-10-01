@@ -373,4 +373,6 @@ R3 改动保持总量 30000 Token / 6 模型请求 / 12 工具和既有权限、
 
 R2 服务端新合同、完整目标证明与独立业务探测仍未实现部署；[审阅清单](../examples/autonomy/remote-order-api-repair-review.json)继续为草稿。当前交付不能写成远程自治修复、长期生产运行、业务 MTTR 改善或模型准确率提升。
 
-源码 `1426febb1592fbc77b5ba40a1cd8f3556db8c63a` 已推送；该提交的 [CI](https://github.com/kt-surge/clawkit/actions/runs/36887478219) 包含 clean verify、Runtime baseline compare 与 Docker smoke，和 [CodeQL](https://github.com/kt-surge/clawkit/actions/runs/36887477931) 均成功。本地最终 clean verify 为 14 reactor 项目、180 suites、1561 项（6 跳过），0 失败/错误。Windows ZIP 通过解压入口与文件哈希检查，build-manifest 绑定源码提交及 75 项文件；打包时无已跟踪文件改动。后续仅更新交付说明时，包按新提交重新生成并保留旧候选与已测 JAR 哈希。
+首轮接入源码 `1426febb1592fbc77b5ba40a1cd8f3556db8c63a` 已推送；该提交的 [CI](https://github.com/kt-surge/clawkit/actions/runs/36887478219) 包含 clean verify、Runtime baseline compare 与 Docker smoke，和 [CodeQL](https://github.com/kt-surge/clawkit/actions/runs/36887477931) 均成功。2026-10-01 本地 clean verify 为 14 reactor 项目、180 suites、1561 项（6 跳过），0 失败/错误。Windows ZIP 通过解压入口与文件哈希检查，build-manifest 绑定源码提交及 75 项文件；打包时无已跟踪文件改动。后续包按新提交重新生成并保留旧候选与已测 JAR 哈希。
+
+2026-10-02 追加初始化失败的资源清理：执行存储或后续初始化不可用时，关闭已经打开的远端观测连接、记录器和其他已创建资源；清理异常追加到原始异常，继续释放其余资源。产品回归先复现执行目录被文件占用时的连接泄漏，再验证修复后全部连接关闭、修正目录后可重新打开，零模型与本地 Docker 调用。本地完整 clean verify 为 14 reactor 项目、180 suites、1562 项（6 跳过），0 失败/错误。真机记录仍绑定各自授权周期的候选 JAR；此次生命周期修复不另行消费真实模型额度，后续安装包版本以其 build-manifest 为准。

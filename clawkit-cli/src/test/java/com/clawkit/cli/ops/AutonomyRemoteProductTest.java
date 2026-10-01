@@ -79,6 +79,26 @@ class AutonomyRemoteProductTest {
         assertThat(execute(command,"remote-register","orders","--target","remote-test","--environment","remote-fixture","--service","order-api","--container-id","d".repeat(12)).code()).isEqualTo(2);
         assertThat(service.applications()).isEmpty(); assertThat(dockerCalls).hasValue(0); assertThat(sessions).allMatch(s -> s.closed);
     }
+    @Test void unavailableExecutionStoreClosesRemoteConnectionsAndCanBeOpenedAfterCorrection() throws Exception {
+        var service=service(); var command=new AutonomyCommand(path -> service);
+        assertThat(execute(command,"remote-register","orders","--target","remote-test","--environment","remote-fixture","--service","order-api","--container-id",CONTAINER).code()).isZero();
+        var directory=new ManagedRegistrationStore(root.resolve("state"),Clock.fixed(NOW,ZoneOffset.UTC)).directory("orders");
+        var attempts=directory.resolve("execution/attempts");
+        Files.createDirectories(attempts.getParent());
+        Files.writeString(attempts,"blocked by a file");
+        var model=new AutonomyDiagnosisProductTest.ScriptedDiagnosis("truncated");
+        int connected=sessions.size();
+        assertThatThrownBy(() -> service.open("orders",model,event -> {}))
+            .isInstanceOf(com.clawkit.reliability.attempt.AttemptFailure.StoreUnavailableException.class)
+            .hasMessageContaining("cannot create store dir");
+        assertThat(sessions.subList(connected,sessions.size())).hasSize(2).allMatch(s -> s.closed);
+        Files.move(attempts,directory.resolve("blocked-attempt-store.txt"));
+        try(var session=service.open("orders",model,event -> {})) {
+            assertThat(sessions.getLast().closed).isFalse();
+        }
+        assertThat(sessions).allMatch(s -> s.closed);
+        assertThat(model.calls).hasValue(0); assertThat(dockerCalls).hasValue(0);
+    }
     private record Result(int code,String output,String error) {}
     private static Result execute(AutonomyCommand command,String... args) {
         var out=new StringWriter(); var err=new StringWriter();
