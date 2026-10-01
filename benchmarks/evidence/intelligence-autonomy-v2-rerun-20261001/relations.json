@@ -1,0 +1,224 @@
+{
+  "pairs" : [ {
+    "predicted" : true,
+    "pair" : {
+      "left" : "orders",
+      "right" : "stock",
+      "expectedRelated" : true
+    },
+    "passed" : true
+  }, {
+    "predicted" : false,
+    "pair" : {
+      "left" : "orders",
+      "right" : "unrelated",
+      "expectedRelated" : false
+    },
+    "passed" : true
+  }, {
+    "predicted" : false,
+    "pair" : {
+      "left" : "orders",
+      "right" : "crossenv",
+      "expectedRelated" : false
+    },
+    "passed" : true
+  }, {
+    "predicted" : false,
+    "pair" : {
+      "left" : "orders",
+      "right" : "late",
+      "expectedRelated" : false
+    },
+    "passed" : true
+  }, {
+    "predicted" : false,
+    "pair" : {
+      "left" : "stock",
+      "right" : "unrelated",
+      "expectedRelated" : false
+    },
+    "passed" : true
+  }, {
+    "predicted" : false,
+    "pair" : {
+      "left" : "stock",
+      "right" : "crossenv",
+      "expectedRelated" : false
+    },
+    "passed" : true
+  } ],
+  "falsePositive" : 0,
+  "ordersDeliveries" : 2,
+  "falseNegative" : 0,
+  "snapshot" : {
+    "entries" : [ {
+      "trigger" : {
+        "eventId" : "3fc13a6dbb5b0ec4f607cc0a5ab8fb5d5352813f066ab33ab9c10bb6000630af",
+        "episodeId" : "0fee6d76a2153f6178f931a7552950da42805d60bf34654004adda37bb52b3a5",
+        "sourceId" : "alertmanager-local",
+        "sourceVersion" : 4,
+        "sourceFingerprint" : "0000000000000001",
+        "groupKey" : "shared-notification-group",
+        "phase" : "FIRING",
+        "startsAt" : "2026-10-01T09:27:59.719477900Z",
+        "endsAt" : null,
+        "receivedAt" : "2026-10-01T09:28:19.727599700Z",
+        "applicationId" : "orders",
+        "applicationVersion" : 1,
+        "applicationHash" : "b0c54a837d1cf0e9b6adadd6fd41c940882cccd9137e343c3609567f28678429",
+        "targetHash" : "e8f8bf73c31a83b8a4af8f2c51e0b122cfcd3d2ddf765f7063b879f9f915c188",
+        "environment" : "clawkit-autonomy-intelligence-660cb56e",
+        "service" : "orders",
+        "alertName" : "FrozenSourceEvent",
+        "severity" : "unknown",
+        "summary" : "Controlled source claim; not a fresh health observation",
+        "quality" : "COMPLETE",
+        "contentHash" : "d022e72d370e4a12aa1132efbc6ff1e9e99a377ce234e9e0573824d21c3fea31"
+      },
+      "deliveries" : 2,
+      "firstReceivedAt" : "2026-10-01T09:28:19.727599700Z",
+      "lastReceivedAt" : "2026-10-01T09:28:19.739209400Z",
+      "state" : "ATTACHED",
+      "incidentId" : "inc-orders",
+      "detail" : "attached to existing independently observed incident"
+    }, {
+      "trigger" : {
+        "eventId" : "5e917b854377e3607c45a22865998b5e178d3f31c3f9e611f38c93d4d804370b",
+        "episodeId" : "0c7510128a2fb7bbec917ecc0f3baf9fb62c7b5e860b1ea59a40ae0e73c5ceab",
+        "sourceId" : "alertmanager-local",
+        "sourceVersion" : 4,
+        "sourceFingerprint" : "0000000000000002",
+        "groupKey" : "shared-notification-group",
+        "phase" : "FIRING",
+        "startsAt" : "2026-10-01T09:27:58.719477900Z",
+        "endsAt" : null,
+        "receivedAt" : "2026-10-01T09:28:19.772878800Z",
+        "applicationId" : "stock",
+        "applicationVersion" : 1,
+        "applicationHash" : "f5cfbfa541dc0e0af2cd1cce92b5a853d760ce19ef4ba1a7c3b18c4c5cc59c30",
+        "targetHash" : "bbd5031a7888aafac3d9d3adaa7c6d436bf454cb8049d32aad8bb724e301ac4d",
+        "environment" : "clawkit-autonomy-intelligence-660cb56e",
+        "service" : "stock",
+        "alertName" : "FrozenSourceEvent",
+        "severity" : "unknown",
+        "summary" : "Controlled source claim; not a fresh health observation",
+        "quality" : "COMPLETE",
+        "contentHash" : "aba9442be6d4b3d8f341239700d49ff8b7e62edc0e6b52370353047b48c9c477"
+      },
+      "deliveries" : 1,
+      "firstReceivedAt" : "2026-10-01T09:28:19.772878800Z",
+      "lastReceivedAt" : "2026-10-01T09:28:19.772878800Z",
+      "state" : "ATTACHED",
+      "incidentId" : "inc-stock",
+      "detail" : "attached to existing independently observed incident"
+    }, {
+      "trigger" : {
+        "eventId" : "f63f3c9cd5581a883d3061d364495974358feaa174528796a653e0f9985de693",
+        "episodeId" : "a9c1cdb7a8c8f9cb10e8e2cbc92823beeaf0e2d927dd6d7c680d2300852c6d70",
+        "sourceId" : "alertmanager-local",
+        "sourceVersion" : 4,
+        "sourceFingerprint" : "0000000000000003",
+        "groupKey" : "shared-notification-group",
+        "phase" : "FIRING",
+        "startsAt" : "2026-10-01T09:27:57.719477900Z",
+        "endsAt" : null,
+        "receivedAt" : "2026-10-01T09:28:19.801836500Z",
+        "applicationId" : "unrelated",
+        "applicationVersion" : 1,
+        "applicationHash" : "1860969906f333dc282cad6a353e52304b60c51e0315ccea778960b59cf137d5",
+        "targetHash" : "e61daa45c397a6c353132d18bb9117da74459e9d76fcecb6990b4c14eb62f236",
+        "environment" : "clawkit-autonomy-intelligence-660cb56e",
+        "service" : "billing",
+        "alertName" : "FrozenSourceEvent",
+        "severity" : "unknown",
+        "summary" : "Controlled source claim; not a fresh health observation",
+        "quality" : "COMPLETE",
+        "contentHash" : "9e3f52ef0c03f76e818568c3591cedb86501421baeaeb4bb6d045d0055fbec82"
+      },
+      "deliveries" : 1,
+      "firstReceivedAt" : "2026-10-01T09:28:19.801836500Z",
+      "lastReceivedAt" : "2026-10-01T09:28:19.801836500Z",
+      "state" : "ATTACHED",
+      "incidentId" : "inc-unrelated",
+      "detail" : "attached to existing independently observed incident"
+    }, {
+      "trigger" : {
+        "eventId" : "5a86a4981a35f253caebf62f9f1157d7323cbec444ebc888296621d1242014db",
+        "episodeId" : "9ae206d7f2ac3961220ecea40754e5bab21b46d120ef9d8e83b72256de3d008b",
+        "sourceId" : "alertmanager-local",
+        "sourceVersion" : 4,
+        "sourceFingerprint" : "0000000000000004",
+        "groupKey" : "shared-notification-group",
+        "phase" : "FIRING",
+        "startsAt" : "2026-10-01T09:27:56.719477900Z",
+        "endsAt" : null,
+        "receivedAt" : "2026-10-01T09:28:19.834147100Z",
+        "applicationId" : "crossenv",
+        "applicationVersion" : 1,
+        "applicationHash" : "c8503a158b1294e75da3d3047e24e5d20dd6dfc626478282fb0ef7079b04f791",
+        "targetHash" : "2f3af0a2c50046304f48b2ec9271dc8d041de5b4801e1d03231fb0d539ed008a",
+        "environment" : "clawkit-autonomy-intelligence-660cb56e-stage",
+        "service" : "orders",
+        "alertName" : "FrozenSourceEvent",
+        "severity" : "unknown",
+        "summary" : "Controlled source claim; not a fresh health observation",
+        "quality" : "COMPLETE",
+        "contentHash" : "aa3ad9c7a4c614934cb13ed452ea32ecc587583919b6a6b42c2387fbddef9bb0"
+      },
+      "deliveries" : 1,
+      "firstReceivedAt" : "2026-10-01T09:28:19.834147100Z",
+      "lastReceivedAt" : "2026-10-01T09:28:19.834147100Z",
+      "state" : "ATTACHED",
+      "incidentId" : "inc-crossenv",
+      "detail" : "attached to existing independently observed incident"
+    }, {
+      "trigger" : {
+        "eventId" : "08389229df2b85f3e195903b90cb1eb52cbe9260adc20f50b36ed8281a15480c",
+        "episodeId" : "6056ed5963eeb6b2bae670f0bc1e618b404e02384c95574b7da098a1e4651d7c",
+        "sourceId" : "alertmanager-local",
+        "sourceVersion" : 4,
+        "sourceFingerprint" : "0000000000000005",
+        "groupKey" : "shared-notification-group",
+        "phase" : "FIRING",
+        "startsAt" : "2026-10-01T09:21:39.719477900Z",
+        "endsAt" : null,
+        "receivedAt" : "2026-10-01T09:28:19.863303700Z",
+        "applicationId" : "stock",
+        "applicationVersion" : 1,
+        "applicationHash" : "f5cfbfa541dc0e0af2cd1cce92b5a853d760ce19ef4ba1a7c3b18c4c5cc59c30",
+        "targetHash" : "bbd5031a7888aafac3d9d3adaa7c6d436bf454cb8049d32aad8bb724e301ac4d",
+        "environment" : "clawkit-autonomy-intelligence-660cb56e",
+        "service" : "stock",
+        "alertName" : "FrozenSourceEvent",
+        "severity" : "unknown",
+        "summary" : "Controlled source claim; not a fresh health observation",
+        "quality" : "COMPLETE",
+        "contentHash" : "a3536400ab0f032affa431c2ab7a00c1e4492debf8e14a7f191755c173c2dfca"
+      },
+      "deliveries" : 1,
+      "firstReceivedAt" : "2026-10-01T09:28:19.863303700Z",
+      "lastReceivedAt" : "2026-10-01T09:28:19.863303700Z",
+      "state" : "ATTACHED",
+      "incidentId" : "inc-late",
+      "detail" : "attached to existing independently observed incident"
+    } ],
+    "relations" : [ {
+      "id" : "f5c6df840d0ccd7ec3fa05b254e1182a08f5328000ef2a2a12e8dbd879d129fd",
+      "leftEventId" : "3fc13a6dbb5b0ec4f607cc0a5ab8fb5d5352813f066ab33ab9c10bb6000630af",
+      "rightEventId" : "5e917b854377e3607c45a22865998b5e178d3f31c3f9e611f38c93d4d804370b",
+      "leftIncidentId" : "inc-orders",
+      "rightIncidentId" : "inc-stock",
+      "topologyHash" : "1c98e1dbbd6ce9b780d0c287dccb17403ff725659623cdf60ca7970d54113b86",
+      "windowStart" : "2026-10-01T09:27:58.719477900Z",
+      "windowEnd" : "2026-10-01T09:27:59.719477900Z",
+      "reason" : "registered pinned dependency edge and startsAt within 120s; correlation, not root cause",
+      "state" : "ACTIVE",
+      "revocationReason" : null
+    } ]
+  },
+  "recall" : 1.0,
+  "truePositive" : 1,
+  "evidenceKind" : "CONTROLLED_SOURCE_AND_BINDING_CONTRACT_NOT_REAL_ALERTMANAGER_OR_CAUSAL_ROOT_CAUSE",
+  "precision" : 1.0
+}

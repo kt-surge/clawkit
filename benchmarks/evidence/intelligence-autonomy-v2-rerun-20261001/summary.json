@@ -1,0 +1,92 @@
+{
+  "actualTokens" : 628554,
+  "arms" : {
+    "CLAWKIT" : {
+      "rootCauseHit" : 4,
+      "independentRecovered" : 1,
+      "allPass" : 4,
+      "duplicates" : 0,
+      "unavailableUsage" : 1,
+      "requests" : 36,
+      "diagnosisPass" : 4,
+      "reasonableAbstention" : 0,
+      "forbiddenActions" : 0,
+      "eligible" : 2,
+      "actualTokens" : 228141,
+      "choicePass" : 4,
+      "failures" : {
+        "MODEL_OR_PROTOCOL_FAILURE" : 6,
+        "PASS" : 4
+      },
+      "knownRootCauseTasks" : 10,
+      "instances" : 10
+    },
+    "STRONG_RULES" : {
+      "rootCauseHit" : 6,
+      "independentRecovered" : 2,
+      "allPass" : 10,
+      "duplicates" : 0,
+      "unavailableUsage" : 0,
+      "requests" : 0,
+      "diagnosisPass" : 10,
+      "reasonableAbstention" : 4,
+      "forbiddenActions" : 0,
+      "eligible" : 2,
+      "actualTokens" : 0,
+      "choicePass" : 10,
+      "failures" : {
+        "PASS" : 10
+      },
+      "knownRootCauseTasks" : 10,
+      "instances" : 10
+    },
+    "GENERIC_AGENT" : {
+      "rootCauseHit" : 8,
+      "independentRecovered" : 1,
+      "allPass" : 5,
+      "duplicates" : 0,
+      "unavailableUsage" : 0,
+      "requests" : 32,
+      "diagnosisPass" : 8,
+      "reasonableAbstention" : 0,
+      "forbiddenActions" : 0,
+      "eligible" : 2,
+      "actualTokens" : 202811,
+      "choicePass" : 5,
+      "failures" : {
+        "FAIL" : 3,
+        "MODEL_OR_PROTOCOL_FAILURE" : 2,
+        "PASS" : 5
+      },
+      "knownRootCauseTasks" : 10,
+      "instances" : 10
+    },
+    "NO_KNOWLEDGE" : {
+      "rootCauseHit" : 6,
+      "independentRecovered" : 0,
+      "allPass" : 2,
+      "duplicates" : 0,
+      "unavailableUsage" : 1,
+      "requests" : 32,
+      "diagnosisPass" : 6,
+      "reasonableAbstention" : 0,
+      "forbiddenActions" : 0,
+      "eligible" : 2,
+      "actualTokens" : 197602,
+      "choicePass" : 3,
+      "failures" : {
+        "FAIL" : 6,
+        "MODEL_OR_PROTOCOL_FAILURE" : 2,
+        "PASS" : 2
+      },
+      "knownRootCauseTasks" : 10,
+      "instances" : 10
+    }
+  },
+  "fatal" : "NONE",
+  "requests" : 100,
+  "planned" : 40,
+  "apiCostAvailable" : false,
+  "uniqueScenarios" : 10,
+  "recorded" : 40
+}

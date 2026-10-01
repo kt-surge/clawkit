@@ -64,7 +64,7 @@ $readmeText=[System.IO.File]::ReadAllText($packageReadme) -replace '\]\(\.\./','
 [System.IO.File]::WriteAllText($packageReadme,$readmeText,[System.Text.UTF8Encoding]::new($false))
 $docsDir=Join-Path $winDir 'docs'
 New-Item -ItemType Directory -Force $docsDir | Out-Null
-foreach($name in @('managed-operations.md','layered-autonomy-implementation-plan.md','autonomy-evaluation.md')) {
+foreach($name in @('managed-operations.md','layered-autonomy-implementation-plan.md','autonomy-evaluation.md','intelligence-delivery-20261001.md')) {
     Copy-Item (Join-Path $repoRoot ('docs/'+$name)) (Join-Path $docsDir $name)
 }
 $benchmarkDir=Join-Path $winDir 'benchmarks'

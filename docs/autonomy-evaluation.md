@@ -68,7 +68,9 @@ mvn -B -ntp -pl clawkit-evaluation -am -Pautonomy-evaluation verify `
 
 v1 完成全部 40 实例并通过原始用量、权限、外部业务与源码审计；CLAWKIT 组 10 次均为模型或协议失败。调查确认其指导错误地要求在同一响应提交诊断和终止决定，而 Runtime 要求终止工具独占批次。v2 修正指导为先提交诊断，接受后另轮独立提交决定；保留 Runtime 门禁、场景、模型和预算。v2 是同场景的协议修复复验，不是新增留出集；v1 原始报告和失败成本均不改写。
 
-2026-10-01 的 [v1 完整记录](../benchmarks/evidence/intelligence-autonomy-v1-20261001/README.md)与 [v2 完整记录](../benchmarks/evidence/intelligence-autonomy-v2-20261001/README.md)分别保存。v2 40/40 完整，53 次调用、205630 actual Token；21 次 HTTP 402 余额不足，usage 不可得。CLAWKIT 2/10、强规则 10/10、普通 Agent 1/10、无知识 1/10 为保留全部失败的原始综合计数；顺序性的余额失败使组间效果不可比较，不能据此证明知识收益。原始事件、失败原因和源码/清理审计均保留。额度恢复后需新目录整轮冻结，不补跑替换失败项。[安装包实际入口检查](../benchmarks/evidence/intelligence-package-20261001/README.md)使用开发夹具，不进入正式分数。
+2026-10-01 的 [v1 完整记录](../benchmarks/evidence/intelligence-autonomy-v1-20261001/README.md)与 [v2 首轮记录](../benchmarks/evidence/intelligence-autonomy-v2-20261001/README.md)分别保存。v2 首轮 40/40 完整，53 次调用、205630 actual Token；21 次 HTTP 402 余额不足，usage 不可得。CLAWKIT 2/10、强规则 10/10、普通 Agent 1/10、无知识 1/10 为保留全部失败的原始综合计数；顺序性的余额失败使该轮组间效果不可比较。原始事件、失败原因和源码/清理审计均保留，未补跑替换失败项。[安装包实际入口检查](../benchmarks/evidence/intelligence-package-20261001/README.md)使用开发夹具，不进入正式分数。
+
+额度恢复后的 [v2 完整复验](../benchmarks/evidence/intelligence-autonomy-v2-rerun-20261001/README.md)采用新目录整轮运行相同协议、场景与顺序：40/40 实例、100 请求/628554 actual Token，两个网络失败 usage 不可得，零余额不足。综合通过依次为 CLAWKIT 4/10、强规则 10/10、普通 Agent 5/10、无知识 2/10；主根因命中 4/10、6/10、8/10、6/10，合理 UNKNOWN 单列；合资格自主恢复 1/2、2/2、1/2、0/2。四次实际派发全部有授权、连续独立恢复及外部精确业务判定，未发现禁止/重复动作；六对受控关系符合标签。CLAWKIT 五次预算未完成及一次网络失败保持失败计数，不把部分诊断或系统交接计为成功。完整原始用量/参数/工具/源码与清理审计通过。该复验不是新留出集，没有证明 Agent 优于规则或稳定知识收益；[分析](../benchmarks/evidence/intelligence-autonomy-v2-rerun-20261001/analysis.md)解释失败与局限。
 
 四组为 CLAWKIT（多源诊断与知识）、强规则、普通 Agent、CLAWKIT 无知识。模型组共享初始发现、全部采证/检索工具合同、模型设置、120 秒/6 请求/12 工具/30000 Token 和执行权限。普通 Agent 使用通用指导；无知识组只移除知识内容，保留 CLAWKIT 指导。强规则读取全部来源并优先检查反证，不隐藏日志、变更、资源或缺失情况。按需采证次数可能不同，完整工具轨迹保留。所有组使用同一产品授权、现场复查与独立业务验证；比较不是不受约束的 Agent。
 

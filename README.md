@@ -10,7 +10,7 @@ Java 21 Agent Runtime、MCP、权限门禁和状态机支撑这些体验。当�
 
 2026-09-30 的首轮产品支持 CLI 持续检查、限定自主启动／重启、人工批准、暂停／停止及可选飞书通知。[使用说明](docs/managed-operations.md)包含安装、登记、授权、运行和清理步骤；[分层自治实施合同](docs/layered-autonomy-implementation-plan.md)维护需求与验收，完成状态见 [TODO](TODO.md)。解压安装包通过实际模型／实际隔离容器的自主与人工修复；[冻结评测](docs/autonomy-evaluation.md)完成 12 场景、4 组、48 实例，CLAWKIT 分层处置 10/12、规则 11/12，CLAWKIT 的两项模型／协议失败完整保留，不宣称优于规则或生产稳定性。真实通知送达和真实目标试用未验证；现有离线 Console 用于证据回放。
 
-2026-10-01 增加多源调查：有界日志、退出/OOM 与内存快照、变更导入及可选 Prometheus；`autonomy diagnose` 展示假设、支持证据、反证和未知项，`diagnosis` 查看已保存结果。持续会话可生成复盘草稿，人工确认案例与流程回放后按范围检索版本化知识，并支持撤销。可选 Alertmanager 接入保存来源身份、重复投递与可撤销的依赖关联，仍由现场采证及各应用独立授权控制处置。[多源 v1 的全部 40 项结果](benchmarks/evidence/intelligence-autonomy-v1-20261001/README.md)保留了提示与终止工具协议冲突造成的失败；修复后的 [v2 40 项记录](benchmarks/evidence/intelligence-autonomy-v2-20261001/README.md)有 21 次供应商余额不足，未能支持知识收益比较，旧分数均保留。[解压包实际入口验收](benchmarks/evidence/intelligence-package-20261001/README.md)完成自主/人工修复、暂停/恢复/停止和独立业务验证；真实告警部署与飞书送达尚未验证。
+2026-10-01 完成多源调查、版本化处置知识与事件协同：Agent 按需读取日志、退出/OOM、资源、变更及可选指标，保存假设、支持/反证和未知项；处理后生成复盘草稿，经确认、回放和审阅的知识按范围检索并可撤销。可选 Alertmanager 接入保存来源身份、重复投递和可撤销依赖关联，处置仍经现场采证与独立授权。[新一轮完整对照](benchmarks/evidence/intelligence-autonomy-v2-rerun-20261001/README.md)记录全部 40 实例：CLAWKIT 综合 4/10、强规则 10/10、普通 Agent 5/10、无知识 2/10，没有证明优于规则或稳定知识收益。[v1 协议失败](benchmarks/evidence/intelligence-autonomy-v1-20261001/README.md)与 [v2 首轮余额失败](benchmarks/evidence/intelligence-autonomy-v2-20261001/README.md)均保留。[解压包实际入口验收](benchmarks/evidence/intelligence-package-20261001/README.md)完成自主/人工修复、暂停/恢复/停止及独立业务验证；[阶段验收](docs/intelligence-delivery-20261001.md)说明已完成范围，真实告警部署与飞书送达尚未验证。
 
 ## 项目概览
 
@@ -20,7 +20,7 @@ Java 21 Agent Runtime、MCP、权限门禁和状态机支撑这些体验。当�
 | 运行方式 | 本地 CLI，控制进程运行期间持续检查 |
 | 核心目标 | 让个人开发者更容易理解并安全处理自己服务器上的服务故障 |
 | 关键机制 | 应用登记、持续观察、Agent 采证、策略／人工授权、独立验证、失败持久化交接 |
-| 当前阶段 | 首轮 P0—P4 完成：可安装 CLI 与冻结隔离评测；真实目标试用属于 P5 |
+| 当前阶段 | P0—P4 与 E0—E4 完成：可安装 CLI、多源诊断、知识反馈与事件协同；真实目标试用属于 P5 |
 
 ## 项目目标
 

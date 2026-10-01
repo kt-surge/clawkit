@@ -1,0 +1,48 @@
+{
+  "experimentDate": "2026-10-01",
+  "gitHeadAtRun": "f62125d3ef1f648dfe50d0d533cf4d3cc18a4562",
+  "sourceFingerprint": "5e54b5b91383ba09fa9a7d27c9814c48037e384a2aee371d39a791de617d4976",
+  "scenarioSpecSha256": "28ad58fb114ea4182c70b473d48335c4618bb94c1a9742d8c8e4d5f0ebe74364",
+  "sourceInputArchiveSha256": "9f441cb4c010844f6da385d5c173967645947d180730fbf2f1bfc23c314827e8",
+  "sourceInputEntries": 2245,
+  "requestedModel": "deepseek-v4-flash",
+  "returnedModels": [
+    "deepseek-flash"
+  ],
+  "modelSettings": {
+    "maxOutputTokens": 4096,
+    "reasoningMode": "DISABLED"
+  },
+  "java": "21.0.4",
+  "dockerServer": "29.2.1",
+  "rawCapturesPublished": false,
+  "rawCapturesRetainedLocally": true,
+  "originalFilesSha256": {
+    "report.md": "f49486ef17ac131e3bd2a0eb5e555f9cca08646cbbcfaadf2a55b8a4b4670b40",
+    "summary.json": "1fff09513cda87e0b32b5d16feeb746041ed708bfb7358f316e60a94b70ab669",
+    "instances.jsonl": "252eaa85aef3c342c7519f4482d3b29f926d0b4847c89e42d8c9782801231af4",
+    "frozen-plan.json": "871d231ce6ae913048db5b4379cf474b3f95d26147c44d7abc9b138685f1b904",
+    "audit.json": "1d2605e79cecbdaf716818ab2c65f6fcf8337eb6a503869b93e4968c7b1af616",
+    "relations.json": "b7fda4fb40452f58d028b064f5228f8ef20492875af74299ef67853b3a360a11",
+    "image-provenance.json": "6a243ac85829d5c4f3d74f8c61294051e2d090b72935942348c1afb52540898f",
+    "source-integrity.json": "caa982957750bc79e7040e8bd4ad91f1fa8a6aa5e28d48e801291fb66d5ab7f8",
+    "cleanup-audit.json": "d9953279c2e2927ccd2c886b3215500035378c7d3c619c7a0cd2c536d6f1fe2c",
+    "external-failures.json": "421fcaeb6265c2b670e06a8a37a2f78bd9ed1c51904492fcaaaf1165e477e4d1",
+    "environment-notes.json": "796570e9920b91cd423d2e41ef8d4d901e8d7781a102e82f6261621a9d8e9847"
+  },
+  "publishedFilesSha256": {
+    "report.md": "f49486ef17ac131e3bd2a0eb5e555f9cca08646cbbcfaadf2a55b8a4b4670b40",
+    "summary.json": "29e0740b35d4f6b151c1976b62913a6fb23449e790d586df43ba7ea9227d3af0",
+    "instances.jsonl": "252eaa85aef3c342c7519f4482d3b29f926d0b4847c89e42d8c9782801231af4",
+    "frozen-plan.json": "58b38fb8828507a7ffe38615f57eabaef3f11b3414d241ff756d52f5300804f9",
+    "audit.json": "62f1340fcf0a7fddef1edf12adc76d482840e2a66c5c1c54cef311d1ece1d792",
+    "relations.json": "ccbb1c977c4edbd4cb47abdf8b74a6ec88b4edc21226fe78b715b1ddc7e90015",
+    "image-provenance.json": "da2f47b0e6a59e77f31d6e6b611a68cc5abdb1738c95509e353a91dde1ffc1ce",
+    "source-integrity.json": "45f920b4c9c7b7cba279b35c8c025bc4af4e6e3a395a9ce2eedb3d4c0af0df75",
+    "cleanup-audit.json": "fd4c0bdce8351debd1eeae9f5c4b086c73b933a60f0d896161725b9e292d599f",
+    "external-failures.json": "10811441fa82d7402e6be3cfd899417b2c2743a1e6625828df177f16818fbf5c",
+    "environment-notes.json": "c579fe966736921c6e1e900456ea86c7156f8b07812300a5aa12e1675b8d75ef"
+  },
+  "publicationTransform": "CRLF converted to LF only; original reports and counts unchanged",
+  "knowledgeReviewKind": "BENCHMARK_FIXTURE_REPLAY_AND_CONTROLLED_REVIEW_NOT_REAL_HUMAN_REVIEW"
+}

@@ -28,6 +28,7 @@
 1. [`product-direction.md`](product-direction.md)：目标用户、核心旅程和产品原则
 2. [`ops-loop.md`](ops-loop.md)：查看、调查、审批处置和独立验证如何形成闭环
 3. [`TODO.md`](../TODO.md)：当前实现到了哪里、下一步做什么
+4. [`intelligence-delivery-20261001.md`](intelligence-delivery-20261001.md)：多源诊断、知识反馈与事件协同的验收和效果边界
 
 ### 想参与开发
 

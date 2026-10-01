@@ -1,0 +1,23 @@
+{
+  "analysisAfterRun": true,
+  "originalScoresUnchanged": true,
+  "externalProviderFailures": 2,
+  "billingFailures": 0,
+  "details": [
+    {
+      "durationMs": 5062,
+      "instanceId": "dependency-no_knowledge-1",
+      "errorMessage": "LLM 调用失败，已重试 0 次。最后错误: Cannot reach DeepSeek",
+      "errorCode": "Network",
+      "usageSource": "UNAVAILABLE"
+    },
+    {
+      "durationMs": 5007,
+      "instanceId": "application-clawkit-1",
+      "errorMessage": "LLM 调用失败，已重试 0 次。最后错误: Cannot reach DeepSeek",
+      "errorCode": "Network",
+      "usageSource": "UNAVAILABLE"
+    }
+  ],
+  "meaning": "Complete same-protocol rerun; provider failures remain in the full denominator and unavailable usage is not assumed to be zero cost."
+}
