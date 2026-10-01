@@ -61,6 +61,16 @@
   v2 首轮正式运行完整记录 40/40、53 请求/205630 actual Token，原始事件确认 21 次 HTTP 402：Insufficient Balance，usage 不可得；各组受影响数量不同，不能支持模型能力或知识收益比较。原始综合计数 CLAWKIT 2/10、强规则 10/10、普通 Agent 1/10、无知识 1/10 均保留；CLAWKIT 两项预算停止、普通 Agent 三项处置未达预期分别解释。源码 2231 输入快照匹配，全部用量/参数/工具/授权/外部判定及六对关系审计通过，无禁止/重复动作，项目清理零残余。公开 [v2 首轮记录](benchmarks/evidence/intelligence-autonomy-v2-20261001/README.md)与 [包验收](benchmarks/evidence/intelligence-package-20261001/README.md)，原始失败未补跑替换。
   额度恢复后的 [v2 完整复验](benchmarks/evidence/intelligence-autonomy-v2-rerun-20261001/README.md)：同一协议/场景/顺序的新目录整轮 40/40，100 请求/628554 actual Token，两次网络失败 usage 不可得、零余额不足。综合 CLAWKIT 4/10、强规则 10/10、普通 Agent 5/10、无知识 2/10；合资格自主恢复分别 1/2、2/2、1/2、0/2。CLAWKIT 五项预算未完成和一项网络失败全部保留，系统兜底不计模型成功。独立审计通过：四次派发均有授权及三次独立恢复/外部精确业务样本，禁止/重复动作零；六对受控关联符合标签；2245 输入归档匹配且源码运行中不变，清理零残余。原始轨迹在 `tmp/intelligence-e4-v2-frozen-20261001-02/`；当前结果未证明优于规则或稳定的知识增益，不写生产效果。
 
+### 后续主线：SSH/MCP 远程自治接入（2026-10-01）
+
+用户已要求建立持续目标，并选择现有 `order-api` 故障演练服务作为接入对象。先接入真实只读观测，再完成限定修复合同及隔离验证；真实目标部署与动作授权需审阅具体配置，不能因 `opsfix` 可连接直接开放自动处置。长期接入合同见 [实施合同第 10 节](docs/layered-autonomy-implementation-plan.md#10-后续sshmcp-远程自治接入)。
+
+- **[x] REMOTE-AUTONOMY-R0：身份与合同核对** — 已实际验证 `opsro` 的 SSH/MCP 握手和十项只读工具；`opsfix` 独立密钥认证与握手通过，仅暴露 `restart_service(serviceId=order-api)`，零写调用。`order-api` 服务、容器和资源三项真实只读检查通过；原始记录分别保留于 `tmp/cloud-connect-20261001-111659/`、`tmp/opsfix-connect-20261001-124801/`、`tmp/remote-order-api-read-20261001-130134/`。远端只返回短容器 ID，资源响应单独没有 OOM/退出码事实；现有修复实现没有完整容器身份/配置条件/幂等动作回执，不能直接套用本地自治资格。一次自动审核超时导致观测未执行，明确说明后重试一次通过，未将超时当服务器故障。
+- **[x] REMOTE-AUTONOMY-R1：只读观测接入统一主链** — `autonomy remote-register` 已接通同一 OpsReadSession、ManagedObserver、OpsDecisionAgent 和持续事件控制器；来源指纹、会话/目标/容器、时间、坏格式与缺口均有合同测试，远程仅 OBSERVE，策略/审批不能开启写入口。真机登记、check、单周期 run、已保存诊断/事件查询和 stop 已运行；首次登记因服务器时间领先约 1.3 秒失败，修复为保留原始时间并最多等待五秒，另补缺失来源的同一采集时间。第一轮获明确授权的 DeepSeek 诊断 4 次实际请求/25180 actual Token，两次诊断被拒后预算耗尽，由 SYSTEM 交接；原始记录保留于 `tmp/remote-autonomy-r1-product-diagnosis-20261001-03/`。另获单周期授权的新候选复验 3 次实际请求/16788 actual Token，产生 MODEL 结构化诊断及 INVESTIGATE 补证决定，0 提交拒绝、0 修复 Attempt；记录保留于 `tmp/remote-autonomy-r1-product-diagnosis-20261001-04/`。模型文字误述日志截断，实际来源为 COMPLETE，差异并列保留。两次单样本接入验证不证明诊断准确率或稳定降本；持续归并/暂停/重启仅在受控产品测试中通过，长期真机运行仍未验证。公开脱敏元数据见 [接入记录](benchmarks/evidence/remote-autonomy-readonly-20261001.json)。
+- **[ ] REMOTE-AUTONOMY-R2：远端受限修复合同与隔离验收** — 对固定服务/完整容器身份、配置与授权版本做服务端复查；固定动作、幂等请求及持久回执接入原 ToolCallExecutor/Attempt/独立验证；断连结果未知保持交接，零自动重复派发。旧 `opsfix` 合同保留兼容，不自动晋级新版资格。
+- **[~] REMOTE-AUTONOMY-R3：预算内提交与知识有效性** — 已逐项核对旧 v2 的五项预算失败。诊断接受后只提供最终决定合同、最多 1024 输出额度；拒绝后恢复调查，原始历史与反证保留；同一已采证快照只检索一次知识。第一轮真机失败进一步暴露缺证被误引用、空知识仍检索和字段修正提示不足：新增 `diagnosticReferenceEligible`、无审核知识时隐藏并拒绝检索、字段拒绝列出九项必填合同。本地合成用量和受控 Provider 证明预算预留与拒绝/修正路径，实际模型收益尚待新版本对照；旧 v1/v2 分数及本次真机失败保持原样。
+- **[~] REMOTE-AUTONOMY-R4：产品交付与远程验收准备** — CLI、使用说明、只读接入与修复审阅草稿均已更新，候选包解压入口与哈希核验通过。最终本地 CI 分组 clean verify：14 reactor 项目、180 suites、1561 项（6 跳过）、0 失败/错误；Runtime 回归保持原基线，不回写。公开接入记录包含两次分别授权的真机周期、全部成本/失败、来源质量与原始记录哈希；无主机地址、密钥或原始服务器日志。源码推送及最终 CI/CodeQL 核验仍需完成；限定修复服务端合同与部署留在 R2，不把当前只读交付记为远端自主恢复。
+
 下列“截至 2026-08-04”记录保留为历史代码事实，不代表 2026-09-30 已重新完成全部验收。
 
 截至 2026-08-04：

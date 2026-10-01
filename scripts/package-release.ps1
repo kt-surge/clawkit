@@ -110,7 +110,7 @@ $jarVersion = & java -jar $jarPath --version 2>&1
 $expectedJarVersion = "clawkit $Version"
 if ($jarVersion -ne $expectedJarVersion) { throw "JAR --version mismatch: got '$jarVersion', expected '$expectedJarVersion'" }
 $autonomyHelp = & java -jar $jarPath autonomy --help 2>&1
-if ($LASTEXITCODE -ne 0 -or "$autonomyHelp" -notmatch "diagnose" -or "$autonomyHelp" -notmatch "knowledge-search" -or "$autonomyHelp" -notmatch "alert-listen") { throw "JAR autonomy --help lacks intelligence commands" }
+if ($LASTEXITCODE -ne 0 -or "$autonomyHelp" -notmatch "remote-register" -or "$autonomyHelp" -notmatch "diagnose" -or "$autonomyHelp" -notmatch "knowledge-search" -or "$autonomyHelp" -notmatch "alert-listen") { throw "JAR autonomy --help lacks intelligence commands" }
 
 # ═══════════════════════════════════════════════════════════════
 # 4. Create ZIP

@@ -1,0 +1,332 @@
+{
+  "schemaVersion": 1,
+  "kind": "REMOTE_READ_ONLY_INTEGRATION_SMOKE",
+  "service": "order-api",
+  "environmentKind": "existing non-production drill service",
+  "localValidation": {
+    "command": "mvn -B -ntp clean verify -Dgroups=!e2e",
+    "reactorProjects": 14,
+    "suites": 180,
+    "tests": 1561.0,
+    "failures": 0.0,
+    "errors": 0.0,
+    "skipped": 6.0,
+    "logSha256": "2327bddc9e5ad564677f95bbc1fd350d5bd8623346e7e6c8acd9cf6e6bbb580d"
+  },
+  "trials": [
+    {
+      "batch": "03",
+      "privateRawDirectory": "tmp/remote-autonomy-r1-product-diagnosis-20261001-03",
+      "candidateJarSha256": "5271d22b57e3d9350b5953077d28c1de8f8a939c85f490e02d63d126b463d69c",
+      "requestedProvider": "https://api.deepseek.com",
+      "requestedModel": "deepseek-v4-flash",
+      "startTime": "2026-10-01T15:02:53.662740100Z",
+      "endTime": "2026-10-01T15:03:08.731083800Z",
+      "runtimeStatus": "BUDGET_EXHAUSTED",
+      "durationMs": 15068,
+      "actualProviderCalls": 4,
+      "actualTotalTokens": 25180.0,
+      "providerRetries": 0,
+      "budgetAdmissionFailures": 1,
+      "origin": "SYSTEM",
+      "failureType": "RUNTIME_BUDGET_EXHAUSTED",
+      "disposition": "ESCALATE",
+      "nextProbes": [],
+      "recheckAfterSeconds": null,
+      "typedDiagnosisAccepted": false,
+      "diagnosticRejectionCount": 2,
+      "hypotheses": [],
+      "evidence": [
+        {
+          "id": "ev-b650cd1b-0f86-456e-b905-662bcfe37099",
+          "probe": "SERVICE",
+          "status": "RUNNING",
+          "source": "SSH_MCP",
+          "quality": "COMPLETE",
+          "observedAt": "2026-10-01T15:02:51.739309982Z",
+          "collectedAt": "2026-10-01T15:02:51.755084486Z",
+          "contentHash": "687f47864b65bf5b256283f26d71636ecebc7fa6fa52a3906deceb675997b384"
+        },
+        {
+          "id": "ev-3cb7241d-525a-4f2f-858c-e66c5ada86a6",
+          "probe": "HEALTH",
+          "status": "UNKNOWN",
+          "source": "SSH_MCP",
+          "quality": "MISSING",
+          "observedAt": "2026-10-01T15:02:51.770644100Z",
+          "collectedAt": "2026-10-01T15:02:51.770644100Z",
+          "contentHash": "a1984223d8ff99bccbbda4c9a98ee6af7dbe229f3078e62b9a9650582a72e3e0"
+        },
+        {
+          "id": "ev-e96838e6-941a-442b-b4b2-43b9107a6409",
+          "probe": "BUSINESS",
+          "status": "UNKNOWN",
+          "source": "SSH_MCP",
+          "quality": "MISSING",
+          "observedAt": "2026-10-01T15:02:51.771166700Z",
+          "collectedAt": "2026-10-01T15:02:51.771166700Z",
+          "contentHash": "f426c26e4d4b02e4a4253b988cbe5523e4668d4257eaecfbfdf86804f985a19d"
+        },
+        {
+          "id": "ev-e23df604-6aaa-4478-96c6-526bea6a9278",
+          "probe": "DEPENDENCIES",
+          "status": "UNKNOWN",
+          "source": "SSH_MCP",
+          "quality": "MISSING",
+          "observedAt": "2026-10-01T15:02:51.771917400Z",
+          "collectedAt": "2026-10-01T15:02:51.771917400Z",
+          "contentHash": "6adc8a240b12314790114ee2be4ab3a51f59d2531609c47e9c43fc82896cfa78"
+        },
+        {
+          "id": "ev-416fe6eb-b190-450c-b16f-d2d71ac4c457",
+          "probe": "LOGS",
+          "status": "UNKNOWN",
+          "source": "SSH_MCP",
+          "quality": "COMPLETE",
+          "observedAt": "2026-10-01T15:02:56.553137313Z",
+          "collectedAt": "2026-10-01T15:02:56.568032672Z",
+          "contentHash": "90e8f6dd9cd3430dd8fef8cb0bd9f4201ed7d16bd93b649d970db414fc560ff0"
+        },
+        {
+          "id": "ev-ac19ef5e-7ff4-4a79-a689-425b635e0e52",
+          "probe": "RESOURCES",
+          "status": "UNKNOWN",
+          "source": "SSH_MCP",
+          "quality": "COMPLETE",
+          "observedAt": "2026-10-01T15:03:00.396572846Z",
+          "collectedAt": "2026-10-01T15:03:00.414605336Z",
+          "contentHash": "ee1ee70c889012dd6e0fc2e61a2e21fe33f7aab0e011def9ed56be45cb608ab4"
+        },
+        {
+          "id": "ev-5ac91673-20ff-4085-a85f-e7fbd3bab573",
+          "probe": "CHANGES",
+          "status": "UNKNOWN",
+          "source": "CHANGE_IMPORT",
+          "quality": "MISSING",
+          "observedAt": "2026-10-01T15:03:00.428084400Z",
+          "collectedAt": "2026-10-01T15:03:00.428084400Z",
+          "contentHash": "e7149c6a365cf4a0f6fc7517d29c2a579823c69b4215e3f99ec5ee54886ef70c"
+        },
+        {
+          "id": "ev-2acd95f2-d1f6-470f-9fca-db17d9b07dd8",
+          "probe": "METRICS",
+          "status": "UNKNOWN",
+          "source": "SSH_MCP",
+          "quality": "MISSING",
+          "observedAt": "2026-10-01T15:03:00.429080500Z",
+          "collectedAt": "2026-10-01T15:03:00.429080500Z",
+          "contentHash": "11a0dbe04be0bd60c609d2086def773a4e484547d19f6eae18adee431a220f99"
+        }
+      ],
+      "invokedTools": [
+        {
+          "name": "mcp__remote_managed_ops__read_logs",
+          "readOnly": true
+        },
+        {
+          "name": "mcp__remote_managed_ops__read_resources",
+          "readOnly": true
+        },
+        {
+          "name": "mcp__remote_managed_ops__read_changes",
+          "readOnly": true
+        },
+        {
+          "name": "mcp__remote_managed_ops__read_metrics",
+          "readOnly": true
+        },
+        {
+          "name": "mcp__remote_managed_ops__search_knowledge",
+          "readOnly": true
+        },
+        {
+          "name": "mcp__remote_managed_ops__submit_diagnosis",
+          "readOnly": true
+        },
+        {
+          "name": "mcp__remote_managed_ops__submit_diagnosis",
+          "readOnly": true
+        }
+      ],
+      "repairPolicyUpgradeRefused": true,
+      "clientRepairAttempts": 0,
+      "stopCommandPassed": true,
+      "modelNarrativeIssues": [],
+      "privateInputSha256": {
+        "decision": "ad8307a3b8d90368e9fa7dca8ca224c844f7ff15c42f3ed80232a71f71f3ce20",
+        "runtimeSummary": "7ed23c3bf7c617723ac2485535059b2a114296a1b48a5357cfeb906d9e6f8dc9",
+        "commandReceipts": "ed554e8472874d9ee3b9db33e63c6d36b1f8d29ba05fb491cb79a3b2f8fe6a13"
+      }
+    },
+    {
+      "batch": "04",
+      "privateRawDirectory": "tmp/remote-autonomy-r1-product-diagnosis-20261001-04",
+      "candidateJarSha256": "8d133451fe7efd11e1f4064388e2133aef3dc495f9e802c5ef4381dc757ae73b",
+      "requestedProvider": "https://api.deepseek.com",
+      "requestedModel": "deepseek-v4-flash",
+      "startTime": "2026-10-01T15:25:39.701633800Z",
+      "endTime": "2026-10-01T15:25:52.180156500Z",
+      "runtimeStatus": "COMPLETED",
+      "durationMs": 12478,
+      "actualProviderCalls": 3,
+      "actualTotalTokens": 16788.0,
+      "providerRetries": 0,
+      "budgetAdmissionFailures": 0,
+      "origin": "MODEL",
+      "failureType": null,
+      "disposition": "INVESTIGATE",
+      "nextProbes": [
+        "HEALTH",
+        "BUSINESS",
+        "DEPENDENCIES"
+      ],
+      "recheckAfterSeconds": 60,
+      "typedDiagnosisAccepted": true,
+      "diagnosticRejectionCount": 0,
+      "hypotheses": [
+        {
+          "id": "H1",
+          "cause": "UNKNOWN",
+          "assessment": "UNKNOWN"
+        },
+        {
+          "id": "H2",
+          "cause": "APPLICATION_FAILURE",
+          "assessment": "SUSPECTED"
+        },
+        {
+          "id": "H3",
+          "cause": "DEPENDENCY_FAILURE",
+          "assessment": "UNKNOWN"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "ev-4fee6cd2-3b96-4b8e-9720-e22513a287b2",
+          "probe": "SERVICE",
+          "status": "RUNNING",
+          "source": "SSH_MCP",
+          "quality": "COMPLETE",
+          "observedAt": "2026-10-01T15:25:37.396459821Z",
+          "collectedAt": "2026-10-01T15:25:37.412033127Z",
+          "contentHash": "a3b9e0ece6a1cd569ac58685166540901837131a1885cfe1a40c07d543a4db64"
+        },
+        {
+          "id": "ev-bbe52f9d-0047-4795-81a4-38e14ea5baf1",
+          "probe": "HEALTH",
+          "status": "UNKNOWN",
+          "source": "SSH_MCP",
+          "quality": "MISSING",
+          "observedAt": "2026-10-01T15:25:37.428854200Z",
+          "collectedAt": "2026-10-01T15:25:37.428854200Z",
+          "contentHash": "04a3db5594d405b05e230b42fa392df3e975bdb92f5bad2134e35f02f82debca"
+        },
+        {
+          "id": "ev-237df7f2-01ef-40b0-b53d-3b031676f0b0",
+          "probe": "BUSINESS",
+          "status": "UNKNOWN",
+          "source": "SSH_MCP",
+          "quality": "MISSING",
+          "observedAt": "2026-10-01T15:25:37.429224800Z",
+          "collectedAt": "2026-10-01T15:25:37.429224800Z",
+          "contentHash": "6d495ce452eea4b547e5a2f092180415943dc94b1640f860b76c9c77015ef9b9"
+        },
+        {
+          "id": "ev-8974bea2-9b54-46f1-983f-5b61257a4ca5",
+          "probe": "DEPENDENCIES",
+          "status": "UNKNOWN",
+          "source": "SSH_MCP",
+          "quality": "MISSING",
+          "observedAt": "2026-10-01T15:25:37.429224800Z",
+          "collectedAt": "2026-10-01T15:25:37.429224800Z",
+          "contentHash": "59abd9ae2ba080c7577dd8c5c33447daeb0d9b99d5b10d900564ae851e3c8d91"
+        },
+        {
+          "id": "ev-3fe93523-cdff-4f1b-853b-8fd1366e991e",
+          "probe": "LOGS",
+          "status": "UNKNOWN",
+          "source": "SSH_MCP",
+          "quality": "COMPLETE",
+          "observedAt": "2026-10-01T15:25:42.635548989Z",
+          "collectedAt": "2026-10-01T15:25:42.652637917Z",
+          "contentHash": "0941873538603570ac39d26a06f04d740607f14ccf3015a649fc6055327b6297"
+        },
+        {
+          "id": "ev-0774988c-9419-4104-be62-919dbf3addbf",
+          "probe": "RESOURCES",
+          "status": "UNKNOWN",
+          "source": "SSH_MCP",
+          "quality": "COMPLETE",
+          "observedAt": "2026-10-01T15:25:46.675046853Z",
+          "collectedAt": "2026-10-01T15:25:46.693574126Z",
+          "contentHash": "7910c4887fde7f8983f51aa99c543ca40a1091b48a1a3a4e27e6667b9329c32f"
+        },
+        {
+          "id": "ev-c1cded90-7fde-493d-a415-9d9309546347",
+          "probe": "CHANGES",
+          "status": "UNKNOWN",
+          "source": "CHANGE_IMPORT",
+          "quality": "MISSING",
+          "observedAt": "2026-10-01T15:25:46.695847Z",
+          "collectedAt": "2026-10-01T15:25:46.695847Z",
+          "contentHash": "0dad51220298d32a5c00a54202f367171d77fba208747416ccd0adc92efbfe30"
+        },
+        {
+          "id": "ev-9bb99378-5779-492a-b183-065a7af20c04",
+          "probe": "METRICS",
+          "status": "UNKNOWN",
+          "source": "SSH_MCP",
+          "quality": "MISSING",
+          "observedAt": "2026-10-01T15:25:46.698969400Z",
+          "collectedAt": "2026-10-01T15:25:46.698969400Z",
+          "contentHash": "e9b6bb8e499f8bf078b5de469a6c0479f42266cd17d4ccc1c29a97f4246ad4c5"
+        }
+      ],
+      "invokedTools": [
+        {
+          "name": "mcp__remote_managed_ops__read_logs",
+          "readOnly": true
+        },
+        {
+          "name": "mcp__remote_managed_ops__read_resources",
+          "readOnly": true
+        },
+        {
+          "name": "mcp__remote_managed_ops__read_changes",
+          "readOnly": true
+        },
+        {
+          "name": "mcp__remote_managed_ops__read_metrics",
+          "readOnly": true
+        },
+        {
+          "name": "mcp__remote_managed_ops__submit_diagnosis",
+          "readOnly": true
+        },
+        {
+          "name": "mcp__remote_managed_ops__submit_decision",
+          "readOnly": true
+        }
+      ],
+      "repairPolicyUpgradeRefused": true,
+      "clientRepairAttempts": 0,
+      "stopCommandPassed": true,
+      "modelNarrativeIssues": ["One gap text describes LOGS as truncated although collected quality is COMPLETE; no verified root cause or recovery claim"],
+      "privateInputSha256": {
+        "decision": "908142646060c90d3d8510c54a70cb20907307a121b8d61395a4cdb90b594146",
+        "runtimeSummary": "84311911945d66a98b50a9cd921ce0a83ab92c5701927a9293bd53f981085d23",
+        "commandReceipts": "ed554e8472874d9ee3b9db33e63c6d36b1f8d29ba05fb491cb79a3b2f8fe6a13"
+      }
+    }
+  ],
+  "limitations": [
+    "One trial per candidate, with separate explicit user authorization; not a frozen or statistical comparison",
+    "No fault injection, remote deployment or repair; no independent recovery verification",
+    "Remote short container identity supports observation only; full repair qualification is absent",
+    "No registered health/business/dependency/metrics sources; RUNNING does not establish business health",
+    "Typed acceptance does not prove factual accuracy; model narrative mismatch is retained",
+    "Ordinary runtime records contain bounded argument summaries, not complete raw model exchanges",
+    "Client repair ledger is empty; this is not an independent server-side mutation audit",
+    "Subsequent source delivery and package hashes must be checked in build-manifest and SHA256SUMS"
+  ]
+}

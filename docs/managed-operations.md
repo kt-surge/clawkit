@@ -1,8 +1,8 @@
 # 分层自治运维 CLI 使用说明
 
-此版本在**本地隔离 Linux Docker Compose** 中管理已登记的无状态服务。支持持续发现、事件归并、Agent 调查／等待／建议、人工批准或限定自主启动／重启、独立业务验证和人工交接。真实服务器自治接入另行选择目标与授权。
+此版本管理**本地隔离 Linux Docker Compose** 的无状态服务，并将已登记的 **SSH/MCP 远程只读来源**接入同一诊断与持续事件流程。隔离服务支持分层授权与独立恢复验证；远程来源当前支持观测、调查、归并与交接。
 
-需要 Java 21、Docker CLI 与 Compose，以及运行中的 Linux Docker daemon。Windows 可用 Docker Desktop 的 `desktop-linux` context；Linux 通常使用 `default`。`run` 和 `diagnose` 需要模型凭据；登记、状态、已保存诊断、配置检查、暂停和撤销不调用模型。
+需要 Java 21。隔离修复需要 Docker CLI、Compose 和运行中的 Linux Docker daemon；远程只读来源需要 OpenSSH 与已登记、可通过校验的远端 MCP。Windows 隔离服务可用 Docker Desktop 的 `desktop-linux` context；Linux 通常使用 `default`。`run` 和 `diagnose` 需要模型凭据；登记、状态、已保存诊断、配置检查、暂停和撤销不调用模型。
 
 安装包解压后包含 `clawkit.jar`、Windows 启动器 `clawkit.cmd`、Linux 启动器 `clawkit.sh` 和隔离夹具。Linux 可执行 `sh ./clawkit.sh` 或 `java -jar ./clawkit.jar`；下方示例为 PowerShell。
 
@@ -16,7 +16,40 @@
 
 登记数据默认放在 `~/.clawkit/autonomy`；试用建议指定新的 `--state-dir`，与其他应用的数据分开。登记固定容器身份，不能用另一个容器覆盖已有应用 ID；重建夹具时使用新的应用 ID 或新的试用目录。
 
-## 2. 创建可丢弃的试用环境
+## 2. 登记远程或隔离服务
+
+下方为隔离服务；接入现有远端请看“远程只读接入”。
+
+### 远程只读接入
+
+先使用现有服务器登记流程保存 `~/.clawkit/remote-targets.yaml`，确认 SSH 主机密钥与 MCP 工具合同。`remote-register` 引用这个目标，不接收主机、私钥或远端命令。
+
+```powershell
+# 容器 ID 必须换成刚核对的真实返回值；12 位引用仅可用于只读来源。
+.\clawkit.cmd autonomy remote-register remote-orders --state-dir .\remote-state `
+  --target test-server --environment order-api-drill --service order-api `
+  --container-id '<已核对的容器ID>' --interval 60
+.\clawkit.cmd autonomy check remote-orders --state-dir .\remote-state
+.\clawkit.cmd autonomy diagnose remote-orders --state-dir .\remote-state --details
+.\clawkit.cmd autonomy run remote-orders --state-dir .\remote-state --once
+.\clawkit.cmd autonomy status remote-orders --state-dir .\remote-state
+```
+
+远端环境名是人工登记的逻辑范围；旧探针不提供完整的项目、daemon 与动作条件证明。每个新会话重新读取连接登记、核对登记指纹并完成现有握手校验；返回事实还须匹配工具、服务、容器和真实采集时间。连接登记改变时拒绝继续，需审阅后使用新应用 ID。
+
+若已有独立探测，登记时可添加：
+
+- `--health-endpoint <白名单名> --health <远端loopback健康URL>`。
+- `--business-endpoint <白名单名> --business <远端loopback业务URL> --marker <成功标记>`。
+- `--metrics-endpoint <白名单名> --metrics-probe-url <远端loopback指标URL>`。
+
+这些 URL 用于核对远端来源，不从客户端访问。端点名必须已存在于远端白名单；不会创建探测。未配置的业务、健康、依赖和指标明确保留为缺证；运行中的容器或累计指标不能单独证明业务健康。遥测为单次快照，没有历史内存趋势时不推算趋势。
+
+远端日志固定为最近五分钟、最多五十行，进入诊断前脱敏并限制摘要长度；本地隔离来源使用下文的两分钟窗口。来源时间保留原值；服务器时间最多领先客户端五秒时等待客户端追上，超出范围则记为来源错误，不改写证据时间。`diagnose` 和 `run` 会把规范化证据发送给配置的模型服务；`remote-register`、`check` 和查询已保存结果只在本地处理。
+
+远程登记默认且仅支持 `observe`。现有 `opsfix/restart_service` 未提供完整身份、条件版本及幂等回执，不能开启 `ask` 或 `limited-auto`，也不能绑定要求完整身份的外部告警。`pause/resume/stop/events/diagnosis` 复用现有入口。下一步修复接入范围见 [实施合同第10节](../docs/layered-autonomy-implementation-plan.md#10-后续sshmcp-远程自治接入)。
+
+### 创建可丢弃的隔离试用环境
 
 先确认 `clawkit-autonomy-demo` 是本次试用的新项目。夹具会占用本地 18180／18181 端口；端口冲突时改变下面两个环境变量和随后登记的 URL。
 
@@ -116,7 +149,7 @@ docker --context desktop-linux compose -f .\ops-fixtures\layered-autonomy\compos
 
 仅用固定模板查询已登记容器的 `container_memory_working_set_bytes`，读取最近五分钟、30 秒步长，并限制响应、序列和样本数。缺失、过期、NaN、warning、身份不符及超时均保留状态；没有这套指标服务也能使用其他调查能力。
 
-每次 Agent 运行默认预算为 120 秒、6 次模型请求、12 次工具调用和 30,000 Token；单次输出上限 4096。登记检查和初始发现按各只读采集器的限制执行。多源诊断默认关闭额外原生思考，将假设、证据和不确定性写入结构化诊断。输出截断或预算耗尽会留档并交接，不算完成诊断。
+每次 Agent 运行默认预算为 120 秒、6 次模型请求、12 次工具调用和 30,000 Token；调查阶段单次输出上限 4096，诊断接受后的最终决定最多 1024。相同证据快照只检索一次处置知识，新采证后可再次检索；最终提交被拒绝后重新开放调查。登记检查和初始发现按各只读采集器的限制执行。多源诊断默认关闭额外原生思考，将假设、证据和不确定性写入结构化诊断。输出截断或预算耗尽会留档并交接，不算完成诊断。
 
 ### 处置知识与复盘
 

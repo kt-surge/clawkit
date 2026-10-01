@@ -19,8 +19,8 @@ public record ManagedApplication(String id, String targetId, String composeProje
         service = identifier(service);
         if (version < 1) throw new IllegalArgumentException("application version must be positive");
         Objects.requireNonNull(desiredState, "desiredState");
-        requireLocalHttp(healthUri);
-        requireLocalHttp(businessUri);
+        if (stateless || healthUri != null) requireLocalHttp(healthUri);
+        if (stateless || businessUri != null) requireLocalHttp(businessUri);
         if (businessMarker == null || businessMarker.isBlank() || businessMarker.length() > 256)
             throw new IllegalArgumentException("a bounded business response marker is required");
         requireDuration(checkInterval, Duration.ofSeconds(1), Duration.ofHours(1));
@@ -43,7 +43,7 @@ public record ManagedApplication(String id, String targetId, String composeProje
             throw new IllegalArgumentException("duration outside supported range");
     }
 
-    private static void requireLocalHttp(URI uri) {
+    static void requireLocalHttp(URI uri) {
         if (uri == null || !"http".equals(uri.getScheme())
                 || uri.getHost() == null || uri.getPort() == 0 || uri.getPort() > 65535
                 || !java.util.Set.of("localhost", "127.0.0.1", "[::1]").contains(uri.getHost())

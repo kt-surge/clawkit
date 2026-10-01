@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "status": "DRAFT_NOT_AUTHORIZED",
+  "purpose": "Human review checklist; this is not a server configuration or an action grant",
+  "targetId": "test-server",
+  "serviceId": "order-api",
+  "readIdentity": "opsro",
+  "fixIdentity": "opsfix",
+  "allowedActions": ["restart"],
+  "recommendedAuthorizationMinutes": 30,
+  "authorizedUntil": null,
+  "maxDispatchesPerIncident": 1,
+  "requiredServerContract": "pinned-container-conditional-idempotent-v2",
+  "serverContractDeployed": false,
+  "requiredPins": {
+    "daemonId": null,
+    "composeProject": null,
+    "fullContainerId": null,
+    "composeAndReadonlyMountDigest": null,
+    "serverGrantVersion": null
+  },
+  "verification": {
+    "readSessionPerSample": "new opsro session",
+    "consecutiveSamples": 3,
+    "healthEndpoint": null,
+    "businessEndpoint": null,
+    "businessSuccessPredicate": null
+  },
+  "excludedActions": ["fault injection", "start", "stop", "dependency restart", "image update", "configuration change", "arbitrary shell"],
+  "unknownOutcome": "Preserve local Attempt and remote receipt; hand off without redispatch",
+  "revocation": "Expire or revoke versioned grant; pause controller; keep unknown receipts",
+  "openRequirements": [
+    "Review deployable v2 gateway and root-owned configuration before any remote deployment",
+    "Pin current full container and configuration; reject writable mounts and native restart competition",
+    "Choose independent health and business probes already present in the remote allowlist",
+    "Obtain explicit authorization for deployment, restart scope and expiration after prerequisites pass"
+  ]
+}

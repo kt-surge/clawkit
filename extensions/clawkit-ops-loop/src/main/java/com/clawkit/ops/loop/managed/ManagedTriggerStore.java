@@ -16,6 +16,7 @@ public final class ManagedTriggerStore {
             OpsKnowledge.hash(applicationHash); OpsKnowledge.hash(targetHash); OpsKnowledge.text(daemonId,200); dependencies=List.copyOf(dependencies);
             if(applicationVersion<1 || containerId==null || !containerId.matches("[a-f0-9]{64}") || dependencies.size()>16) throw new IllegalArgumentException("bounded pinned binding required"); }
         public static Binding from(ManagedRegistrationStore.Registration reg) {
+            if (reg.remote()!=null) throw new IllegalArgumentException("remote alert binding requires a full server/container identity contract");
             var a=reg.application(); var t=reg.target(); return new Binding(a.id(),a.version(),ManagedContracts.hash(a),ManagedContracts.hash(t),a.composeProject(),a.service(),t.daemonId(),t.containerId(),
                 t.dependencies().entrySet().stream().sorted(Map.Entry.comparingByKey()).map(e -> new DependencyPin(e.getKey(),e.getValue())).toList());
         }
@@ -99,6 +100,7 @@ public final class ManagedTriggerStore {
             .sorted(Comparator.comparing(Entry::firstReceivedAt)).limit(32).toList();
     }
     public boolean current(TriggerEnvelope trigger,ManagedRegistrationStore.Registration registration) throws IOException {
+        if (registration.remote()!=null) return false;
         var c=config(); return c!=null && c.enabled() && c.version()==trigger.sourceVersion() && c.bindings().stream()
             .anyMatch(b -> b.matches(registration.application()) && b.targetHash().equals(trigger.targetHash()) && b.equals(Binding.from(registration)));
     }

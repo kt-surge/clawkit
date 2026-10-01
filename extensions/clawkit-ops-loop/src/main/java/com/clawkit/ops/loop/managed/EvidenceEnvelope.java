@@ -8,7 +8,7 @@ import java.util.Objects;
 public record EvidenceEnvelope(String evidenceId, String applicationId, long applicationVersion,
                                String environment, ManagedObserver.Observation observation,
                                String contentHash) {
-    public enum Source { DOCKER_INSPECT, DOCKER_LOGS, DOCKER_STATS, HTTP, CHANGE_IMPORT, PROMETHEUS, LEGACY }
+    public enum Source { DOCKER_INSPECT, DOCKER_LOGS, DOCKER_STATS, HTTP, CHANGE_IMPORT, PROMETHEUS, SSH_MCP, LEGACY }
     public enum Quality { COMPLETE, MISSING, ERROR, TRUNCATED, LEGACY }
     public record Collection(Source source, Quality quality, Instant windowStart, Instant windowEnd,
                              Instant collectedAt, String unit, String aggregation, String limitation,

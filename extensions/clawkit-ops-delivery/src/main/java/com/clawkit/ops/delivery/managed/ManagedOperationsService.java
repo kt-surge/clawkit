@@ -3,6 +3,7 @@ package com.clawkit.ops.delivery.managed;
 import com.clawkit.observability.FileRunRecorder;
 import com.clawkit.ops.loop.automation.JdkAutomationTaskScheduler;
 import com.clawkit.ops.loop.managed.*;
+import com.clawkit.ops.loop.OpsReadSession;
 import com.clawkit.ops.mcp.*;
 import com.clawkit.provider.LLMProvider;
 import java.io.*;
@@ -18,6 +19,11 @@ import java.util.function.Consumer;
 public final class ManagedOperationsService {
     public record RegistrationRequest(String id,Path composeFile,String context,String project,String service,List<String> dependencies,
             boolean stateless,URI healthUri,URI businessUri,String businessMarker,Duration checkInterval) {}
+    /** CLI composition resolves local SSH configuration and attests each new session. */
+    public interface RemoteSources {
+        RemoteManagedSource resolve(RemoteObservationBinding binding) throws Exception;
+        OpsReadSession open(RemoteManagedSource source) throws Exception;
+    }
     public record StatusView(String applicationId,String target,String desiredState,String requestedMode,String permission,
             String qualification,Instant permissionExpiresAt,String incidentId,String state,String decision,String action,String reason,
             String executionOutcome,String degradationReason,Instant lastObservation,long observations,int decisions,Path evidenceDirectory,boolean processActive,
@@ -44,8 +50,13 @@ public final class ManagedOperationsService {
     private final CommandExecutor commands;
     private final Clock clock;
     private final Path stateRoot;
+    private final RemoteSources remotes;
     public ManagedOperationsService(Path stateRoot,CommandExecutor commands,Clock clock) throws IOException {
+        this(stateRoot,commands,clock,null);
+    }
+    public ManagedOperationsService(Path stateRoot,CommandExecutor commands,Clock clock,RemoteSources remotes) throws IOException {
         this.stateRoot=stateRoot.toAbsolutePath().normalize(); registrations=new ManagedRegistrationStore(stateRoot,clock); this.commands=Objects.requireNonNull(commands); this.clock=clock;
+        this.remotes=remotes;
     }
     public static ManagedOperationsService local(Path stateRoot) throws IOException {
         return new ManagedOperationsService(stateRoot,new ProcessCommandExecutor(),Clock.systemUTC());
@@ -85,7 +96,9 @@ public final class ManagedOperationsService {
             ManagedKnowledgeStore.contentHash(decisionArtifact),ManagedKnowledgeStore.contentHash(snapshot));
     }
     public void configureMetrics(String id,URI endpoint) throws Exception {
-        var app=registrations.read(id).application(); metricStore(id).configure(app,endpoint,clock.instant());
+        var config=registrations.read(id);
+        if (config.remote()!=null) throw new IllegalArgumentException("remote metrics must use an endpoint registered in the SSH/MCP source");
+        metricStore(id).configure(config.application(),endpoint,clock.instant());
     }
     public void importChange(String id,Path input,String operator) throws Exception {
         var app=registrations.read(id).application();
@@ -102,7 +115,7 @@ public final class ManagedOperationsService {
     public DiagnosisView diagnose(String id,LLMProvider provider) throws Exception {
         var config=registrations.read(id); check(id); var directory=registrations.directory(id);
         try (var recorder=new FileRunRecorder(directory);
-             var observer=observer(id,config.target())) {
+             var observer=observer(id,config)) {
             var agent=new OpsDecisionAgent(provider,directory.resolve("agent"),recorder,clock,OpsDecisionAgent.Limits.defaults(),
                 OpsDecisionAgent.Guidance.REVIEWED_PLAYBOOKS,OpsDecisionAgent.ModelSettings.multisourceDefaults(),OpsDecisionAgent.Profile.MULTISOURCE,knowledge(id));
             var baseline=ManagedEvidenceCollector.initial(config.application(),observer,clock);
@@ -131,6 +144,13 @@ public final class ManagedOperationsService {
         var target=IsolatedComposeClient.register(commands,request.composeFile(),request.context(),request.project(),request.service(),request.dependencies());
         registrations.register(app,target); return status(app.id());
     }
+    public StatusView registerRemote(String id,RemoteObservationBinding binding,Duration checkInterval) throws Exception {
+        if (remotes==null) throw new IllegalArgumentException("remote source resolver is not configured");
+        var source=remotes.resolve(binding); var app=binding.application(id,1,checkInterval);
+        if (!source.binding().equals(binding)) throw new IllegalArgumentException("resolved remote scope differs from the user registration");
+        try (var observer=remoteObserver(id,source)) { requireRemoteIdentity(observer.observe(app,ManagedObserver.Probe.SERVICE),app); }
+        registrations.registerRemote(app,source); return status(id);
+    }
     public StatusView setPolicy(String id,String mode,Set<String> actions,Duration validity,String operator,String reviewNote) throws Exception {
         var permission=switch(mode.toLowerCase(Locale.ROOT)) { case "observe" -> ActionPolicy.Mode.OBSERVE; case "ask" -> ActionPolicy.Mode.ASK;
             case "limited-auto" -> ActionPolicy.Mode.LIMITED_AUTO; default -> throw new IllegalArgumentException("permission must be observe, ask or limited-auto"); };
@@ -138,6 +158,8 @@ public final class ManagedOperationsService {
         for (String action:actions) playbooks.add(switch(action) { case "start" -> OpsDecision.Playbook.START_STOPPED_V1;
             case "restart" -> OpsDecision.Playbook.RESTART_UNHEALTHY_V1; default -> throw new IllegalArgumentException("action must be start or restart"); });
         var config=registrations.read(id);
+        if (config.remote()!=null && permission!=ActionPolicy.Mode.OBSERVE)
+            throw new IllegalArgumentException("remote repair requires a qualified server contract; this source supports only observe");
         if (permission==ActionPolicy.Mode.LIMITED_AUTO) {
             var container=new IsolatedComposeClient(config.target(),commands).service();
             if (container.writableMount() || container.restarting() || !(container.restartPolicy().isEmpty() || container.restartPolicy().equals("no")))
@@ -156,7 +178,7 @@ public final class ManagedOperationsService {
             : current.evidence().stream().map(DecisionEvidence::observation).toList() : latest.observations();
         // Display the actual collection time, never the controller heartbeat or an old pre-repair decision as fresh health.
         Instant observedAt=observations.stream().map(ManagedObserver.Observation::observedAt).min(Comparator.naturalOrder()).orElse(null);
-        return new StatusView(id,app.composeProject()+"/"+app.service(),app.desiredState().name(),incidents(id).requestedMode().name(),permission,
+        return new StatusView(id,(config.remote()==null ? "" : app.targetId()+"/")+app.composeProject()+"/"+app.service(),app.desiredState().name(),incidents(id).requestedMode().name(),permission,
             policy.qualification().name(),policy.expiresAt(),current==null ? null : current.id(),current==null ? "NO_INCIDENT" : current.state().name(),
             current==null || current.decision()==null ? null : current.decision().disposition().name(),
             current==null || current.decision()==null || current.decision().playbook()==null ? null : action(current.decision().playbook()),
@@ -172,7 +194,10 @@ public final class ManagedOperationsService {
     }
     /** Configuration and pinned environment check only; neither registration nor checks can repair. */
     public StatusView check(String id) throws Exception {
-        var config=registrations.read(id); new IsolatedComposeClient(config.target(),commands).service(); return status(id);
+        var config=registrations.read(id);
+        if (config.remote()==null) new IsolatedComposeClient(config.target(),commands).service();
+        else try(var observer=observer(id,config)) { requireRemoteIdentity(observer.observe(config.application(),ManagedObserver.Probe.SERVICE),config.application()); }
+        return status(id);
     }
     public void requestMode(String id,String mode) throws Exception {
         registrations.read(id);
@@ -180,6 +205,7 @@ public final class ManagedOperationsService {
     }
     public CommandView requestCommand(String id,String incidentId,boolean approve,String operator) throws Exception {
         var config=registrations.read(id); var incident=incidents(id).read().current();
+        if (config.remote()!=null && approve) throw new IllegalArgumentException("remote source supports observation only; no repair approval is available");
         if (incident==null || !incident.id().equals(incidentId)) throw new IllegalArgumentException("choose the current awaiting incident");
         if (!incident.applicationId().equals(config.application().id())) throw new IllegalArgumentException("incident target differs");
         var command=inbox(id).enqueue(approve ? ManagedCommandInbox.Type.APPROVE : ManagedCommandInbox.Type.REJECT,incident,operator);
@@ -210,24 +236,42 @@ public final class ManagedOperationsService {
     private ManagedChangeStore changes(String id) throws IOException { return new ManagedChangeStore(registrations.directory(id).resolve("changes"),clock); }
     private ManagedDiagnosisStore diagnoses(String id) throws IOException { return new ManagedDiagnosisStore(registrations.directory(id).resolve("diagnoses")); }
     private ManagedMetricStore metricStore(String id) throws IOException { return new ManagedMetricStore(registrations.directory(id).resolve("metrics")); }
-    private ComposeManagedAdapter observer(String id,IsolatedComposeClient.Target target) throws IOException {
+    private ManagedObserver observer(String id,ManagedRegistrationStore.Registration registration) throws Exception {
+        current(id,registration);
+        if (registration.remote()!=null) return remoteObserver(id,registration.remote());
+        var target=registration.target();
         var config=metricStore(id).read(registrations.read(id).application());
         var source=config==null || config.endpoint()==null ? null : new PrometheusMetricSource(config.endpoint(),target,clock);
         return new ComposeManagedAdapter(new IsolatedComposeClient(target,commands),clock,changes(id),source);
     }
+    private ManagedObserver remoteObserver(String id,RemoteManagedSource source) throws Exception {
+        if (remotes==null) throw new IllegalArgumentException("remote source resolver is not configured");
+        var session=remotes.open(source);
+        try { return new RemoteManagedObserver(source.binding(),session,clock,changes(id)); }
+        catch(Exception e) { session.close(); throw e; }
+    }
+    private void requireRemoteIdentity(ManagedObserver.Observation observation,ManagedApplication app) throws IOException {
+        if (observation.payload()==null || observation.payload().collection().quality()!=EvidenceEnvelope.Quality.COMPLETE
+                || observation.status()==ManagedObserver.Status.UNKNOWN || observation.observedAt().isAfter(clock.instant())
+                || !clock.instant().isBefore(observation.observedAt().plus(app.evidenceTtl())))
+            throw new IOException("remote container identity or observation contract could not be verified");
+    }
     private static String action(OpsDecision.Playbook playbook) { return playbook==OpsDecision.Playbook.START_STOPPED_V1 ? "start" : "restart"; }
-    private ManagedRegistrationStore.Registration current(String id,IsolatedComposeClient.Target pinned) {
+    private static boolean sameSource(ManagedRegistrationStore.Registration a,ManagedRegistrationStore.Registration b) {
+        return Objects.equals(a.target(),b.target()) && Objects.equals(a.remote(),b.remote());
+    }
+    private ManagedRegistrationStore.Registration current(String id,ManagedRegistrationStore.Registration pinned) {
         try {
             var config=registrations.read(id);
-            if (!config.target().equals(pinned)) throw new IOException("registered target changed during control; restart after review");
+            if (!sameSource(config,pinned)) throw new IOException("registered target changed during control; restart after review");
             return config;
         } catch (IOException e) { throw new UncheckedIOException(e); }
     }
     public final class RunningSession implements AutoCloseable {
         private final String id;
-        private final IsolatedComposeClient.Target pinnedTarget;
+        private final ManagedRegistrationStore.Registration pinnedTarget;
         private final FileRunRecorder recorder;
-        private final ComposeManagedAdapter adapter;
+        private final ManagedObserver adapter;
         private final ManagedRepairExecutor executor;
         private final ManagedIncidentController controller;
         private final ManagedCommandInbox queue;
@@ -240,9 +284,12 @@ public final class ManagedOperationsService {
         private volatile String failure;
         private volatile ManagedIncidentStore.Mode appliedMode;
         private RunningSession(String id,ManagedRegistrationStore.Registration config,LLMProvider provider,Consumer<EventView> sink,NotificationConfiguration notifications) throws Exception {
-            this.id=id; var target=config.target(); pinnedTarget=target; Path directory=registrations.directory(id); queue=inbox(id);
+            this.id=id; var target=config; pinnedTarget=target; Path directory=registrations.directory(id); queue=inbox(id);
             recorder=new FileRunRecorder(directory);
-            adapter=observer(id,target);
+            try { adapter=observer(id,target); }
+            catch(Exception e) { recorder.close(); lifecycle.shutdown(); humanCommands.shutdown(); delivery.shutdown(); throw e; }
+            ManagedFixAdapter fix=config.remote()==null ? (ComposeManagedAdapter)adapter : (app,playbook) ->
+                new ManagedFixAdapter.ExecutionReport(com.clawkit.tools.action.EffectCertainty.NOT_DISPATCHED,"remote observation source has no qualified repair contract");
             var verifier=new IndependentManagedVerifier(clock,IndependentManagedVerifier.Settings.defaults(),d -> Thread.sleep(d.toMillis()));
             executor=new ManagedRepairExecutor(directory.resolve("execution"),clock,recorder,verifier);
             var agent=new OpsDecisionAgent(provider,directory.resolve("agent"),recorder,clock,OpsDecisionAgent.Limits.defaults(),
@@ -268,7 +315,7 @@ public final class ManagedOperationsService {
                         catch (Exception e) { org.slf4j.LoggerFactory.getLogger(ManagedOperationsService.class)
                             .warn("Diagnostic view projection unavailable: {}",e.getClass().getSimpleName()); }
                         return outcome; // Controller's decision artifact remains authoritative.
-                    },adapter,executor,verifier,
+                    },fix,executor,verifier,
                     incidents(id),new JdkAutomationTaskScheduler(1),ManagedIncidentController.Settings.defaults(),clock,event -> {
                         if (notifier!=null) {
                             try { notifier.enqueue(event); } catch (IOException e) { throw new UncheckedIOException(e); }
@@ -318,7 +365,7 @@ public final class ManagedOperationsService {
             if(observe && due) controller.tick();
             var incident=controller.status().current();
             for(var entry:queued) {
-                var registered=registrations.read(id); boolean drift=!registered.target().equals(pinnedTarget) || !store.current(entry.trigger(),registered);
+                var registered=registrations.read(id); boolean drift=!sameSource(registered,pinnedTarget) || !store.current(entry.trigger(),registered);
                 String incidentId=incident==null || incident.terminal() ? null : incident.id();
                 store.complete(entry.trigger().eventId(),drift ? null : incidentId,drift);
             }

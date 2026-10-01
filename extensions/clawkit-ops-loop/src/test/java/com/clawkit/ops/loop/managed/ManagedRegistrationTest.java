@@ -58,4 +58,21 @@ class ManagedRegistrationTest {
         try (var lease=incidents.claim()) { assertThat(incidents.processActive()).isTrue(); assertThatThrownBy(() -> store.register(a,target())).hasMessageContaining("lease unavailable"); }
         assertThat(incidents.processActive()).isFalse();
     }
+    @Test void remoteRegistrationPersistsSeparateSourceAndCannotGainLocalRepairOrAlertIdentity() throws Exception {
+        var store=new ManagedRegistrationStore(root,clock);
+        var binding=new RemoteObservationBinding("remote-test","remote-fixture","order-api","c".repeat(12),null,null,null,List.of());
+        var app=binding.application("remote-orders",1,Duration.ofSeconds(5));
+        var source=new RemoteManagedSource(binding,"a".repeat(64),"b".repeat(64));
+        var value=store.registerRemote(app,source);
+        assertThat(store.read(app.id())).isEqualTo(value);
+        assertThat(value.target()).isNull(); assertThat(value.policy().mode()).isEqualTo(ActionPolicy.Mode.OBSERVE);
+        assertThatThrownBy(() -> store.setPolicy(app.id(),ActionPolicy.Mode.ASK,Set.of(OpsDecision.Playbook.RESTART_UNHEALTHY_V1),Duration.ofMinutes(10),"human",null))
+            .hasMessageContaining("only observe");
+        assertThatThrownBy(() -> ManagedTriggerStore.Binding.from(value)).hasMessageContaining("full server/container");
+        assertThatThrownBy(() -> store.registerRemote(binding.application("alias",1,Duration.ofSeconds(5)),source)).hasMessageContaining("already belongs");
+        assertThatThrownBy(() -> new ManagedRegistrationStore.Registration(app,ActionPolicy.ask(app,clock.instant().plusSeconds(60)),null,null,source))
+            .hasMessageContaining("only observe");
+        // Existing local sources remain independently registerable after a remote source has been saved.
+        assertThat(store.register(ManagedDecisionTest.app(),target()).target()).isNotNull();
+    }
 }

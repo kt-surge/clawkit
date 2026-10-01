@@ -33,7 +33,9 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
  */
 public class ApplicationBootstrap {
     public static com.clawkit.ops.delivery.managed.ManagedOperationsService managedOperations(Path stateRoot) throws java.io.IOException {
-        return com.clawkit.ops.delivery.managed.ManagedOperationsService.local(stateRoot);
+        return new com.clawkit.ops.delivery.managed.ManagedOperationsService(stateRoot,new com.clawkit.ops.mcp.ProcessCommandExecutor(),
+            java.time.Clock.systemUTC(),new com.clawkit.cli.remote.ManagedRemoteSources(
+                Path.of(System.getProperty("user.home"),".clawkit","remote-targets.yaml")));
     }
     public static com.clawkit.ops.delivery.managed.ManagedOperationsService.RunningSession managedSession(
             com.clawkit.ops.delivery.managed.ManagedOperationsService service,String id,String model,String baseUrl,String protocol,

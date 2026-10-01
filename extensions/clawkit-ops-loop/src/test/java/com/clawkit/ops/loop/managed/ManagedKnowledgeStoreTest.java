@@ -84,19 +84,25 @@ class ManagedKnowledgeStoreTest {
         assertThat(store.search(app,"stopped",3,facts).runbooks()).isEmpty();
         assertThat(store.cases().getFirst().opsCase()).isEqualTo(draft);
     }
-    @Test void realRuntimeUsesSameToolsAndBudgetWithOrWithoutKnowledgeAndRecordsMatchedVersions() throws Exception {
+    @Test void realRuntimeUsesSameBudgetAndScopedKnowledgeAvailabilityAndRecordsMatchedVersions() throws Exception {
         var app=ManagedDecisionTest.app(); var store=ready(app,root.resolve("knowledge")); var facts=evidence(app,false,Status.HEALTHY);
         for(boolean enabled:List.of(true,false)) {
             var count=new AtomicInteger(); LLMProvider provider=new LLMProvider() {
                 public Message generate(List<Message> m,List<ToolDefinition> t) { throw new AssertionError("typed request required"); }
                 public ModelResponse generate(ModelRequest request) {
-                    assertThat(request.parameters()).isEqualTo(OpsDecisionAgent.ModelSettings.multisourceDefaults().parameters());
-                    assertThat(request.tools()).anyMatch(t -> t.name().endsWith("search_knowledge"));
                     int turn=count.getAndIncrement(); String name; com.fasterxml.jackson.databind.JsonNode args;
+                    if(turn<2) {
+                        assertThat(request.parameters()).isEqualTo(OpsDecisionAgent.ModelSettings.multisourceDefaults().parameters());
+                        if(turn==0 && enabled) assertThat(request.tools()).anyMatch(t -> t.name().endsWith("search_knowledge"));
+                        else assertThat(request.tools()).noneMatch(t -> t.name().endsWith("search_knowledge"));
+                    } else {
+                        assertThat(request.parameters()).isEqualTo(new ModelParameters(0.0,1024,false,ProviderReasoningMode.DISABLED));
+                        assertThat(request.tools()).extracting(ToolDefinition::name).containsExactly("mcp__remote_managed_ops__submit_decision");
+                    }
                     if(turn==0) { name="search_knowledge"; args=ManagedContracts.JSON.createObjectNode().put("query","stopped service"); }
                     else if(turn==1) {
                         assertThat(request.messages().stream().filter(m -> m.role()==Role.TOOL).map(Message::content).reduce("",String::concat))
-                            .contains(enabled ? "start-guidance" : "\"runbooks\":[]");
+                            .contains(enabled ? "start-guidance" : "no scoped reviewed knowledge exists");
                         name="submit_diagnosis"; args=ManagedContracts.JSON.valueToTree(new DiagnosticReport("Stopped service; root cause unknown",List.of(
                             new DiagnosticReport.Hypothesis("H1",DiagnosticReport.Cause.UNKNOWN,DiagnosticReport.Assessment.UNKNOWN,"Need crash cause",
                                 List.of(facts.getFirst().id()),List.of(),List.of("exit cause"),List.of(),List.of()))));

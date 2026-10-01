@@ -14,11 +14,11 @@ import picocli.CommandLine.Model.CommandSpec;
 
 /** Deterministic product commands; run and diagnose create a narrowly scoped read-only operations Agent. */
 @Command(name="autonomy",mixinStandardHelpOptions=true,description={
-    "登记和管理隔离 Linux Compose 服务的分层自治闭环。",
-    "操作：register, policy, check, diagnose, diagnosis, change-import, metrics, run, status, events, approve, reject, command-result, handoff, notifications, pause, resume, stop。",
+    "登记隔离 Compose 服务或现有 SSH/MCP 远程只读来源，持续观察和调查异常。",
+    "操作：register, remote-register, policy, check, diagnose, diagnosis, change-import, metrics, run, status, events, approve, reject, command-result, handoff, notifications, pause, resume, stop。",
     "知识：postmortem, cases, case-review, case-revoke, knowledge-import, knowledge-list, knowledge-search, knowledge-replay, knowledge-review, knowledge-revoke。",
     "告警：alert-bind, alert-disable, alert-import, alert-listen, alerts, relations, relation-revoke。",
-    "登记默认需审批；policy limited-auto 需要 --confirm-reviewed 和 --review-note。"})
+    "隔离服务默认需审批；policy limited-auto 需要范围审阅。远程来源当前仅观察。"})
 public final class AutonomyCommand implements Callable<Integer> {
     @Spec CommandSpec spec;
     @Parameters(index="0",arity="0..1",description="操作（默认显示帮助）") String operation;
@@ -28,11 +28,18 @@ public final class AutonomyCommand implements Callable<Integer> {
     @Option(names="--compose",description="现有隔离 Compose 文件") Path compose;
     @Option(names="--context",description="本地 Docker context") String context;
     @Option(names="--project",description="已创建的 clawkit-autonomy-* 项目") String project;
-    @Option(names="--service",description="已存在的无状态服务") String serviceName;
+    @Option(names="--service",description="已存在的目标服务；隔离修复须确认无状态") String serviceName;
+    @Option(names="--target",description="remote-register 使用 ~/.clawkit/remote-targets.yaml 中的目标 ID") String remoteTarget;
+    @Option(names="--environment",description="远端观测环境名称") String environment;
+    @Option(names="--container-id",description="已核对的远端容器 ID（12 位只读引用或 64 位完整 ID）") String containerId;
+    @Option(names="--health-endpoint",description="远端白名单中的健康探测名；与 --health 一起填写") String healthEndpoint;
+    @Option(names="--business-endpoint",description="远端白名单中的独立业务探测名；与 --business、--marker 一起填写") String businessEndpoint;
+    @Option(names="--metrics-endpoint",description="远端白名单中的指标探测名；与 --metrics-probe-url 一起填写") String metricsEndpoint;
+    @Option(names="--metrics-probe-url",description="远端白名单指标 URL，仅记录绑定，不从本机访问") URI metricsProbeUrl;
     @Option(names="--dependencies",split=",",description="声明的上游依赖服务，以逗号分隔") List<String> dependencies=List.of();
     @Option(names="--stateless",description="确认目标是可安全启动/重启的无状态服务") boolean stateless;
-    @Option(names="--health",description="登记的本地健康检查 URL") URI health;
-    @Option(names="--business",description="登记的本地业务检查 URL") URI business;
+    @Option(names="--health",description="服务侧 loopback 健康检查 URL") URI health;
+    @Option(names="--business",description="服务侧 loopback 独立业务检查 URL") URI business;
     @Option(names="--marker",description="业务响应必须包含的标记") String marker;
     @Option(names="--interval",defaultValue="5",description="观察间隔秒数（1..3600）") int interval;
     @Option(names="--actions",split=",",defaultValue="start,restart",description="审阅的动作：start,restart") Set<String> actions;
@@ -80,6 +87,15 @@ public final class AutonomyCommand implements Callable<Integer> {
                     render(service.register(new ManagedOperationsService.RegistrationRequest(applicationId,compose,dockerContext,project,serviceName,dependencies,
                         stateless,health,business,marker,Duration.ofSeconds(interval))),out,details);
                     out.println("已登记；默认请求人工审批。登记本身未执行修复。");
+                }
+                case "remote-register" -> {
+                    require(remoteTarget,"--target"); require(environment,"--environment"); require(serviceName,"--service"); require(containerId,"--container-id");
+                    if (stateless) throw new IllegalArgumentException("远程登记当前仅支持观察，不能通过 --stateless 增加修复资格。");
+                    var source=new RemoteObservationBinding(remoteTarget,environment,serviceName,containerId,
+                        remoteEndpoint(healthEndpoint,health,"", "健康"),remoteEndpoint(businessEndpoint,business,marker,"业务"),
+                        remoteEndpoint(metricsEndpoint,metricsProbeUrl,"","指标"),dependencies);
+                    render(service.registerRemote(applicationId,source,Duration.ofSeconds(interval)),out,details);
+                    out.println("远端身份与读取合同已检查；已登记为仅观察。未配置的探测明确保留为缺证。");
                 }
                 case "policy" -> {
                     require(argument,"权限模式：observe、ask 或 limited-auto");
@@ -218,6 +234,12 @@ public final class AutonomyCommand implements Callable<Integer> {
     }
     private static void require(Object value,String name) {
         if (value==null || value instanceof String text && text.isBlank()) throw new IllegalArgumentException("缺少 "+name);
+    }
+    private static RemoteObservationBinding.Endpoint remoteEndpoint(String name,URI uri,String marker,String kind) {
+        if (name==null && uri==null) return null;
+        require(name,kind+"探测名"); require(uri,kind+"探测 URL");
+        if(kind.equals("业务")) require(marker,"--marker（业务成功标记）");
+        return new RemoteObservationBinding.Endpoint(name,uri,marker);
     }
     private static String operator() { return System.getProperty("user.name","local-user"); }
     private OpsKnowledge.Reference knowledgeReference(ManagedKnowledgeStore store) throws Exception {

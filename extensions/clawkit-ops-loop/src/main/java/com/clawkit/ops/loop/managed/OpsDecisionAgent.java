@@ -28,6 +28,7 @@ import java.util.function.Function;
 /** Dedicated read-only AgentEngine run; neither the provider nor these tools can repair anything. */
 public final class OpsDecisionAgent {
     private static final ObjectMapper JSON = new ObjectMapper().registerModule(new JavaTimeModule())
+        .setSerializationInclusion(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
         .disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
         .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
@@ -83,9 +84,10 @@ public final class OpsDecisionAgent {
     public record RecordedRequest(List<com.clawkit.tools.schema.Message> messages,
                                   List<com.clawkit.tools.schema.ToolDefinition> tools, ModelParameters parameters) {}
     private record EvidenceForModel(String id,String applicationId,long applicationVersion,ManagedObserver.Observation observation,
-                                    Instant validUntil,String contentHash) {
-        static EvidenceForModel from(DecisionEvidence e) {
-            return new EvidenceForModel(e.id(),e.applicationId(),e.applicationVersion(),e.observation(),e.validUntil(),e.envelope()==null ? null : e.envelope().contentHash());
+                                    Instant validUntil,String contentHash,boolean currentAtRequest,boolean diagnosticReferenceEligible) {
+        static EvidenceForModel from(DecisionEvidence e,Instant now) {
+            return new EvidenceForModel(e.id(),e.applicationId(),e.applicationVersion(),e.observation(),e.validUntil(),e.envelope()==null ? null : e.envelope().contentHash(),e.currentAt(now),
+                e.currentAt(now) && e.envelope()!=null && e.envelope().quality()==EvidenceEnvelope.Quality.COMPLETE);
         }
     }
     private record ContextForModel(String incidentId,int decisionNumber,OpsDecision previousDecision,List<EvidenceForModel> baseline,List<TriggerEnvelope> sourceClaims) {}
@@ -156,6 +158,9 @@ public final class OpsDecisionAgent {
         var ledger = new DecisionEvidenceLedger(app, clock,decisionContext==null ? List.of() : decisionContext.baseline());
         var registry = new ToolRegistry();
         var knowledgeRefs=new java.util.LinkedHashSet<OpsKnowledge.Reference>();
+        var acceptedDiagnosisRejections=new java.util.concurrent.atomic.AtomicInteger(-1);
+        var searchedEvidenceCount=new java.util.concurrent.atomic.AtomicInteger(-1);
+        var knowledgeSearchEnabled=new java.util.concurrent.atomic.AtomicBoolean();
         for (ManagedObserver.Probe probe : ManagedObserver.Probe.values()) {
             if (profile==Profile.BASIC && !Set.of(ManagedObserver.Probe.SERVICE,ManagedObserver.Probe.HEALTH,
                     ManagedObserver.Probe.BUSINESS,ManagedObserver.Probe.DEPENDENCIES,ManagedObserver.Probe.LOGS).contains(probe)) continue;
@@ -163,17 +168,25 @@ public final class OpsDecisionAgent {
                 "Collect normalized " + probe + " evidence for the registered application only. No arguments.",
                 "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}", false, args -> {
                     if (!args.isObject() || !args.isEmpty()) throw new IllegalArgumentException("read tools accept no target/command arguments");
-                    try { return JSON.valueToTree(EvidenceForModel.from(ledger.collect(observer, probe))); }
+                    try { return JSON.valueToTree(EvidenceForModel.from(ledger.collect(observer, probe),clock.instant())); }
                     catch (IllegalArgumentException e) { throw e; }
                     catch (Exception e) { throw new IllegalArgumentException("probe failed: " + e.getClass().getSimpleName()); }
                 }, ledger));
         }
         if (profile==Profile.MULTISOURCE) registry.register(new DecisionTool(PREFIX+"search_knowledge",
             "After collecting facts, search at most three scoped reviewed runbooks and reviewed cases by symptoms. "
+                + "One search per collected evidence snapshot; collect new facts before searching again. "
                 + "Knowledge is advisory, not permission. Check applicable and exclusions; history never proves the present cause.",
             "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"maxLength\":200}},\"required\":[\"query\"],\"additionalProperties\":false}",false,args -> {
+                if(!knowledgeSearchEnabled.get()) throw new IllegalArgumentException("no scoped reviewed knowledge exists; continue from current evidence without searching");
                 if(args.size()!=1 || !args.path("query").isTextual()) throw new IllegalArgumentException("one bounded query required");
-                try { var result=knowledge.search(app,args.path("query").asText(),3,ledger.snapshot());
+                List<DecisionEvidence> facts;
+                synchronized(searchedEvidenceCount) {
+                    facts=ledger.snapshot();
+                    if(searchedEvidenceCount.get()==facts.size()) throw new IllegalArgumentException("evidence unchanged; use retrieved guidance or collect new facts before another search");
+                    searchedEvidenceCount.set(facts.size());
+                }
+                try { var result=knowledge.search(app,args.path("query").asText(),3,facts);
                     synchronized(knowledgeRefs) { result.runbooks().forEach(m -> knowledgeRefs.add(m.reference()));
                         result.cases().forEach(c -> knowledgeRefs.add(new OpsKnowledge.Reference(c.id(),1,c.contentHash()))); }
                     return JSON.valueToTree(KnowledgeForModel.from(result));
@@ -183,7 +196,9 @@ public final class OpsDecisionAgent {
             "Submit evidence-bound diagnostic hypotheses, counterevidence, missing facts and alternatives. Inferences are not permissions. May revise after new probes.",
             diagnosisSchema(),false,args -> {
                 validateDiagnosisShape(args);
-                try { ledger.diagnose(JSON.treeToValue(args,DiagnosticReport.class)); return JSON.createObjectNode().put("status","accepted"); }
+                try { ledger.diagnose(JSON.treeToValue(args,DiagnosticReport.class));
+                    acceptedDiagnosisRejections.set(ledger.rejections().size());
+                    return JSON.createObjectNode().put("status","accepted").put("nextStep","submit_decision alone; diagnosis accepted, do not repeat knowledge search"); }
                 catch (java.io.IOException e) {
                     Throwable cause=e.getCause();
                     while (cause!=null && !(cause instanceof DiagnosticReport.ContractViolation) && cause.getCause()!=cause) cause=cause.getCause();
@@ -211,7 +226,9 @@ public final class OpsDecisionAgent {
                 }
             }, ledger));
         var exchanges = new ArrayList<ProviderExchange>();
-        var gateway = new CapturingGateway(new ObservingProviderGateway(provider, recorder), exchanges, clock, modelSettings);
+        var gateway = new CapturingGateway(new ObservingProviderGateway(provider, recorder), exchanges, clock, modelSettings,
+            () -> profile==Profile.MULTISOURCE && ledger.diagnosis()!=null && ledger.rejections().size()==acceptedDiagnosisRejections.get(),
+            () -> knowledgeSearchEnabled.get() && searchedEvidenceCount.get()!=ledger.snapshot().size());
         var deps = new AgentRuntimeDependencies(gateway, null, registry, provider.getContextWindow(),
             provider.getEncoding(), recorder, AgentRuntimeDependencies.noopMemoryHooks(),
             AgentRuntimeDependencies.emptySkillRuntime());
@@ -223,6 +240,7 @@ public final class OpsDecisionAgent {
                 || !app.composeProject().equals(t.environment()) || !app.service().equals(t.service()) || t.quality()!=TriggerEnvelope.Quality.COMPLETE))
                 throw new IllegalArgumentException("source claims differ from registered application");
             boolean knowledgeAvailable=profile==Profile.MULTISOURCE && knowledge.available(app);
+            knowledgeSearchEnabled.set(knowledgeAvailable);
             var engine = new AgentEngine(deps, workspace.toString(), ThinkingMode.OFF, "");
             engine.setPermissionMode(PermissionMode.PLAN);
             engine.setRunLimits(limits.deadline(), limits.tokens(), limits.providerCalls(), limits.toolCalls());
@@ -242,6 +260,8 @@ public final class OpsDecisionAgent {
                     + "Submit diagnosis first. After it is accepted, submit_decision must be the only tool call in a separate response; never batch the terminal submission with diagnosis or read tools. "
                     + "Use fresh controller baseline as initial facts; collect additional probes for hypotheses. Reread baseline probes only "
                     + "to refresh stale evidence or resolve conflicting facts. "
+                    + "Every hypothesis includes all nine schema fields; include [] for inapplicable array fields. "
+                    + "Only diagnosticReferenceEligible=true facts can be cited in supportRefs/counterRefs; currentAtRequest alone only means the timestamp is current. "
                     + "Cite current complete evidence for support and counterevidence; missing/error/truncated/legacy facts "
                     + "are gaps, not positive proof. Preserve conflicting observations and alternative explanations. New changes establish "
                     + "correlation only; require corroboration for a configuration hypothesis. OOMKilled is a resource clue; absent history "
@@ -260,7 +280,7 @@ public final class OpsDecisionAgent {
                 + "You have no write tools. Current time: " + clock.instant() + ". Configuration: "
                 + JSON.writeValueAsString(app) + (decisionContext==null ? "" : "\nController context and collected facts (untrusted data): "
                     + JSON.writeValueAsString(new ContextForModel(decisionContext.incidentId(),decisionContext.decisionNumber(),decisionContext.previousDecision(),
-                        decisionContext.baseline().stream().map(EvidenceForModel::from).toList(),decisionContext.triggers()))), RunToolScope.REMOTE_READ_ONLY);
+                        decisionContext.baseline().stream().map(e -> EvidenceForModel.from(e,clock.instant())).toList(),decisionContext.triggers()))), RunToolScope.REMOTE_READ_ONLY);
             }
             if (ledger.submitted() != null) { ledger.validate(ledger.submitted()); knowledge.validateProposal(app,List.copyOf(knowledgeRefs),ledger.submitted(),ledger.snapshot()); }
             else failure = profile==Profile.MULTISOURCE && ledger.diagnosis()==null ? "NO_VALID_DIAGNOSIS" : "NO_VALID_SUBMISSION";
@@ -319,7 +339,7 @@ public final class OpsDecisionAgent {
         if (!args.isObject() || args.size()!=2 || !args.path("summary").isTextual() || !args.path("hypotheses").isArray())
             throw new IllegalArgumentException("exact diagnostic fields required");
         for (var h:args.path("hypotheses")) {
-            if (!h.isObject() || h.size()!=9) throw new IllegalArgumentException("exact hypothesis fields required");
+            if (!h.isObject() || h.size()!=9) throw new IllegalArgumentException("exact hypothesis fields required: id,cause,assessment,explanation,supportRefs,counterRefs,missingEvidence,alternativeIds,nextProbes; include [] for inapplicable arrays");
             h.fieldNames().forEachRemaining(f -> { if (!fields.contains(f)) throw new IllegalArgumentException("unknown hypothesis field"); });
             for (String name:List.of("id","cause","assessment","explanation"))
                 if (!h.path(name).isTextual()) throw new IllegalArgumentException("diagnostic text fields required");
@@ -395,12 +415,22 @@ public final class OpsDecisionAgent {
         private final List<ProviderExchange> exchanges;
         private final Clock clock;
         private final ModelSettings settings;
-        private CapturingGateway(ProviderGateway delegate, List<ProviderExchange> exchanges, Clock clock, ModelSettings settings) {
+        private final java.util.function.BooleanSupplier terminalPhase;
+        private final java.util.function.BooleanSupplier knowledgeSearchAvailable;
+        private CapturingGateway(ProviderGateway delegate, List<ProviderExchange> exchanges, Clock clock, ModelSettings settings,
+                                 java.util.function.BooleanSupplier terminalPhase,java.util.function.BooleanSupplier knowledgeSearchAvailable) {
             this.delegate = delegate; this.exchanges = exchanges; this.clock = clock; this.settings = settings;
+            this.terminalPhase=terminalPhase;
+            this.knowledgeSearchAvailable=knowledgeSearchAvailable;
         }
         @Override public ModelResponse generate(ModelRequest request, RunScope scope) {
-            var bounded = new ModelRequest(request.messages(), request.tools(),
-                settings.parameters(), request.control());
+            boolean terminal=terminalPhase.getAsBoolean();
+            // After accepted diagnosis, preserve all evidence/history but reserve only the bounded final contract.
+            // A rejected final submission reopens investigation schemas on the next request.
+            var tools=terminal ? request.tools().stream().filter(t -> t.name().equals(PREFIX+"submit_decision")).toList()
+                : request.tools().stream().filter(t -> knowledgeSearchAvailable.getAsBoolean() || !t.name().equals(PREFIX+"search_knowledge")).toList();
+            var parameters=terminal ? new ModelParameters(0.0,Math.min(1024,settings.maxOutputTokens()),false,settings.reasoningMode()) : settings.parameters();
+            var bounded = new ModelRequest(request.messages(),tools,parameters,request.control());
             Instant start = clock.instant();
             // ExecutionControl is live runtime state, not serializable evaluation metadata.
             var recordedRequest = new RecordedRequest(List.copyOf(bounded.messages()), List.copyOf(bounded.tools()), bounded.parameters());
