@@ -239,7 +239,7 @@ public final class OpsDecisionAgent {
                 + "recheck. ESCALATE hands uncertainty or an out-of-scope problem to a human. " : "Use the tool schemas and observed evidence to choose a bounded operations decision. ")
                 + "Submit all six decision contract fields, null/empty where inapplicable. Never output only prose. "
                 + (profile==Profile.MULTISOURCE ? "Before submit_decision, use submit_diagnosis. Choose bounded logs/resources/changes/metrics to test hypotheses. "
-                    + "Once sufficient facts are collected, submit_diagnosis followed by submit_decision in the same response to avoid an unnecessary model round. "
+                    + "Submit diagnosis first. After it is accepted, submit_decision must be the only tool call in a separate response; never batch the terminal submission with diagnosis or read tools. "
                     + "Use fresh controller baseline as initial facts; collect additional probes for hypotheses. Reread baseline probes only "
                     + "to refresh stale evidence or resolve conflicting facts. "
                     + "Cite current complete evidence for support and counterevidence; missing/error/truncated/legacy facts "

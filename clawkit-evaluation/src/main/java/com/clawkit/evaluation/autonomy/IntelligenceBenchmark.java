@@ -39,7 +39,7 @@ public final class IntelligenceBenchmark {
                          int knowledgeVersions,int rejectedSubmissions,double seconds,String failureType) {}
     private final Path repo,output,compose;
     private final Spec spec;
-    private final String mode,context,project;
+    private final String mode,context,project,specFile;
     private final Clock clock=Clock.systemUTC();
     private final CommandExecutor process=new ProcessCommandExecutor();
     private final Map<String,String> environment;
@@ -49,8 +49,8 @@ public final class IntelligenceBenchmark {
     private long requests,tokens;
     private boolean owned;
 
-    private IntelligenceBenchmark(Path repo,Path output,Spec spec,String mode) throws Exception {
-        this.repo=repo.toRealPath(); this.output=output.toAbsolutePath().normalize(); this.spec=spec; this.mode=mode;
+    private IntelligenceBenchmark(Path repo,Path output,Spec spec,String mode,String specFile) throws Exception {
+        this.repo=repo.toRealPath(); this.output=output.toAbsolutePath().normalize(); this.spec=spec; this.mode=mode; this.specFile=specFile;
         compose=this.repo.resolve("ops-fixtures/intelligence-autonomy/compose.yaml").toRealPath();
         context=System.getenv().getOrDefault("CLAWKIT_DOCKER_CONTEXT",System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win") ? "desktop-linux" : "default");
         project="clawkit-autonomy-intelligence-"+UUID.randomUUID().toString().substring(0,8);
@@ -63,15 +63,18 @@ public final class IntelligenceBenchmark {
     public static void main(String[] args) throws Exception {
         if(!"true".equals(System.getenv("CLAWKIT_INTELLIGENCE_EVALUATION"))) throw new IllegalStateException("explicit isolated evaluation opt-in required");
         Path repo=Path.of(System.getProperty("intelligence.repo",System.getProperty("user.dir")));
-        var spec=JSON.readValue(repo.resolve("benchmarks/intelligence-autonomy-v1.json").toFile(),Spec.class);
+        String specFile=System.getProperty("intelligence.spec","intelligence-autonomy-v2.json");
+        if(!Set.of("intelligence-autonomy-v1.json","intelligence-autonomy-v2.json").contains(specFile)) throw new IllegalArgumentException("known frozen spec required");
+        var spec=JSON.readValue(repo.resolve("benchmarks").resolve(specFile).toFile(),Spec.class);
         String mode=System.getProperty("intelligence.mode","smoke");
-        if(!Set.of("smoke","frozen").contains(mode)) throw new IllegalArgumentException("smoke or frozen required");
-        new IntelligenceBenchmark(repo,Path.of(requiredProperty("intelligence.output")),spec,mode).run();
+        if(!Set.of("smoke","protocol-smoke","frozen").contains(mode)) throw new IllegalArgumentException("smoke, protocol-smoke or frozen required");
+        new IntelligenceBenchmark(repo,Path.of(requiredProperty("intelligence.output")),spec,mode,specFile).run();
     }
     public static List<Trial> trials(Spec spec,String mode) {
         var plan=new ArrayList<Trial>();
         for(int repeat=1;repeat<=spec.repetitions();repeat++) for(var s:spec.scenarios()) for(var arm:spec.arms()) {
             if(mode.equals("smoke") && !Set.of("application","dependency").contains(s.id())) continue;
+            if(mode.equals("protocol-smoke") && (!s.id().equals("oom") || arm!=Arm.CLAWKIT)) continue;
             plan.add(new Trial(s.id()+"-"+arm.name().toLowerCase(Locale.ROOT)+"-"+repeat,s,arm,repeat));
         }
         Collections.shuffle(plan,new Random(spec.seed())); return List.copyOf(plan);
@@ -83,7 +86,7 @@ public final class IntelligenceBenchmark {
         write(output.resolve("source-files.json"),sources);
         write(output.resolve("metadata.json"),Map.ofEntries(Map.entry("startedAt",clock.instant()),Map.entry("mode",mode),Map.entry("model",config.model()),
             Map.entry("gitHead",read(List.of("git","rev-parse","HEAD"))),Map.entry("sourceFingerprint",hash(JSON.writeValueAsBytes(sources))),
-            Map.entry("specHash",hash(Files.readAllBytes(repo.resolve("benchmarks/intelligence-autonomy-v1.json")))),Map.entry("project",project),
+            Map.entry("specFile",specFile),Map.entry("specHash",hash(Files.readAllBytes(repo.resolve("benchmarks").resolve(specFile)))),Map.entry("project",project),
             Map.entry("java",System.getProperty("java.version")),Map.entry("dockerVersion",docker(List.of("version","--format","{{.Server.Version}}"))),
             Map.entry("modelSettings",OpsDecisionAgent.ModelSettings.multisourceDefaults()),Map.entry("apiCostAvailable",false),
             Map.entry("knowledgeReviewKind","BENCHMARK_FIXTURE_REPLAY_AND_CONTROLLED_REVIEW_NOT_REAL_HUMAN_REVIEW"),

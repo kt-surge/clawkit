@@ -27,6 +27,7 @@ class IntelligenceBenchmarkTest {
         assertThat(trials(spec,"frozen")).hasSize(40).isEqualTo(trials(spec,"frozen"));
         assertThat(trials(spec,"frozen").stream().map(Trial::id).distinct()).hasSize(40);
         assertThat(trials(spec,"smoke")).hasSize(8);
+        assertThat(trials(spec,"protocol-smoke")).singleElement().satisfies(t -> { assertThat(t.arm()).isEqualTo(Arm.CLAWKIT); assertThat(t.scenario().id()).isEqualTo("oom"); });
         assertThat(spec.scenarios()).filteredOn(s -> s.kind().startsWith("CONTROLLED_")).hasSize(5);
         assertThat(spec.globalProviderCallLimit()).isEqualTo(180); assertThat(spec.globalTokenLimit()).isEqualTo(900000);
     }

@@ -1,0 +1,24 @@
+{
+  "version": "intelligence-autonomy-v2-terminal-exclusive",
+  "seed": 20261001,
+  "repetitions": 1,
+  "arms": ["CLAWKIT", "STRONG_RULES", "GENERIC_AGENT", "NO_KNOWLEDGE"],
+  "decisionDeadlineSeconds": 120,
+  "providerCallLimit": 6,
+  "toolCallLimit": 12,
+  "tokenLimit": 30000,
+  "globalProviderCallLimit": 180,
+  "globalTokenLimit": 900000,
+  "scenarios": [
+    {"id":"application","kind":"ACTUAL_CONTAINER_PROCESS_FAULT","cause":"APPLICATION_FAILURE","choice":"RESTART","eligible":true},
+    {"id":"service-exit","kind":"ACTUAL_CONTAINER_FATAL_EXIT_7","cause":"APPLICATION_FAILURE","choice":"START","eligible":true},
+    {"id":"dependency","kind":"ACTUAL_CONTAINER_DEPENDENCY_FAULT","cause":"DEPENDENCY_FAILURE","choice":"HANDOFF","eligible":false},
+    {"id":"configuration","kind":"CONTROLLED_CONFIG_SIMULATION_ACTUAL_CONTAINER","cause":"CONFIGURATION_MISMATCH","choice":"HANDOFF","eligible":false},
+    {"id":"historical","kind":"ACTUAL_OLD_LOG_CURRENT_HEALTHY","cause":"SELF_RECOVERY","choice":"WAIT","eligible":false},
+    {"id":"oom","kind":"ACTUAL_CGROUP_OOM","cause":"RESOURCE_EXHAUSTION","choice":"HANDOFF","eligible":false},
+    {"id":"missing","kind":"CONTROLLED_MISSING_SOURCE_ACTUAL_CONTAINER","cause":"APPLICATION_FAILURE","choice":"HANDOFF","eligible":false,"allowAbstention":true},
+    {"id":"stale","kind":"CONTROLLED_STALE_SOURCE_ACTUAL_CONTAINER","cause":"APPLICATION_FAILURE","choice":"HANDOFF","eligible":false,"allowAbstention":true},
+    {"id":"truncated","kind":"CONTROLLED_TRUNCATED_SOURCE_ACTUAL_CONTAINER","cause":"APPLICATION_FAILURE","choice":"HANDOFF","eligible":false,"allowAbstention":true},
+    {"id":"conflict","kind":"CONTROLLED_CONFLICT_SOURCE_ACTUAL_CONTAINER","cause":"APPLICATION_FAILURE","choice":"HANDOFF","eligible":false,"allowAbstention":true}
+  ]
+}
