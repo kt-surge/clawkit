@@ -58,10 +58,41 @@ Copy-Item (Join-Path $OutputDir $jarName) (Join-Path $winDir "clawkit.jar")
 Copy-Item (Join-Path $repoRoot "clawkit.cmd") (Join-Path $winDir "clawkit.cmd")
 Copy-Item (Join-Path $repoRoot "clawkit.sh") (Join-Path $winDir "clawkit.sh")
 Copy-Item (Join-Path $repoRoot "docs/managed-operations.md") (Join-Path $winDir "README.md")
+$packageReadme=Join-Path $winDir 'README.md'
+$readmeText=[System.IO.File]::ReadAllText($packageReadme) -replace '\]\(\.\./','](./'
+[System.IO.File]::WriteAllText($packageReadme,$readmeText,[System.Text.UTF8Encoding]::new($false))
+$docsDir=Join-Path $winDir 'docs'
+New-Item -ItemType Directory -Force $docsDir | Out-Null
+foreach($name in @('managed-operations.md','layered-autonomy-implementation-plan.md','autonomy-evaluation.md')) {
+    Copy-Item (Join-Path $repoRoot ('docs/'+$name)) (Join-Path $docsDir $name)
+}
+$benchmarkDir=Join-Path $winDir 'benchmarks'
+New-Item -ItemType Directory -Force $benchmarkDir | Out-Null
+Copy-Item (Join-Path $repoRoot 'benchmarks/layered-autonomy-v1.json') $benchmarkDir
+Copy-Item (Join-Path $repoRoot 'benchmarks/intelligence-autonomy-v1.json') $benchmarkDir
+Copy-Item (Join-Path $repoRoot 'benchmarks/evidence') $benchmarkDir -Recurse
+$examplesDir=Join-Path $winDir 'examples/autonomy'
+New-Item -ItemType Directory -Force $examplesDir | Out-Null
+Copy-Item (Join-Path $repoRoot 'examples/autonomy/*.json') $examplesDir
+Copy-Item (Join-Path $repoRoot 'examples/autonomy/*.yaml') $examplesDir
 $fixtureDir = Join-Path $winDir "ops-fixtures/layered-autonomy"
 New-Item -ItemType Directory -Force $fixtureDir | Out-Null
 Copy-Item (Join-Path $repoRoot "ops-fixtures/layered-autonomy/compose.yaml") (Join-Path $fixtureDir "compose.yaml")
 Copy-Item (Join-Path $repoRoot "ops-fixtures/layered-autonomy/server.py") (Join-Path $fixtureDir "server.py")
+foreach($fixtureName in @('diagnostic-autonomy','intelligence-autonomy')) {
+    $extraFixture=Join-Path $winDir ('ops-fixtures/'+$fixtureName)
+    New-Item -ItemType Directory -Force $extraFixture | Out-Null
+    Copy-Item (Join-Path $repoRoot ('ops-fixtures/'+$fixtureName+'/compose.yaml')) $extraFixture
+    Copy-Item (Join-Path $repoRoot ('ops-fixtures/'+$fixtureName+'/server.py')) $extraFixture
+}
+$packagedFiles=[ordered]@{}
+Get-ChildItem -LiteralPath $winDir -Recurse -File | ForEach-Object {
+    $name=$_.FullName.Substring($winDir.Length+1).Replace('\','/')
+    $packagedFiles[$name]=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+$buildManifest=@{ version=$Version; packagedAt=[DateTime]::UtcNow.ToString('o'); gitHead=(& git -C $repoRoot rev-parse HEAD);
+    trackedWorktreeDirty=(@(& git -C $repoRoot status --porcelain --untracked-files=no).Count -gt 0); files=$packagedFiles }
+[System.IO.File]::WriteAllText((Join-Path $winDir 'build-manifest.json'),($buildManifest | ConvertTo-Json -Depth 10),[System.Text.UTF8Encoding]::new($false))
 
 # ═══════════════════════════════════════════════════════════════
 # 3. Smoke JAR (before ZIP, catches shading problems early)
@@ -77,7 +108,7 @@ $jarVersion = & java -jar $jarPath --version 2>&1
 $expectedJarVersion = "clawkit $Version"
 if ($jarVersion -ne $expectedJarVersion) { throw "JAR --version mismatch: got '$jarVersion', expected '$expectedJarVersion'" }
 $autonomyHelp = & java -jar $jarPath autonomy --help 2>&1
-if ($LASTEXITCODE -ne 0 -or "$autonomyHelp" -notmatch "register") { throw "JAR autonomy --help failed" }
+if ($LASTEXITCODE -ne 0 -or "$autonomyHelp" -notmatch "diagnose" -or "$autonomyHelp" -notmatch "knowledge-search" -or "$autonomyHelp" -notmatch "alert-listen") { throw "JAR autonomy --help lacks intelligence commands" }
 
 # ═══════════════════════════════════════════════════════════════
 # 4. Create ZIP
@@ -108,6 +139,11 @@ foreach ($f in @($unpackedJar, $unpackedCmd, $unpackedReadme, (Join-Path $unpack
     (Join-Path $unpackDir "ops-fixtures/layered-autonomy/compose.yaml"), (Join-Path $unpackDir "ops-fixtures/layered-autonomy/server.py"))) {
     if (-not (Test-Path $f)) { throw "Missing in ZIP: $(Split-Path $f -Leaf)" }
     if ((Get-Item $f).Length -eq 0) { throw "Zero-byte file in ZIP: $(Split-Path $f -Leaf)" }
+}
+$unpackedManifest=Get-Content -LiteralPath (Join-Path $unpackDir 'build-manifest.json') -Raw | ConvertFrom-Json
+foreach($entry in $unpackedManifest.files.PSObject.Properties) {
+    $file=Join-Path $unpackDir $entry.Name
+    if((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -ne $entry.Value) { throw "Extracted package content hash mismatch: $($entry.Name)" }
 }
 
 # Clean up unpack dir

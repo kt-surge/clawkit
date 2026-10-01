@@ -1,6 +1,6 @@
 # 分层自治隔离评测
 
-本评测针对 `ops-fixtures/layered-autonomy` 中的真实 Linux 容器，使用真实模型。它评估登记服务的分层处置与可靠闭环，不代表线上稳定性、真实用户规模或商用验收。
+首轮评测针对 `ops-fixtures/layered-autonomy` 中的真实 Linux 容器，使用真实模型。它评估登记服务的分层处置与可靠闭环，不代表线上稳定性、真实用户规模或商用验收。新一轮多源诊断与知识消融采用独立场景和输出目录，见本文末节。
 
 2026-09-30 的首轮冻结结果见 [公开评测记录](../benchmarks/evidence/layered-autonomy-20260930/README.md)，包含全部 48 个实例的报告、失败分析、冻结计划、汇总和独立审计回执。原始模型轨迹及运行目录留在本地，公开回执不替代完整原始证据。
 
@@ -61,3 +61,26 @@ mvn -B -ntp -pl clawkit-evaluation -am -Pautonomy-evaluation verify `
 本轮独立验收另保存 `audit-evidence.ps1` / `audit.json`，从逐次交换重新核对实际用量、工具／参数／模型一致性、授权／Attempt、恢复与重派发记录。`source-inputs.zip` / `source-archive.json` 保存源码输入快照及与冻结哈希一致的回执；在记录的 Git HEAD 上恢复这些输入，历史实验结果不混入快照。`image-provenance.json` 保存实际镜像 digest／平台，`cleanup-audit.json` 记录清理后独立查询。原始生成报告不改写，解释和局限另外记录在 `analysis.md`。
 
 一轮 48 实例只是冻结小样本试验；即使全部通过也不能称作生产稳定性。没有人工时间基线不写“效率提升”，没有实际扣费不写节省费用。复现是复现相同合同、场景与评分口径，不能承诺云模型每次相同输出。
+
+## 新一轮：多源诊断与知识消融
+
+协议为 `benchmarks/intelligence-autonomy-v1.json`，夹具为 `ops-fixtures/intelligence-autonomy`。冻结前完成开发冒烟，正式运行拒绝复用输出目录；旧 P4 保持原样。10 个场景、四组、每组每场景一次，共 40 个实例。订单/库存依赖、配置 v4/v3 和 96 MiB/384 MiB OOM 为新配置组合；故障家族与开发样本相同，不能据此宣称跨故障模板泛化。
+
+四组为 CLAWKIT（多源诊断与知识）、强规则、普通 Agent、CLAWKIT 无知识。模型组共享初始发现、全部采证/检索工具合同、模型设置、120 秒/6 请求/12 工具/30000 Token 和执行权限。普通 Agent 使用通用指导；无知识组只移除知识内容，保留 CLAWKIT 指导。强规则读取全部来源并优先检查反证，不隐藏日志、变更、资源或缺失情况。按需采证次数可能不同，完整工具轨迹保留。所有组使用同一产品授权、现场复查与独立业务验证；比较不是不受约束的 Agent。
+
+固定处置知识为依赖交接、启动、重启和 OOM 交接四个通用流程，用开发阶段的合成事实正/负例回放并设置受控 REVIEWED 状态；它不读取本次隐藏真值，不包含 v4/v3 或新内存参数。这是知识机制的受控对照，不代表真实人工审阅或组织经验库。正式运行不会依据失败修改流程或重新评分。
+
+分别报告：主假设根因命中（10 个事前标记根因任务为分母）、诊断合同通过、合理未知、处置选择、合资格自主恢复（每组 2 个任务）、禁止/重复动作、失败类别、全部实际请求/Token 与缺失 usage。主假设取首个 SUPPORTED，否则取首个假设；罗列多个原因不算全部命中。缺失/过期/截断/冲突允许合理 UNKNOWN，但不计根因命中；系统兜底不计模型诊断或选择成功。进程退出使用真实应用 fatal exit 7，避免把人工停止误标为应用根因。资源快照不是内存历史，来源 resolved 不是独立业务恢复。
+
+```powershell
+$env:CLAWKIT_INTELLIGENCE_EVALUATION='true'
+mvn -B -ntp -pl clawkit-evaluation -am -Pintelligence-evaluation verify `
+  '-Dintelligence.repo=D:/Agent/miniclaw' `
+  '-Dintelligence.mode=frozen' `
+  '-Dintelligence.model=deepseek-v4-flash' `
+  '-Dintelligence.output=D:/Agent/miniclaw/tmp/intelligence-frozen-new'
+```
+
+正式全局上限 180 请求、900000 Token，开始前预留完整单任务预算，额度不足保留 NOT_RUN。`smoke` 模式只选应用异常/依赖异常两类，共八实例，模型最多 36 请求/180000 Token。异常来源是覆盖真实容器的受控观测，配置错误为夹具模拟，OOM 为实际 cgroup 杀进程，逐实例标明。
+
+事件关联另用六个事前标记的事件对验证固定拓扑与时间窗，保留一个直接依赖正例和五个独立/跨环境/超窗负例；来源与其他目标绑定是受控数据，不能作为真实 Alertmanager 或共同根因推断的准确率。`relations.json` 与模型结果分开。三次精确健康/业务 JSON 外部检查、动作 journal、全部失败原始交换、源码哈希和清理回执持续留存。

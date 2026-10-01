@@ -1,0 +1,32 @@
+services:
+  orders:
+    image: python:3.13-alpine
+    command: [python, -u, /fixture/server.py]
+    environment:
+      FIXTURE_ROLE: orders
+      DEPENDENCY_URL: http://stock:8080/health
+    mem_limit: 96m
+    volumes: ["./server.py:/fixture/server.py:ro"]
+    ports: ["127.0.0.1:${INTELLIGENCE_ORDERS_PORT:-18380}:8080"]
+    restart: "no"
+    depends_on:
+      stock: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=1)"]
+      interval: 2s
+      timeout: 2s
+      retries: 2
+      start_period: 2s
+  stock:
+    image: python:3.13-alpine
+    command: [python, -u, /fixture/server.py]
+    environment: {FIXTURE_ROLE: stock}
+    volumes: ["./server.py:/fixture/server.py:ro"]
+    ports: ["127.0.0.1:${INTELLIGENCE_STOCK_PORT:-18381}:8080"]
+    restart: "no"
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=1)"]
+      interval: 2s
+      timeout: 2s
+      retries: 2
+      start_period: 2s
