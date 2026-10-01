@@ -1,0 +1,29 @@
+{
+  "auditPassed": true,
+  "jarSha256": "07a5b222a218f44ee3f00ce169033258e201cefa02b370511969944879a1322e",
+  "attempts": 2,
+  "providerRequests": 6,
+  "actualTokens": 36802.0,
+  "unavailableUsage": 0,
+  "modelDecisions": 2,
+  "details": [
+    {
+      "externalExactBusiness": true,
+      "attemptId": "att-aca1a1c7-eed1-451b-b828-5b9c99667694",
+      "source": "POLICY",
+      "samples": 3,
+      "spanSeconds": 9.9153053
+    },
+    {
+      "externalExactBusiness": true,
+      "attemptId": "att-473e2fb8-e726-460c-89bc-cc77cd927642",
+      "source": "HUMAN",
+      "samples": 3,
+      "spanSeconds": 9.7105334
+    }
+  ],
+  "notificationsSent": 0,
+  "remainingContainers": 0,
+  "apiCost": null,
+  "scope": "DEVELOPMENT_PACKAGE_SMOKE_NOT_FROZEN_RESULTS"
+}

@@ -1,0 +1,593 @@
+{
+  "relationCases" : [ {
+    "left" : "orders",
+    "right" : "stock",
+    "expectedRelated" : true
+  }, {
+    "left" : "orders",
+    "right" : "unrelated",
+    "expectedRelated" : false
+  }, {
+    "left" : "orders",
+    "right" : "crossenv",
+    "expectedRelated" : false
+  }, {
+    "left" : "orders",
+    "right" : "late",
+    "expectedRelated" : false
+  }, {
+    "left" : "stock",
+    "right" : "unrelated",
+    "expectedRelated" : false
+  }, {
+    "left" : "stock",
+    "right" : "crossenv",
+    "expectedRelated" : false
+  } ],
+  "spec" : {
+    "version" : "intelligence-autonomy-v2-terminal-exclusive",
+    "seed" : 20261001,
+    "repetitions" : 1,
+    "arms" : [ "CLAWKIT", "STRONG_RULES", "GENERIC_AGENT", "NO_KNOWLEDGE" ],
+    "decisionDeadlineSeconds" : 120,
+    "providerCallLimit" : 6,
+    "toolCallLimit" : 12,
+    "tokenLimit" : 30000,
+    "globalProviderCallLimit" : 180,
+    "globalTokenLimit" : 900000,
+    "scenarios" : [ {
+      "id" : "application",
+      "kind" : "ACTUAL_CONTAINER_PROCESS_FAULT",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "RESTART",
+      "eligible" : true,
+      "allowAbstention" : false
+    }, {
+      "id" : "service-exit",
+      "kind" : "ACTUAL_CONTAINER_FATAL_EXIT_7",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "START",
+      "eligible" : true,
+      "allowAbstention" : false
+    }, {
+      "id" : "dependency",
+      "kind" : "ACTUAL_CONTAINER_DEPENDENCY_FAULT",
+      "cause" : "DEPENDENCY_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    }, {
+      "id" : "configuration",
+      "kind" : "CONTROLLED_CONFIG_SIMULATION_ACTUAL_CONTAINER",
+      "cause" : "CONFIGURATION_MISMATCH",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    }, {
+      "id" : "historical",
+      "kind" : "ACTUAL_OLD_LOG_CURRENT_HEALTHY",
+      "cause" : "SELF_RECOVERY",
+      "choice" : "WAIT",
+      "eligible" : false,
+      "allowAbstention" : false
+    }, {
+      "id" : "oom",
+      "kind" : "ACTUAL_CGROUP_OOM",
+      "cause" : "RESOURCE_EXHAUSTION",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    }, {
+      "id" : "missing",
+      "kind" : "CONTROLLED_MISSING_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    }, {
+      "id" : "stale",
+      "kind" : "CONTROLLED_STALE_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    }, {
+      "id" : "truncated",
+      "kind" : "CONTROLLED_TRUNCATED_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    }, {
+      "id" : "conflict",
+      "kind" : "CONTROLLED_CONFLICT_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    } ]
+  },
+  "orderedInstances" : [ {
+    "id" : "dependency-no_knowledge-1",
+    "scenario" : {
+      "id" : "dependency",
+      "kind" : "ACTUAL_CONTAINER_DEPENDENCY_FAULT",
+      "cause" : "DEPENDENCY_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "NO_KNOWLEDGE",
+    "repetition" : 1
+  }, {
+    "id" : "service-exit-generic_agent-1",
+    "scenario" : {
+      "id" : "service-exit",
+      "kind" : "ACTUAL_CONTAINER_FATAL_EXIT_7",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "START",
+      "eligible" : true,
+      "allowAbstention" : false
+    },
+    "arm" : "GENERIC_AGENT",
+    "repetition" : 1
+  }, {
+    "id" : "historical-clawkit-1",
+    "scenario" : {
+      "id" : "historical",
+      "kind" : "ACTUAL_OLD_LOG_CURRENT_HEALTHY",
+      "cause" : "SELF_RECOVERY",
+      "choice" : "WAIT",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "CLAWKIT",
+    "repetition" : 1
+  }, {
+    "id" : "oom-clawkit-1",
+    "scenario" : {
+      "id" : "oom",
+      "kind" : "ACTUAL_CGROUP_OOM",
+      "cause" : "RESOURCE_EXHAUSTION",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "CLAWKIT",
+    "repetition" : 1
+  }, {
+    "id" : "configuration-clawkit-1",
+    "scenario" : {
+      "id" : "configuration",
+      "kind" : "CONTROLLED_CONFIG_SIMULATION_ACTUAL_CONTAINER",
+      "cause" : "CONFIGURATION_MISMATCH",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "CLAWKIT",
+    "repetition" : 1
+  }, {
+    "id" : "application-strong_rules-1",
+    "scenario" : {
+      "id" : "application",
+      "kind" : "ACTUAL_CONTAINER_PROCESS_FAULT",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "RESTART",
+      "eligible" : true,
+      "allowAbstention" : false
+    },
+    "arm" : "STRONG_RULES",
+    "repetition" : 1
+  }, {
+    "id" : "truncated-generic_agent-1",
+    "scenario" : {
+      "id" : "truncated",
+      "kind" : "CONTROLLED_TRUNCATED_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "GENERIC_AGENT",
+    "repetition" : 1
+  }, {
+    "id" : "historical-generic_agent-1",
+    "scenario" : {
+      "id" : "historical",
+      "kind" : "ACTUAL_OLD_LOG_CURRENT_HEALTHY",
+      "cause" : "SELF_RECOVERY",
+      "choice" : "WAIT",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "GENERIC_AGENT",
+    "repetition" : 1
+  }, {
+    "id" : "conflict-strong_rules-1",
+    "scenario" : {
+      "id" : "conflict",
+      "kind" : "CONTROLLED_CONFLICT_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "STRONG_RULES",
+    "repetition" : 1
+  }, {
+    "id" : "missing-generic_agent-1",
+    "scenario" : {
+      "id" : "missing",
+      "kind" : "CONTROLLED_MISSING_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "GENERIC_AGENT",
+    "repetition" : 1
+  }, {
+    "id" : "truncated-strong_rules-1",
+    "scenario" : {
+      "id" : "truncated",
+      "kind" : "CONTROLLED_TRUNCATED_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "STRONG_RULES",
+    "repetition" : 1
+  }, {
+    "id" : "stale-clawkit-1",
+    "scenario" : {
+      "id" : "stale",
+      "kind" : "CONTROLLED_STALE_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "CLAWKIT",
+    "repetition" : 1
+  }, {
+    "id" : "stale-generic_agent-1",
+    "scenario" : {
+      "id" : "stale",
+      "kind" : "CONTROLLED_STALE_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "GENERIC_AGENT",
+    "repetition" : 1
+  }, {
+    "id" : "stale-no_knowledge-1",
+    "scenario" : {
+      "id" : "stale",
+      "kind" : "CONTROLLED_STALE_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "NO_KNOWLEDGE",
+    "repetition" : 1
+  }, {
+    "id" : "dependency-strong_rules-1",
+    "scenario" : {
+      "id" : "dependency",
+      "kind" : "ACTUAL_CONTAINER_DEPENDENCY_FAULT",
+      "cause" : "DEPENDENCY_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "STRONG_RULES",
+    "repetition" : 1
+  }, {
+    "id" : "oom-generic_agent-1",
+    "scenario" : {
+      "id" : "oom",
+      "kind" : "ACTUAL_CGROUP_OOM",
+      "cause" : "RESOURCE_EXHAUSTION",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "GENERIC_AGENT",
+    "repetition" : 1
+  }, {
+    "id" : "service-exit-strong_rules-1",
+    "scenario" : {
+      "id" : "service-exit",
+      "kind" : "ACTUAL_CONTAINER_FATAL_EXIT_7",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "START",
+      "eligible" : true,
+      "allowAbstention" : false
+    },
+    "arm" : "STRONG_RULES",
+    "repetition" : 1
+  }, {
+    "id" : "conflict-generic_agent-1",
+    "scenario" : {
+      "id" : "conflict",
+      "kind" : "CONTROLLED_CONFLICT_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "GENERIC_AGENT",
+    "repetition" : 1
+  }, {
+    "id" : "truncated-clawkit-1",
+    "scenario" : {
+      "id" : "truncated",
+      "kind" : "CONTROLLED_TRUNCATED_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "CLAWKIT",
+    "repetition" : 1
+  }, {
+    "id" : "application-clawkit-1",
+    "scenario" : {
+      "id" : "application",
+      "kind" : "ACTUAL_CONTAINER_PROCESS_FAULT",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "RESTART",
+      "eligible" : true,
+      "allowAbstention" : false
+    },
+    "arm" : "CLAWKIT",
+    "repetition" : 1
+  }, {
+    "id" : "dependency-clawkit-1",
+    "scenario" : {
+      "id" : "dependency",
+      "kind" : "ACTUAL_CONTAINER_DEPENDENCY_FAULT",
+      "cause" : "DEPENDENCY_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "CLAWKIT",
+    "repetition" : 1
+  }, {
+    "id" : "historical-no_knowledge-1",
+    "scenario" : {
+      "id" : "historical",
+      "kind" : "ACTUAL_OLD_LOG_CURRENT_HEALTHY",
+      "cause" : "SELF_RECOVERY",
+      "choice" : "WAIT",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "NO_KNOWLEDGE",
+    "repetition" : 1
+  }, {
+    "id" : "configuration-strong_rules-1",
+    "scenario" : {
+      "id" : "configuration",
+      "kind" : "CONTROLLED_CONFIG_SIMULATION_ACTUAL_CONTAINER",
+      "cause" : "CONFIGURATION_MISMATCH",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "STRONG_RULES",
+    "repetition" : 1
+  }, {
+    "id" : "stale-strong_rules-1",
+    "scenario" : {
+      "id" : "stale",
+      "kind" : "CONTROLLED_STALE_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "STRONG_RULES",
+    "repetition" : 1
+  }, {
+    "id" : "application-no_knowledge-1",
+    "scenario" : {
+      "id" : "application",
+      "kind" : "ACTUAL_CONTAINER_PROCESS_FAULT",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "RESTART",
+      "eligible" : true,
+      "allowAbstention" : false
+    },
+    "arm" : "NO_KNOWLEDGE",
+    "repetition" : 1
+  }, {
+    "id" : "truncated-no_knowledge-1",
+    "scenario" : {
+      "id" : "truncated",
+      "kind" : "CONTROLLED_TRUNCATED_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "NO_KNOWLEDGE",
+    "repetition" : 1
+  }, {
+    "id" : "oom-strong_rules-1",
+    "scenario" : {
+      "id" : "oom",
+      "kind" : "ACTUAL_CGROUP_OOM",
+      "cause" : "RESOURCE_EXHAUSTION",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "STRONG_RULES",
+    "repetition" : 1
+  }, {
+    "id" : "service-exit-no_knowledge-1",
+    "scenario" : {
+      "id" : "service-exit",
+      "kind" : "ACTUAL_CONTAINER_FATAL_EXIT_7",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "START",
+      "eligible" : true,
+      "allowAbstention" : false
+    },
+    "arm" : "NO_KNOWLEDGE",
+    "repetition" : 1
+  }, {
+    "id" : "conflict-clawkit-1",
+    "scenario" : {
+      "id" : "conflict",
+      "kind" : "CONTROLLED_CONFLICT_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "CLAWKIT",
+    "repetition" : 1
+  }, {
+    "id" : "application-generic_agent-1",
+    "scenario" : {
+      "id" : "application",
+      "kind" : "ACTUAL_CONTAINER_PROCESS_FAULT",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "RESTART",
+      "eligible" : true,
+      "allowAbstention" : false
+    },
+    "arm" : "GENERIC_AGENT",
+    "repetition" : 1
+  }, {
+    "id" : "oom-no_knowledge-1",
+    "scenario" : {
+      "id" : "oom",
+      "kind" : "ACTUAL_CGROUP_OOM",
+      "cause" : "RESOURCE_EXHAUSTION",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "NO_KNOWLEDGE",
+    "repetition" : 1
+  }, {
+    "id" : "missing-no_knowledge-1",
+    "scenario" : {
+      "id" : "missing",
+      "kind" : "CONTROLLED_MISSING_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "NO_KNOWLEDGE",
+    "repetition" : 1
+  }, {
+    "id" : "dependency-generic_agent-1",
+    "scenario" : {
+      "id" : "dependency",
+      "kind" : "ACTUAL_CONTAINER_DEPENDENCY_FAULT",
+      "cause" : "DEPENDENCY_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "GENERIC_AGENT",
+    "repetition" : 1
+  }, {
+    "id" : "missing-clawkit-1",
+    "scenario" : {
+      "id" : "missing",
+      "kind" : "CONTROLLED_MISSING_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "CLAWKIT",
+    "repetition" : 1
+  }, {
+    "id" : "conflict-no_knowledge-1",
+    "scenario" : {
+      "id" : "conflict",
+      "kind" : "CONTROLLED_CONFLICT_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "NO_KNOWLEDGE",
+    "repetition" : 1
+  }, {
+    "id" : "missing-strong_rules-1",
+    "scenario" : {
+      "id" : "missing",
+      "kind" : "CONTROLLED_MISSING_SOURCE_ACTUAL_CONTAINER",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : true
+    },
+    "arm" : "STRONG_RULES",
+    "repetition" : 1
+  }, {
+    "id" : "configuration-no_knowledge-1",
+    "scenario" : {
+      "id" : "configuration",
+      "kind" : "CONTROLLED_CONFIG_SIMULATION_ACTUAL_CONTAINER",
+      "cause" : "CONFIGURATION_MISMATCH",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "NO_KNOWLEDGE",
+    "repetition" : 1
+  }, {
+    "id" : "service-exit-clawkit-1",
+    "scenario" : {
+      "id" : "service-exit",
+      "kind" : "ACTUAL_CONTAINER_FATAL_EXIT_7",
+      "cause" : "APPLICATION_FAILURE",
+      "choice" : "START",
+      "eligible" : true,
+      "allowAbstention" : false
+    },
+    "arm" : "CLAWKIT",
+    "repetition" : 1
+  }, {
+    "id" : "historical-strong_rules-1",
+    "scenario" : {
+      "id" : "historical",
+      "kind" : "ACTUAL_OLD_LOG_CURRENT_HEALTHY",
+      "cause" : "SELF_RECOVERY",
+      "choice" : "WAIT",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "STRONG_RULES",
+    "repetition" : 1
+  }, {
+    "id" : "configuration-generic_agent-1",
+    "scenario" : {
+      "id" : "configuration",
+      "kind" : "CONTROLLED_CONFIG_SIMULATION_ACTUAL_CONTAINER",
+      "cause" : "CONFIGURATION_MISMATCH",
+      "choice" : "HANDOFF",
+      "eligible" : false,
+      "allowAbstention" : false
+    },
+    "arm" : "GENERIC_AGENT",
+    "repetition" : 1
+  } ],
+  "knowledgeRecipes" : [ "dependency", "restart", "start", "oom" ],
+  "mode" : "frozen"
+}

@@ -1,0 +1,11 @@
+{
+  "businessExactMatch": true,
+  "recovered": true,
+  "evidence": {
+    "source": "POLICY",
+    "attemptId": "att-aca1a1c7-eed1-451b-b828-5b9c99667694",
+    "incidentId": "inc-0230a1d9-eda3-40b1-8b1b-e07525f70936",
+    "sampleCount": 3,
+    "action": "RESTART_UNHEALTHY_V1"
+  }
+}

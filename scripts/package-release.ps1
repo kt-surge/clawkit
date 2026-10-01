@@ -58,6 +58,7 @@ Copy-Item (Join-Path $OutputDir $jarName) (Join-Path $winDir "clawkit.jar")
 Copy-Item (Join-Path $repoRoot "clawkit.cmd") (Join-Path $winDir "clawkit.cmd")
 Copy-Item (Join-Path $repoRoot "clawkit.sh") (Join-Path $winDir "clawkit.sh")
 Copy-Item (Join-Path $repoRoot "docs/managed-operations.md") (Join-Path $winDir "README.md")
+Copy-Item (Join-Path $repoRoot "TODO.md") (Join-Path $winDir "TODO.md")
 $packageReadme=Join-Path $winDir 'README.md'
 $readmeText=[System.IO.File]::ReadAllText($packageReadme) -replace '\]\(\.\./','](./'
 [System.IO.File]::WriteAllText($packageReadme,$readmeText,[System.Text.UTF8Encoding]::new($false))

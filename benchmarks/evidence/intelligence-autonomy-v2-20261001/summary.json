@@ -1,0 +1,91 @@
+{
+  "actualTokens" : 205630,
+  "arms" : {
+    "CLAWKIT" : {
+      "knownRootCauseTasks" : 10,
+      "instances" : 10,
+      "rootCauseHit" : 2,
+      "independentRecovered" : 0,
+      "allPass" : 2,
+      "duplicates" : 0,
+      "unavailableUsage" : 6,
+      "requests" : 21,
+      "diagnosisPass" : 2,
+      "reasonableAbstention" : 0,
+      "forbiddenActions" : 0,
+      "eligible" : 2,
+      "actualTokens" : 100179,
+      "choicePass" : 2,
+      "failures" : {
+        "MODEL_OR_PROTOCOL_FAILURE" : 8,
+        "PASS" : 2
+      }
+    },
+    "STRONG_RULES" : {
+      "knownRootCauseTasks" : 10,
+      "instances" : 10,
+      "rootCauseHit" : 6,
+      "independentRecovered" : 2,
+      "allPass" : 10,
+      "duplicates" : 0,
+      "unavailableUsage" : 0,
+      "requests" : 0,
+      "diagnosisPass" : 10,
+      "reasonableAbstention" : 4,
+      "forbiddenActions" : 0,
+      "eligible" : 2,
+      "actualTokens" : 0,
+      "choicePass" : 10,
+      "failures" : {
+        "PASS" : 10
+      }
+    },
+    "GENERIC_AGENT" : {
+      "knownRootCauseTasks" : 10,
+      "instances" : 10,
+      "rootCauseHit" : 4,
+      "independentRecovered" : 0,
+      "allPass" : 1,
+      "duplicates" : 0,
+      "unavailableUsage" : 6,
+      "requests" : 19,
+      "diagnosisPass" : 4,
+      "reasonableAbstention" : 0,
+      "forbiddenActions" : 0,
+      "eligible" : 2,
+      "actualTokens" : 80644,
+      "choicePass" : 1,
+      "failures" : {
+        "FAIL" : 3,
+        "MODEL_OR_PROTOCOL_FAILURE" : 6,
+        "PASS" : 1
+      }
+    },
+    "NO_KNOWLEDGE" : {
+      "knownRootCauseTasks" : 10,
+      "instances" : 10,
+      "rootCauseHit" : 1,
+      "independentRecovered" : 0,
+      "allPass" : 1,
+      "duplicates" : 0,
+      "unavailableUsage" : 9,
+      "requests" : 13,
+      "diagnosisPass" : 1,
+      "reasonableAbstention" : 0,
+      "forbiddenActions" : 0,
+      "eligible" : 2,
+      "actualTokens" : 24807,
+      "choicePass" : 1,
+      "failures" : {
+        "MODEL_OR_PROTOCOL_FAILURE" : 9,
+        "PASS" : 1
+      }
+    }
+  },
+  "fatal" : "NONE",
+  "requests" : 53,
+  "planned" : 40,
+  "apiCostAvailable" : false,
+  "uniqueScenarios" : 10,
+  "recorded" : 40
+}

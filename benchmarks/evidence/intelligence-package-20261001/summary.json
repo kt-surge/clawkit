@@ -1,0 +1,25 @@
+{
+  "apiCost": null,
+  "automatic": {
+    "source": "POLICY",
+    "attemptId": "att-aca1a1c7-eed1-451b-b828-5b9c99667694",
+    "incidentId": "inc-0230a1d9-eda3-40b1-8b1b-e07525f70936",
+    "sampleCount": 3,
+    "action": "RESTART_UNHEALTHY_V1"
+  },
+  "completedAt": "2026-10-01T06:45:22.7998095Z",
+  "attempts": 2,
+  "evidenceKind": "DEVELOPMENT_PRODUCT_SMOKE_NOT_FROZEN_BENCHMARK",
+  "providerCalls": 6,
+  "productSmokePassed": true,
+  "notificationsSent": 0,
+  "human": {
+    "source": "HUMAN",
+    "attemptId": "att-473e2fb8-e726-460c-89bc-cc77cd927642",
+    "incidentId": "inc-28bf3bd4-179d-4e34-b17f-ac34ea27127e",
+    "sampleCount": 3,
+    "action": "RESTART_UNHEALTHY_V1"
+  },
+  "feeUnavailable": true,
+  "actualTokens": 36802
+}

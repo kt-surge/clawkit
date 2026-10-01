@@ -1,0 +1,48 @@
+{
+  "experimentDate": "2026-10-01",
+  "gitHeadAtRun": "fad996bdb6fa56df841f399525c4e8e49f09dce6",
+  "sourceFingerprint": "045134121bbf05707f88f2a6c1b5f5d5010ffdc51ed3667f04a7740681be2b07",
+  "scenarioSpecSha256": "28ad58fb114ea4182c70b473d48335c4618bb94c1a9742d8c8e4d5f0ebe74364",
+  "sourceInputArchiveSha256": "7a2a34a5a827f7422e9de004d4d967f2357a57be649b2e782e92cc42fe7a2648",
+  "sourceInputEntries": 2231,
+  "requestedModel": "deepseek-v4-flash",
+  "returnedModels": [
+    "deepseek-flash"
+  ],
+  "modelSettings": {
+    "maxOutputTokens": 4096,
+    "reasoningMode": "DISABLED"
+  },
+  "java": "21.0.4",
+  "dockerServer": "29.2.1",
+  "rawCapturesPublished": false,
+  "rawCapturesRetainedLocally": true,
+  "originalFilesSha256": {
+    "report.md": "f9b9ff414d60798115e59434d7702bb04d87cc8636f33deb40541875b90abcf0",
+    "summary.json": "b46f0fdf8fbf3a0a475d38ce444a2d3f9a6094f8c2f60acd8506cf43f7127d45",
+    "instances.jsonl": "9c4ecbc1f53fcbcf406610297a4c06039aa557e27013ab65b5a77f1006fa68ff",
+    "frozen-plan.json": "2bfa7500fc480de1826d2b096ad9d1f756c7f8d41748cc2c3a642380eb908d71",
+    "audit.json": "4ca5dcf3384448c44a4b48748a87cdb7798d70ec98600cc50f19589b6edd8fa6",
+    "relations.json": "fdac60b228a4c68b8211cb73702ca0b65d3de1fd45f10fd66f909ca55f836930",
+    "image-provenance.json": "29d695adccc2142d8095d60ba39717ca87e728323f589c120cfe3099cb3eeca8",
+    "source-integrity.json": "caa982957750bc79e7040e8bd4ad91f1fa8a6aa5e28d48e801291fb66d5ab7f8",
+    "cleanup-audit.json": "d9953279c2e2927ccd2c886b3215500035378c7d3c619c7a0cd2c536d6f1fe2c",
+    "external-failures.json": "434cc3f9012dd50d0df3b9cdb791444939de2e01bbea7bcd865d039916243dee",
+    "environment-notes.json": "467889f0330713c86eee84c0c667780203f1cd10840ea92cabcc3050f757c5bc"
+  },
+  "publishedFilesSha256": {
+    "report.md": "f9b9ff414d60798115e59434d7702bb04d87cc8636f33deb40541875b90abcf0",
+    "summary.json": "d9e7253a095420a7f97cea799f0e66ef8c89e9d11788df7f8d1e412ac9ebbdcf",
+    "instances.jsonl": "9c4ecbc1f53fcbcf406610297a4c06039aa557e27013ab65b5a77f1006fa68ff",
+    "frozen-plan.json": "4694dadb81f1046b26e8db38ecdd6fd68d990566607bea355747886945b9e85a",
+    "audit.json": "0932607f747b19573b2e3b4f92d09327c0f404fc32598931252e3feb64175385",
+    "relations.json": "01afa6b406497ced68b9cccece25412d4e37489cda9437327d433996f02448eb",
+    "image-provenance.json": "90ea99c18ef567b1890609edcd928f374025eefc403a6dd1b377e187435da84c",
+    "source-integrity.json": "45f920b4c9c7b7cba279b35c8c025bc4af4e6e3a395a9ce2eedb3d4c0af0df75",
+    "cleanup-audit.json": "fd4c0bdce8351debd1eeae9f5c4b086c73b933a60f0d896161725b9e292d599f",
+    "external-failures.json": "d70f9a697a8e5efd212e0f3464da6ea50f80bf2e70a0e2e33264175885348148",
+    "environment-notes.json": "0bd55d3d4d6f847d242640bdf21837ec5c6f86bf8d84fbe084d23540c3a70df0"
+  },
+  "publicationTransform": "CRLF converted to LF only; original reports and counts unchanged",
+  "knowledgeReviewKind": "BENCHMARK_FIXTURE_REPLAY_AND_CONTROLLED_REVIEW_NOT_REAL_HUMAN_REVIEW"
+}

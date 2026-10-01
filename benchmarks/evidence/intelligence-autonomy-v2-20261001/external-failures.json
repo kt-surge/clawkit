@@ -1,0 +1,179 @@
+{
+  "analysisAfterRun": true,
+  "originalScoresUnchanged": true,
+  "externalProviderFailures": 21,
+  "failureCause": "HTTP_402_INSUFFICIENT_BALANCE",
+  "affectedInstances": [
+    "stale-generic_agent-1",
+    "stale-no_knowledge-1",
+    "oom-generic_agent-1",
+    "conflict-generic_agent-1",
+    "truncated-clawkit-1",
+    "application-clawkit-1",
+    "dependency-clawkit-1",
+    "historical-no_knowledge-1",
+    "application-no_knowledge-1",
+    "truncated-no_knowledge-1",
+    "service-exit-no_knowledge-1",
+    "conflict-clawkit-1",
+    "application-generic_agent-1",
+    "oom-no_knowledge-1",
+    "missing-no_knowledge-1",
+    "dependency-generic_agent-1",
+    "missing-clawkit-1",
+    "conflict-no_knowledge-1",
+    "configuration-no_knowledge-1",
+    "service-exit-clawkit-1",
+    "configuration-generic_agent-1"
+  ],
+  "details": [
+    {
+      "providerCallId": "20261001-145618-0563:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/stale-generic_agent-1/runs/20261001-145618-0563/events.jsonl",
+      "instanceId": "stale-generic_agent-1"
+    },
+    {
+      "providerCallId": "20261001-145645-6752:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/stale-no_knowledge-1/runs/20261001-145645-6752/events.jsonl",
+      "instanceId": "stale-no_knowledge-1"
+    },
+    {
+      "providerCallId": "20261001-145754-8951:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/oom-generic_agent-1/runs/20261001-145754-8951/events.jsonl",
+      "instanceId": "oom-generic_agent-1"
+    },
+    {
+      "providerCallId": "20261001-145924-6135:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/conflict-generic_agent-1/runs/20261001-145924-6135/events.jsonl",
+      "instanceId": "conflict-generic_agent-1"
+    },
+    {
+      "providerCallId": "20261001-145953-7831:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/truncated-clawkit-1/runs/20261001-145953-7831/events.jsonl",
+      "instanceId": "truncated-clawkit-1"
+    },
+    {
+      "providerCallId": "20261001-150021-e857:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/application-clawkit-1/runs/20261001-150021-e857/events.jsonl",
+      "instanceId": "application-clawkit-1"
+    },
+    {
+      "providerCallId": "20261001-150052-f92d:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/dependency-clawkit-1/runs/20261001-150052-f92d/events.jsonl",
+      "instanceId": "dependency-clawkit-1"
+    },
+    {
+      "providerCallId": "20261001-150120-2387:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/historical-no_knowledge-1/runs/20261001-150120-2387/events.jsonl",
+      "instanceId": "historical-no_knowledge-1"
+    },
+    {
+      "providerCallId": "20261001-150256-86ee:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/application-no_knowledge-1/runs/20261001-150256-86ee/events.jsonl",
+      "instanceId": "application-no_knowledge-1"
+    },
+    {
+      "providerCallId": "20261001-150325-33e6:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/truncated-no_knowledge-1/runs/20261001-150325-33e6/events.jsonl",
+      "instanceId": "truncated-no_knowledge-1"
+    },
+    {
+      "providerCallId": "20261001-150434-0942:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/service-exit-no_knowledge-1/runs/20261001-150434-0942/events.jsonl",
+      "instanceId": "service-exit-no_knowledge-1"
+    },
+    {
+      "providerCallId": "20261001-150505-6065:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/conflict-clawkit-1/runs/20261001-150505-6065/events.jsonl",
+      "instanceId": "conflict-clawkit-1"
+    },
+    {
+      "providerCallId": "20261001-150533-42b1:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/application-generic_agent-1/runs/20261001-150533-42b1/events.jsonl",
+      "instanceId": "application-generic_agent-1"
+    },
+    {
+      "providerCallId": "20261001-150604-37c8:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/oom-no_knowledge-1/runs/20261001-150604-37c8/events.jsonl",
+      "instanceId": "oom-no_knowledge-1"
+    },
+    {
+      "providerCallId": "20261001-150631-4898:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/missing-no_knowledge-1/runs/20261001-150631-4898/events.jsonl",
+      "instanceId": "missing-no_knowledge-1"
+    },
+    {
+      "providerCallId": "20261001-150703-6fe7:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/dependency-generic_agent-1/runs/20261001-150703-6fe7/events.jsonl",
+      "instanceId": "dependency-generic_agent-1"
+    },
+    {
+      "providerCallId": "20261001-150730-b011:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/missing-clawkit-1/runs/20261001-150730-b011/events.jsonl",
+      "instanceId": "missing-clawkit-1"
+    },
+    {
+      "providerCallId": "20261001-150759-d9ee:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/conflict-no_knowledge-1/runs/20261001-150759-d9ee/events.jsonl",
+      "instanceId": "conflict-no_knowledge-1"
+    },
+    {
+      "providerCallId": "20261001-150902-5fa0:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/configuration-no_knowledge-1/runs/20261001-150902-5fa0/events.jsonl",
+      "instanceId": "configuration-no_knowledge-1"
+    },
+    {
+      "providerCallId": "20261001-150933-d339:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/service-exit-clawkit-1/runs/20261001-150933-d339/events.jsonl",
+      "instanceId": "service-exit-clawkit-1"
+    },
+    {
+      "providerCallId": "20261001-151036-475c:provider:1",
+      "usageSource": "UNAVAILABLE",
+      "cause": "HTTP_402_INSUFFICIENT_BALANCE",
+      "eventFile": "instances/configuration-generic_agent-1/runs/20261001-151036-475c/events.jsonl",
+      "instanceId": "configuration-generic_agent-1"
+    }
+  ],
+  "meaning": "This run does not support comparison of knowledge benefit or general model ability; sequential account failures affect arms unequally."
+}

@@ -1,0 +1,12 @@
+{
+  "businessExactMatch": true,
+  "recovered": true,
+  "previouslyAwaitingApproval": true,
+  "evidence": {
+    "source": "HUMAN",
+    "attemptId": "att-473e2fb8-e726-460c-89bc-cc77cd927642",
+    "incidentId": "inc-28bf3bd4-179d-4e34-b17f-ac34ea27127e",
+    "sampleCount": 3,
+    "action": "RESTART_UNHEALTHY_V1"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "notes": "Package verification completed before this run; source unchanged throughout the formal run. Workstation has normal background applications; wall time is not a dedicated-host performance benchmark.",
+  "protocolCorrection": "Terminal decision submitted exclusively after diagnosis acceptance; same cases/seed/budget as preserved v1, not a new holdout set."
+}
