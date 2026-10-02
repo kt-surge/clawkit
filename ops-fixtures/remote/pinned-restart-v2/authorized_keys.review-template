@@ -1,0 +1,2 @@
+# REVIEW TEMPLATE: replace the public-key placeholder after concrete deployment approval.
+restrict,command="/usr/local/bin/clawkit-ops-v2-entry" ssh-ed25519 REPLACE_WITH_REVIEWED_PUBLIC_KEY clawkit-ops-v2

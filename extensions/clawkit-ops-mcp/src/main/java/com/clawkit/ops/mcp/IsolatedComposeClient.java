@@ -214,7 +214,7 @@ public final class IsolatedComposeClient {
         }
         return Path.of(source);
     }
-    private static String contentHash(Path root) throws Exception {
+    static String contentHash(Path root) throws Exception {
         if (Files.isSymbolicLink(root)) throw new IllegalStateException("symbolic configuration mounts are unsupported");
         MessageDigest digest=MessageDigest.getInstance("SHA-256");
         List<Path> entries;
@@ -267,7 +267,7 @@ public final class IsolatedComposeClient {
     private static void containerId(String value) {
         if (value==null || !value.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("exactly one existing container required");
     }
-    private static String fileHash(Path file) throws Exception {
+    static String fileHash(Path file) throws Exception {
         byte[] bytes;
         try (var input=Files.newInputStream(file)) { bytes=input.readNBytes(1_048_577); }
         if (bytes.length>1_048_576) throw new IllegalStateException("Compose configuration exceeds byte limit");

@@ -1,0 +1,3 @@
+# REVIEW TEMPLATE: choose a separate identity and verify root-owned gateway paths.
+# Empty argument string permits the exact gateway with no arguments. No SETENV.
+clawkitfixv2 ALL=(root) NOPASSWD: NOSETENV: /usr/local/sbin/clawkit-ops-v2-gateway ""

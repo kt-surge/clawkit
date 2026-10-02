@@ -33,11 +33,13 @@ $jarName  = "clawkit-$Version.jar"
 $zipName  = "clawkit-$Version-windows.zip"
 $winDir   = Join-Path $OutputDir "clawkit-$Version-windows"
 $srcJar   = Join-Path $repoRoot "clawkit-cli/target/clawkit-cli-$Version.jar"
+$serverJar = Join-Path $repoRoot "extensions/clawkit-ops-mcp/target/clawkit-ops-mcp-$Version.jar"
 
 if (-not (Test-Path $srcJar)) {
     Write-Error "Shaded JAR not found: $srcJar. Run 'mvn -pl clawkit-cli -am package' first."
     exit 1
 }
+if (-not (Test-Path -LiteralPath $serverJar)) { throw "Shaded MCP server JAR missing; build clawkit-cli and its dependencies first." }
 
 Write-Host "=== Packaging clawkit $Version ==="
 
@@ -87,6 +89,14 @@ foreach($fixtureName in @('diagnostic-autonomy','intelligence-autonomy')) {
     Copy-Item (Join-Path $repoRoot ('ops-fixtures/'+$fixtureName+'/compose.yaml')) $extraFixture
     Copy-Item (Join-Path $repoRoot ('ops-fixtures/'+$fixtureName+'/server.py')) $extraFixture
 }
+$gatewayDir=Join-Path $winDir 'remote-gateway'
+New-Item -ItemType Directory -Force $gatewayDir | Out-Null
+Copy-Item -LiteralPath $serverJar -Destination (Join-Path $gatewayDir 'ops-mcp.jar')
+foreach($name in @('clawkit-ops-v2-entry','clawkit-ops-v2-gateway','sudoers.review-template','authorized_keys.review-template')) {
+    Copy-Item -LiteralPath (Join-Path $repoRoot ('ops-fixtures/remote/pinned-restart-v2/'+$name)) -Destination $gatewayDir
+}
+$serverHash=(Get-FileHash -LiteralPath (Join-Path $gatewayDir 'ops-mcp.jar') -Algorithm SHA256).Hash.ToLowerInvariant()
+[System.IO.File]::WriteAllText((Join-Path $gatewayDir 'SHA256SUMS.txt'),($serverHash+'  ops-mcp.jar'+"`n"),[System.Text.UTF8Encoding]::new($false))
 $packagedFiles=[ordered]@{}
 Get-ChildItem -LiteralPath $winDir -Recurse -File | ForEach-Object {
     $name=$_.FullName.Substring($winDir.Length+1).Replace('\','/')
@@ -138,9 +148,16 @@ $unpackedJar = Join-Path $unpackDir "clawkit.jar"
 $unpackedCmd = Join-Path $unpackDir "clawkit.cmd"
 $unpackedReadme = Join-Path $unpackDir "README.md"
 foreach ($f in @($unpackedJar, $unpackedCmd, $unpackedReadme, (Join-Path $unpackDir "clawkit.sh"),
-    (Join-Path $unpackDir "ops-fixtures/layered-autonomy/compose.yaml"), (Join-Path $unpackDir "ops-fixtures/layered-autonomy/server.py"))) {
+    (Join-Path $unpackDir "ops-fixtures/layered-autonomy/compose.yaml"), (Join-Path $unpackDir "ops-fixtures/layered-autonomy/server.py"),
+    (Join-Path $unpackDir 'remote-gateway/ops-mcp.jar'), (Join-Path $unpackDir 'remote-gateway/clawkit-ops-v2-gateway'),
+    (Join-Path $unpackDir 'remote-gateway/clawkit-ops-v2-entry'), (Join-Path $unpackDir 'remote-gateway/SHA256SUMS.txt'),
+    (Join-Path $unpackDir 'examples/autonomy/pinned-restart-v2-disabled.json'))) {
     if (-not (Test-Path $f)) { throw "Missing in ZIP: $(Split-Path $f -Leaf)" }
     if ((Get-Item $f).Length -eq 0) { throw "Zero-byte file in ZIP: $(Split-Path $f -Leaf)" }
+}
+$extractedServerHash=(Get-FileHash -LiteralPath (Join-Path $unpackDir 'remote-gateway/ops-mcp.jar') -Algorithm SHA256).Hash.ToLowerInvariant()
+if ([System.IO.File]::ReadAllText((Join-Path $unpackDir 'remote-gateway/SHA256SUMS.txt')) -ne ($extractedServerHash+'  ops-mcp.jar'+"`n")) {
+    throw 'Extracted remote gateway checksum mismatch'
 }
 $unpackedManifest=Get-Content -LiteralPath (Join-Path $unpackDir 'build-manifest.json') -Raw | ConvertFrom-Json
 foreach($entry in $unpackedManifest.files.PSObject.Properties) {

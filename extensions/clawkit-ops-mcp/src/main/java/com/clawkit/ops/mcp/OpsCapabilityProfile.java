@@ -9,7 +9,8 @@ public enum OpsCapabilityProfile {
         "service_status", "container_status", "ports", "http_probe", "logs",
         "container_resources", "business_metrics", "db_activity", "db_lock_graph",
         "db_connection_stats")),
-    FIX_ORDER_API_V1(Set.of("restart_service"));
+    FIX_ORDER_API_V1(Set.of("restart_service")),
+    PINNED_RESTART_V2(Set.of("repair_scope","restart_pinned","repair_receipt"));
 
     private final Set<String> toolNames;
 

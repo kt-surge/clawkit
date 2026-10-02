@@ -22,6 +22,17 @@ public final class OpsMcpMain {
 
         DockerFixBackend fixBackend = null;
 
+        if(profile==OpsCapabilityProfile.PINNED_RESTART_V2) {
+            String configPath=System.getenv("CLAWKIT_OPS_PINNED_CONFIG");
+            if(configPath==null || configPath.isBlank()) throw new IllegalArgumentException("explicit root-owned pinned configuration required");
+            var source=new PinnedRestartConfigurationFile(java.nio.file.Path.of(configPath));
+            var config=source.read();
+            var service=new PinnedRestartService(java.nio.file.Path.of(config.stateDirectory()),source,
+                new PinnedDockerRestart(new ProcessCommandExecutor()),Clock.systemUTC());
+            new OpsMcpServer(null,profile,null,service).serve(System.in,System.out);
+            return;
+        }
+
         if (profile == OpsCapabilityProfile.FIX_ORDER_API_V1) {
             OpsTargetConfig config = OpsTargetConfig.fromEnvironment(System.getenv());
             fixBackend = new DockerFixBackend(config, new ProcessCommandExecutor());

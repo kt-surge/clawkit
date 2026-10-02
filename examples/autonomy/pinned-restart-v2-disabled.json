@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "target": {
+    "context": "REPLACE_REVIEWED_CONTEXT",
+    "daemonId": "REPLACE_REVIEWED_DAEMON_ID",
+    "endpoint": "unix:///var/run/docker.sock",
+    "composeFile": "/opt/REPLACE_REVIEWED_PROJECT/compose.yaml",
+    "composeHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "project": "REPLACE_REVIEWED_PROJECT",
+    "service": "order-api",
+    "containerId": "0000000000000000000000000000000000000000000000000000000000000000",
+    "dependencies": {},
+    "mounts": {}
+  },
+  "grantVersion": 1,
+  "issuedAt": "2026-10-02T00:00:00Z",
+  "expiresAt": "2026-10-02T00:30:00Z",
+  "enabled": false,
+  "statelessReviewed": false,
+  "stateDirectory": "/var/lib/clawkit-ops-v2"
+}

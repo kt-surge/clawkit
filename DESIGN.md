@@ -315,6 +315,7 @@ CLI / 自然语言意图
 - 自然语言可以选择目标和调用已登记工具，但新增目标、接受新 host key、扩大 profile 或启用写能力必须走确定性命令与确认。
 - 首批通用能力只包含有界日志、服务/容器状态、端口和 HTTP 探测；路径、服务、时间窗和输出大小均由服务端白名单限制。
 - `RemoteTargetDescriptor`、`RemoteMcpSession`、`RemoteConnectionService` 与 `RemoteOpsSession` 保持窄接口/adapter；只有出现真实重复后才决定是否继续抽模块。
+- REMOTE-AUTONOMY-R2 增加独立私有 `PINNED_RESTART_V2` 合同。普通会话构造、能力目录、远程登记和模型工具仍只读；可信修复适配器显式指定唯一写工具，并核验完整工具合同和类型化回执。固定目标、根所有的期限授权及服务端持久化请求由 ops-mcp 负责；客户端仍复用 ToolCallExecutor、SideEffectGate、原 Attempt 与独立验证。它是本地已实现的部署候选，真实 SSH 修复资格及产品绑定尚未开放，详情见实施合同第 10.7 节。
 - 当前产品形态是个人 CLI；Target/Connection/Capability 契约避免绑定单一用户目录，为未来团队化保留接口，但本阶段不实现多租户、中心控制面、Web 控制台或云账号资产发现。
 
 ## 错误与生命周期

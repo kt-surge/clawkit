@@ -114,6 +114,7 @@ public final class ManagedRepairExecutor implements AutoCloseable {
         if (!attempts.byLogicalAction(descriptor.contentDerivedActionId()).isEmpty())
             return blocked("incident/action already has an attempt; never redispatch it");
         var authorization=new AtomicReference<RepairAuthorization>();
+        var dispatch=new AtomicReference<ManagedFixAdapter.Dispatch>();
         var precheck=new AtomicReference<List<DecisionEvidence>>(List.of());
         var verification=new AtomicReference<IndependentManagedVerifier.Result>();
         SideEffectGate gate=new SideEffectGate(coordinator,attempt -> {
@@ -160,6 +161,7 @@ public final class ManagedRepairExecutor implements AutoCloseable {
                     return new SideEffectGate.PrecheckOutcome(false,"cancelled/revoked during fresh precheck");
                 controlStore.authorize(attempt.attemptId(),granted);
                 authorization.set(granted);
+                dispatch.set(new ManagedFixAdapter.Dispatch(incidentId,attempt.attemptId()));
                 return new SideEffectGate.PrecheckOutcome(true,"fresh target/intent/evidence and explicit "+(granted instanceof RepairAuthorization.Human ? "human" : "policy")+" authorization persisted");
             } catch (Exception e) { return new SideEffectGate.PrecheckOutcome(false,"fresh precheck refused: "+e.getClass().getSimpleName()); }
         });
@@ -184,10 +186,14 @@ public final class ManagedRepairExecutor implements AutoCloseable {
                             || !ManagedContracts.hash(app).equals(ManagedContracts.hash(currentApplication.get()))
                             || !clock.instant().isBefore(authorization.get().binding().expiresAt()))
                         throw new IllegalStateException("authorization changed after dispatch intent; no transport call made");
-                    var report=fix.execute(app,decision.playbook());
+                    var report=fix.execute(app,decision.playbook(),Objects.requireNonNull(dispatch.get()));
                     if (report.certainty()==EffectCertainty.EFFECT_CONFIRMED)
                         return ToolExecutionResult.success(req.toolCallId(),name(),report.detail(),0,metadata())
                             .withReliability(EffectCertainty.EFFECT_CONFIRMED,null,null);
+                    if(report.certainty()==EffectCertainty.NO_EFFECT_CONFIRMED || report.certainty()==EffectCertainty.NOT_DISPATCHED)
+                        return ToolExecutionResult.error(req.toolCallId(),name(),"REPAIR_REFUSED_BEFORE_EXECUTION",report.detail(),0,metadata())
+                            .withReliability(report.certainty(),report.certainty()==EffectCertainty.NOT_DISPATCHED ? FailureClass.PRECONDITION_FAILED
+                                : FailureClass.SERVER_REJECTED_BEFORE_EXECUTION,null);
                     return ToolExecutionResult.error(req.toolCallId(),name(),"REPAIR_OUTCOME_UNKNOWN",report.detail(),0,metadata())
                         .withReliability(EffectCertainty.EFFECT_UNKNOWN,FailureClass.EXECUTION_ERROR_OUTCOME_UNKNOWN,null);
                 } catch (Exception e) {

@@ -376,3 +376,17 @@ R2 服务端新合同、完整目标证明与独立业务探测仍未实现部�
 首轮接入源码 `1426febb1592fbc77b5ba40a1cd8f3556db8c63a` 已推送；该提交的 [CI](https://github.com/kt-surge/clawkit/actions/runs/36887478219) 包含 clean verify、Runtime baseline compare 与 Docker smoke，和 [CodeQL](https://github.com/kt-surge/clawkit/actions/runs/36887477931) 均成功。2026-10-01 本地 clean verify 为 14 reactor 项目、180 suites、1561 项（6 跳过），0 失败/错误。Windows ZIP 通过解压入口与文件哈希检查，build-manifest 绑定源码提交及 75 项文件；打包时无已跟踪文件改动。后续包按新提交重新生成并保留旧候选与已测 JAR 哈希。
 
 2026-10-02 追加初始化失败的资源清理：执行存储或后续初始化不可用时，关闭已经打开的远端观测连接、记录器和其他已创建资源；清理异常追加到原始异常，继续释放其余资源。产品回归先复现执行目录被文件占用时的连接泄漏，再验证修复后全部连接关闭、修正目录后可重新打开，零模型与本地 Docker 调用。本地完整 clean verify 为 14 reactor 项目、180 suites、1562 项（6 跳过），0 失败/错误。真机记录仍绑定各自授权周期的候选 JAR；此次生命周期修复不另行消费真实模型额度，后续安装包版本以其 build-manifest 为准。
+
+### 10.7 V2 固定重启合同与本地交付
+
+本地新增独立 `PINNED_RESTART_V2` profile：`repair_scope`、`restart_pinned`、`repair_receipt`。MCP 协议版本仍为 2024-11-05，服务 probe 升为 2。旧 `opsfix` 和普通只读 profile 的合同保持兼容；新写工具不进入模型的观测工具或通用能力目录。类型化 schema、注解与合同摘要一起核验，不能仅凭 MCP 注解授予权限，参照 [MCP 工具规范](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)。
+
+**服务器条件。** 根所有且无符号链接、不可由其他身份写入的配置与所有祖先目录，声明固定 `order-api`、Docker context/本地 socket/daemon、完整 64 位容器、单一 Compose 文件摘要、最多两个依赖完整 ID 和全部只读 bind 挂载内容摘要。配置要求无状态审阅、递增授权版本和不超过 30 分钟的期限。服务端核对运行但 unhealthy、依赖 healthy、无原生重启策略；唯一动作是针对固定本地 daemon 的 `docker restart --time 5 <full ID>`。使用固定 `--host`，避免 context 被重绑后命令转向其他 daemon；context 仍作身份校验。[Docker 重启语义](https://docs.docker.com/reference/cli/docker/container/restart/)不代表业务恢复；拒绝原生重启竞争的依据见 [Docker 重启策略](https://docs.docker.com/engine/containers/start-containers-automatically/)。
+
+**派发与回执。** 请求 ID 使用客户端原 Attempt，绑定事件、目标摘要、完整配置摘要、授权版本和到期时间。目标跨进程互斥下先复查，落盘 immutable intent，再复查并重读授权，才派发。每个授权版本最多一个 intent；即使第二次检查拒绝也占用该额度。相同 ID/摘要返回原回执，冲突拒绝；同事件不再派发；任何未解决 UNKNOWN 阻止后续请求。超时、非零退出和回执缺失均保留 UNKNOWN。损坏、孤立回执或历史超过 2048 intent 的状态拒绝动作，转人工；续期、升级版本或删掉客户端状态都不能消除服务端未知。Linux 对文件和目录执行 fsync；Windows 本地验收不认证断电持久性。无法通过此合同解决 root 操作员删改历史或复查后外部管理员并发改动，因此运维必须独占授权窗口、保留审计目录。
+
+**客户端主链。** 固定重启适配器从真实权限记录取得原 Attempt，核对新会话的精确 profile/工具合同及最新配置，调用一次写入口，并验证回执绑定。明确派发前拒绝记为 NO_EFFECT；发出后丢失响应记为 OUTCOME_UNKNOWN，自动降级并保留，查询回执不自行晋升客户端状态。服务端 DISPATCH_REPORTED 仍由原独立验证器确认健康、业务和依赖，至少连续三次新样本成功才 RECOVERED。模型不产生连接、授权或稳定请求 ID。
+
+**交付与剩余门禁。** 安装包提供独立 MCP server JAR、哈希、固定 root gateway、受限 SSH entry、sudoers/公钥审阅模板及默认禁用且未审阅的配置。模板仅供审阅，不包含安装或真机授权。真实服务仍需补齐完整身份的只读证明、根所有目标配置、独立健康/业务端点及资格绑定；现有 `autonomy remote-register` 继续 OBSERVE，不能通过策略命令自动切换 V2。下一阶段在具体部署与期限授权获批后，分别核验真实 SSH 握手/限定派发/新只读会话恢复；本阶段本地 Docker 与进程内 MCP 验收不能替代这些结果。
+
+本地验收入口为 `PinnedRestartFixtureEvidenceMain`，最终 clean verify 的 JAR 通过真实隔离 Docker 重启、外部业务请求、重复请求和控制器重启核对；模型和 SSH 调用均为零。[公开记录](../benchmarks/evidence/pinned-restart-local-20261002.json)保存候选 JAR、server JAR 和原始证据哈希。两次实际重启中，一次经三连续样本确认恢复；另一次客户端丢回执保留 UNKNOWN，外部业务随后恢复也不晋升该状态，重开控制器无重派发。首次外部核验过早导致 IOException 的失败保留，新版用有界独立读记录启动窗口。坏配置、身份漂移、撤销、到期、损坏历史、跨实例互斥和业务不恢复由十五项新增合同测试覆盖。完整 clean verify 为 14 reactor、183 suites、1577 项（6 跳过），零失败/错误。独立服务器包与 root gateway 在无网络/无 Docker socket 的临时 Linux 中通过禁用 scope 及可写配置/符号链接/坏 JAR 校验拒绝；未测试真实 SSH 或断电。原始失败候选留在各自 `tmp/remote-r2-*` 目录，最终通过记录另存；公开证据仅导出元数据和哈希，不能称模型准确率、生产自治或 MTTR 改善。

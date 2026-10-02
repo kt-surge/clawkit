@@ -49,6 +49,23 @@
 
 远程登记默认且仅支持 `observe`。现有 `opsfix/restart_service` 未提供完整身份、条件版本及幂等回执，不能开启 `ask` 或 `limited-auto`，也不能绑定要求完整身份的外部告警。`pause/resume/stop/events/diagnosis` 复用现有入口。下一步修复接入范围见 [实施合同第10节](../docs/layered-autonomy-implementation-plan.md#10-后续sshmcp-远程自治接入)。
 
+### V2 修复部署候选与审阅
+
+本地已实现固定重启的独立服务端合同和客户端适配器；普通远程登记仍为只读。安装包的 `remote-gateway/` 包含独立 `ops-mcp.jar`、`SHA256SUMS.txt`、SSH entry、root gateway 和权限模板。配置草稿见 [默认禁用示例](../examples/autonomy/pinned-restart-v2-disabled.json)，逐项审阅见 [order-api 清单](../examples/autonomy/remote-order-api-repair-review.json)。示例含占位身份、过期时间和 `statelessReviewed=false`，不能直接激活动作。
+
+真机部署前需要填写实际完整容器、daemon、本地 Docker socket、Compose 和全部只读挂载摘要、依赖、审阅声明及不超过 30 分钟的授权期限。还需将独立健康/业务探测纳入已有只读白名单，补齐完整身份的只读证明和客户端资格绑定。根所有配置不是用户审批，也不是模型准确率证明。
+
+审阅固定安装位置：JAR/校验文件位于 `/opt/clawkit-ops-v2/`；配置 `/etc/clawkit-ops-v2/scope.json`；持久化回执 `/var/lib/clawkit-ops-v2/`；gateway `/usr/local/sbin/clawkit-ops-v2-gateway`；SSH entry `/usr/local/bin/clawkit-ops-v2-entry`。需要 Linux、Java 21、Docker CLI、GNU coreutils、sudo 和 OpenSSH；配置、JAR、脚本、状态及祖先目录由 root 所有，其他身份不可写，脚本使用 LF 且有执行权限。使用独立 SSH 身份/公钥和精确无参数 sudoers 条目；审阅模板后先以 `visudo -cf` 核对，不能自动覆盖已有 opsro/opsfix。root gateway 清空继承环境并核对独立 server JAR 哈希。包内不提供自动安装器。
+
+每个服务器授权版本只允许一个派发 intent，第二次条件检查拒绝也占用额度。状态未知时保留客户端 Attempt 和服务器 intent/receipt，先暂停控制器并人工核对；续期不解锁未知，更不能删除记录以重试。撤销时将配置 `enabled=false` 或等待到期，暂停/停止控制器并保留日志；恢复仅接受新独立观测，不把重启退出码当成功。Linux 状态执行文件和目录同步；当前 Windows 隔离结果不是断电持久性认证。详细合同见 [第10.7节](../docs/layered-autonomy-implementation-plan.md#107-v2-固定重启合同与本地交付)。
+
+开发者可在仓库根目录以候选 JAR 运行隔离验收；输出目录必须尚不存在且位于仓库 `tmp/`。它仅使用本地 Linux Docker daemon，为唯一随机项目故障注入与重启，最后清理所属容器，保留记录；不调用模型和 SSH。
+
+```powershell
+java -cp .\clawkit-cli\target\clawkit-cli-0.1.0.jar `
+  com.clawkit.ops.delivery.managed.PinnedRestartFixtureEvidenceMain tmp/remote-r2-my-fresh-trial
+```
+
 ### 创建可丢弃的隔离试用环境
 
 先确认 `clawkit-autonomy-demo` 是本次试用的新项目。夹具会占用本地 18180／18181 端口；端口冲突时改变下面两个环境变量和随后登记的 URL。

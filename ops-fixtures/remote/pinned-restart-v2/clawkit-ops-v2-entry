@@ -1,0 +1,5 @@
+#!/bin/sh
+# Install only after reviewing the concrete server, scope and separate SSH identity.
+set -eu
+[ "$#" -eq 0 ] && [ -z "${SSH_ORIGINAL_COMMAND:-}" ] || exit 126
+exec /usr/bin/sudo -n -- /usr/local/sbin/clawkit-ops-v2-gateway

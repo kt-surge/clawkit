@@ -87,6 +87,7 @@ public final class RemoteMcpSession implements AutoCloseable {
     private final RemoteTargetDescriptor target;
     private final RemoteSshConnectionSpec connectionSpec;
     private final Clock clock;
+    private final java.util.Set<String> permittedWriteTools;
     private final java.util.concurrent.atomic.AtomicReference<InternalState> state =
         new java.util.concurrent.atomic.AtomicReference<>(InternalState.NEW);
     private final java.util.concurrent.atomic.AtomicLong generation =
@@ -114,9 +115,17 @@ public final class RemoteMcpSession implements AutoCloseable {
     /** Constructor with explicit clock. */
     public RemoteMcpSession(RemoteTargetDescriptor target, RemoteSshConnectionSpec connectionSpec,
                              Clock clock) {
+        this(target,connectionSpec,clock,java.util.Set.of());
+    }
+    /** Trusted composition only. Defaults remain read-only; exact tool contract hash still binds every annotation. */
+    public RemoteMcpSession(RemoteTargetDescriptor target,RemoteSshConnectionSpec connectionSpec,Clock clock,
+                            java.util.Set<String> permittedWriteTools) {
         this.target = target;
         this.connectionSpec = connectionSpec;
         this.clock = clock;
+        this.permittedWriteTools=java.util.Set.copyOf(permittedWriteTools);
+        if(this.permittedWriteTools.size()>1 || this.permittedWriteTools.stream().anyMatch(n -> n==null || n.isBlank()))
+            throw new IllegalArgumentException("at most one explicitly pinned private write tool supported");
         this.requestTimeout = connectionSpec.requestTimeout();
         this.maxOutputBytes = connectionSpec.maxOutputBytes();
     }
@@ -147,9 +156,16 @@ public final class RemoteMcpSession implements AutoCloseable {
      */
     public RemoteMcpSession(RemoteTargetDescriptor target, RemoteEndpointConfig endpointConfig,
                             Clock clock, McpTransport transport, McpClient client) {
+        this(target,endpointConfig,clock,transport,client,java.util.Set.of());
+    }
+    public RemoteMcpSession(RemoteTargetDescriptor target,RemoteSshConnectionSpec endpointConfig,
+                            Clock clock,McpTransport transport,McpClient client,java.util.Set<String> permittedWriteTools) {
         this.target = target;
         this.connectionSpec = endpointConfig;
         this.clock = clock;
+        this.permittedWriteTools=java.util.Set.copyOf(permittedWriteTools);
+        if(this.permittedWriteTools.size()>1 || this.permittedWriteTools.stream().anyMatch(String::isBlank))
+            throw new IllegalArgumentException("at most one explicitly pinned private write tool supported");
         this.transport = transport;
         this.client = client;
         this.requestTimeout = endpointConfig.requestTimeout();
@@ -315,9 +331,11 @@ public final class RemoteMcpSession implements AutoCloseable {
         // Every tool must have safe annotations
         for (McpToolDef tool : tools) {
             JsonNode a = tool.annotations();
+            boolean privateWrite=permittedWriteTools.contains(tool.name());
             if (a == null
-                || !a.path("readOnlyHint").asBoolean(false)
-                || a.path("destructiveHint").asBoolean(true)
+                || !a.path("readOnlyHint").isBoolean() || a.path("readOnlyHint").asBoolean()==privateWrite
+                || !a.path("destructiveHint").isBoolean() || a.path("destructiveHint").asBoolean()!=privateWrite
+                || privateWrite && (!a.path("idempotentHint").isBoolean() || !a.path("idempotentHint").asBoolean())
                 || a.path("openWorldHint").asBoolean(true)) {
                 RemoteError err = RemoteError.unsafeToolAnnotation(target.targetId(), tool.name());
                 transitionToFailed(err);
@@ -329,6 +347,11 @@ public final class RemoteMcpSession implements AutoCloseable {
                 transitionToFailed(err);
                 throw new IOException(err.safeMessage());
             }
+        }
+        if(!tools.stream().map(McpToolDef::name).collect(java.util.stream.Collectors.toSet()).containsAll(permittedWriteTools)) {
+            RemoteError err=RemoteError.unsafeToolAnnotation(target.targetId(),permittedWriteTools.iterator().next());
+            transitionToFailed(err);
+            throw new IOException(err.safeMessage());
         }
 
         // Compute and verify tool-contract hash (must be pre-pinned)

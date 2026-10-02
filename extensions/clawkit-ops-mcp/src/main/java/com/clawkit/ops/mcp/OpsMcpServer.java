@@ -34,6 +34,7 @@ public final class OpsMcpServer {
     private final ObjectMapper mapper;
     private final String serverName;
     private final DockerFixBackend fixBackend;
+    private final PinnedRestartService pinnedRestart;
 
     public OpsMcpServer(OpsBackend backend) {
         this(backend, OpsCapabilityProfile.APP_DOWN_V1);
@@ -48,12 +49,18 @@ public final class OpsMcpServer {
      */
     public OpsMcpServer(OpsBackend backend, OpsCapabilityProfile profile,
                         DockerFixBackend fixBackend) {
+        this(backend,profile,fixBackend,null);
+    }
+    public OpsMcpServer(OpsBackend backend,OpsCapabilityProfile profile,DockerFixBackend fixBackend,PinnedRestartService pinnedRestart) {
         this.backend = backend;
         this.profile = profile;
         this.fixBackend = fixBackend;
-        this.serverName = profile == OpsCapabilityProfile.FIX_ORDER_API_V1
+        this.pinnedRestart=pinnedRestart;
+        this.serverName = profile==OpsCapabilityProfile.PINNED_RESTART_V2 ? "clawkit-ops-fix-v2" : profile == OpsCapabilityProfile.FIX_ORDER_API_V1
             ? "clawkit-ops-fix" : "clawkit-ops-mcp";
         this.mapper = new ObjectMapper().registerModule(new JavaTimeModule())
+            .enable(com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+            .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
@@ -113,7 +120,7 @@ public final class OpsMcpServer {
         ObjectNode info = result.putObject("serverInfo");
         info.put("name", serverName);
         info.put("version", "0.1.0");
-        info.put("probeVersion", PROBE_VERSION);
+        info.put("probeVersion",profile==OpsCapabilityProfile.PINNED_RESTART_V2 ? "2" : PROBE_VERSION);
         info.put("capabilityProfile", profile.name());
         info.put("toolSetHash", computeToolSetHash(profile));
         return success(id, result);
@@ -188,6 +195,7 @@ public final class OpsMcpServer {
 
     /** Package-visible: build the tools/list JSON for hash computation. */
     ObjectNode buildToolsListJson() {
+        if(profile==OpsCapabilityProfile.PINNED_RESTART_V2) return pinnedTools();
         // Simulate the same logic as listTools()
         var mapper2 = new ObjectMapper().registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -277,6 +285,7 @@ public final class OpsMcpServer {
     }
 
     private ObjectNode listTools(JsonNode id) {
+        if(profile==OpsCapabilityProfile.PINNED_RESTART_V2) return success(id,pinnedTools());
         ArrayNode tools = mapper.createArrayNode();
 
         if (profile == OpsCapabilityProfile.FIX_ORDER_API_V1) {
@@ -334,6 +343,7 @@ public final class OpsMcpServer {
             return error(id, -32602, "unknown or prohibited tool: " + name);
         }
         JsonNode args = params.path("arguments");
+        if(profile==OpsCapabilityProfile.PINNED_RESTART_V2) return callPinned(id,name,args);
 
         if (profile == OpsCapabilityProfile.FIX_ORDER_API_V1) {
             if (!"restart_service".equals(name)) {
@@ -400,6 +410,54 @@ public final class OpsMcpServer {
         }
         callResult.putArray("content").add(text);
         return success(id, callResult);
+    }
+
+    private ObjectNode pinnedTools() {
+        var tools=mapper.createArrayNode();
+        tools.add(roTool("repair_scope","Read the operator-owned fixed restart scope and grant; this does not authorize execution.",properties(Map.of()),required()));
+        tools.add(roTool("repair_receipt","Read the durable receipt for an existing client Attempt; never redispatch.",
+            properties(Map.of("requestId",stringProperty("Original att-UUID request id"))),required("requestId")));
+        var restart=fixTool("restart_pinned","Restart the exact reviewed unhealthy order-api container once per grant and incident; persist intent and deduplicate requests.",
+            properties(Map.of("schemaVersion",integerProperty("Contract version",2,2),"requestId",stringProperty("Stable original client Attempt id"),
+                "incidentId",stringProperty("Original incident identity"),"targetHash",stringProperty("Full reviewed target fingerprint"),
+                "configurationHash",stringProperty("Exact operator configuration fingerprint"),"grantVersion",integerProperty("Operator grant version",1,Integer.MAX_VALUE),
+                "grantExpiresAt",stringProperty("Exact grant expiry"))),
+            required("schemaVersion","requestId","incidentId","targetHash","configurationHash","grantVersion","grantExpiresAt"));
+        ((ObjectNode)restart.get("annotations")).put("idempotentHint",true);
+        ((ObjectNode)restart.get("_meta")).put("clawkit/timeoutMs",90000);
+        tools.add(restart); var result=mapper.createObjectNode(); result.set("tools",tools); return result;
+    }
+    private ObjectNode callPinned(JsonNode id,String name,JsonNode arguments) {
+        if(pinnedRestart==null) return error(id,-32603,"pinned restart backend is not configured");
+        if(!arguments.isObject()) return error(id,-32602,"V2 arguments must be an object");
+        var started=java.time.Instant.now();
+        long startNanos=System.nanoTime();
+        try {
+            Object data; boolean ok=true; String code=null;
+            if(name.equals("repair_scope")) {
+                if(!arguments.isEmpty()) return error(id,-32602,"repair_scope accepts no arguments");
+                data=pinnedRestart.scope();
+            } else if(name.equals("repair_receipt")) {
+                if(arguments.size()!=1) return error(id,-32602,"repair_receipt accepts only requestId");
+                data=pinnedRestart.receipt(requiredText(arguments,"requestId"));
+                if(data==null) return error(id,-32602,"no durable request receipt");
+            } else {
+                var request=PinnedRestartContract.JSON.treeToValue(arguments,PinnedRestartContract.Request.class);
+                var receipt=pinnedRestart.restart(request); data=receipt;
+                ok=receipt.status()==PinnedRestartContract.Status.DISPATCH_REPORTED;
+                code=ok ? null : receipt.code();
+            }
+            var node=mapper.valueToTree(data); int bytes=mapper.writeValueAsBytes(node).length;
+            var frame=new OpsToolResult(name,"order-api",started,java.time.Instant.now(),true,ok,
+                node,code,code,new OpsToolResult.Audit("pinned-restart-v2",(System.nanoTime()-startNanos)/1000000,90000,bytes,bytes,false));
+            var call=mapper.createObjectNode().put("isError",!ok); call.set("structuredContent",mapper.valueToTree(frame));
+            call.putArray("content").addObject().put("type","text").put("text",mapper.writeValueAsString(frame));
+            return success(id,call);
+        } catch(IllegalArgumentException | com.fasterxml.jackson.core.JsonProcessingException e) {
+            return error(id,-32602,"invalid fixed V2 request fields");
+        } catch(Exception e) {
+            return error(id,-32603,"pinned execution store/configuration unavailable; preserve unknown outcome");
+        }
     }
 
     // ── Read-only tool builder (readOnlyHint=true, destructiveHint=false, LOW risk) ──

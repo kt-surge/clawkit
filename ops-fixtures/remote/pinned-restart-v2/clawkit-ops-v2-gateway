@@ -1,0 +1,33 @@
+#!/bin/sh
+# Fixed root entry. No arguments, user environment, shell commands or dynamic JAR path.
+set -eu
+umask 077
+PATH=/usr/bin:/bin
+export PATH
+[ "$#" -eq 0 ] && [ "$(id -u)" -eq 0 ] || exit 126
+trusted_path() {
+    checked=$1
+    while :; do
+        [ -e "$checked" ] && [ ! -L "$checked" ] || exit 126
+        [ "$(stat -c '%u' -- "$checked")" -eq 0 ] || exit 126
+        mode=$(stat -c '%a' -- "$checked")
+        [ "$((0$mode & 022))" -eq 0 ] || exit 126
+        [ "$checked" = / ] && break
+        checked=$(dirname -- "$checked")
+    done
+}
+trusted_path /usr/local/sbin/clawkit-ops-v2-gateway
+trusted_path /opt/clawkit-ops-v2/ops-mcp.jar
+trusted_path /opt/clawkit-ops-v2/SHA256SUMS.txt
+trusted_path /etc/clawkit-ops-v2/scope.json
+trusted_path /var/lib/clawkit-ops-v2
+[ -f /opt/clawkit-ops-v2/ops-mcp.jar ] && [ -f /opt/clawkit-ops-v2/SHA256SUMS.txt ] || exit 126
+cd /opt/clawkit-ops-v2
+# Require precisely the generated one-JAR checksum, not a caller-selected manifest.
+[ "$(wc -l < SHA256SUMS.txt)" -eq 1 ] || exit 126
+/usr/bin/grep -Eq '^[a-f0-9]{64}  ops-mcp\.jar$' SHA256SUMS.txt || exit 126
+/usr/bin/sha256sum --check --strict --status SHA256SUMS.txt || exit 126
+exec /usr/bin/env -i PATH=/usr/bin:/bin HOME=/root \
+    CLAWKIT_OPS_PROFILE=PINNED_RESTART_V2 \
+    CLAWKIT_OPS_PINNED_CONFIG=/etc/clawkit-ops-v2/scope.json \
+    /usr/bin/java -jar /opt/clawkit-ops-v2/ops-mcp.jar

@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "scope": "CONTROLLED_LOCAL_DOCKER_AND_IN_PROCESS_MCP",
+  "at": "2026-10-02T02:02:17.298575100Z",
+  "cliJarSha256": "5c3d5008f57b2ed26ec0b7ecd4b379650eeca245da1d999d843d3a2ce32475c6",
+  "serverJarSha256": "073c3aadbc873b73504a8b01b0b0acf52875f22cbdcaf8985754ec69925cbffa",
+  "cases": [
+    {
+      "attemptId": "att-53cc0814-4de2-406a-88c2-820e2c5990ef",
+      "case": "policy-recovery",
+      "duplicateRestartObserved": false,
+      "externalBusinessOracle": true,
+      "externalOracleObservations": [
+        {
+          "at": "2026-10-02T02:01:46.036206800Z",
+          "exactBodyMatched": true,
+          "httpStatus": 200
+        }
+      ],
+      "independentSamples": 3,
+      "serverStatus": "DISPATCH_REPORTED",
+      "status": "RECOVERED"
+    },
+    {
+      "attemptId": "att-b2d47478-bce8-46a4-8bb6-326fbe562c9b",
+      "case": "lost-client-reply",
+      "externalBusinessOracle": true,
+      "externalOracleObservations": [
+        {
+          "at": "2026-10-02T02:02:07.905145700Z",
+          "error": "IOException"
+        },
+        {
+          "at": "2026-10-02T02:02:08.415763800Z",
+          "exactBodyMatched": true,
+          "httpStatus": 200
+        }
+      ],
+      "independentSamples": 0,
+      "serverStatus": "DISPATCH_REPORTED",
+      "status": "OUTCOME_UNKNOWN"
+    },
+    {
+      "case": "client-restart-after-unknown",
+      "duplicateRestartObserved": false,
+      "status": "BLOCKED",
+      "unknownAndDowngradePersisted": true
+    }
+  ],
+  "serverRestartReceipts": 2,
+  "modelRequests": 0,
+  "sshSessions": 0,
+  "cleanupContainerCount": 0,
+  "cleanVerify": {
+    "errors": 0,
+    "suites": 183,
+    "tests": 1577,
+    "failures": 0,
+    "skipped": 6,
+    "reactorProjects": 14
+  },
+  "linuxGatewayReadonlySmoke": {
+    "checks": [
+      "disabled typed scope",
+      "writable config refusal",
+      "symbolic config refusal",
+      "server checksum refusal"
+    ],
+    "actions": 0,
+    "dockerSocketMounted": false,
+    "passed": true,
+    "logSha256": "ba36c6bea00e7313532c6afb786ae7ac29459b85bd7be0a458fd812dcf0049ba"
+  },
+  "rawEvidenceHashes": {
+    "summary.json": "9dbafe371cee2a8bff9718699fa204217ccd4b988411bf36033f578d33722624",
+    "client/attempts/journal.jsonl": "b05fc66552f545de3909219c9eb77d1b3397caf6e1eb1aaae406c881e604be19",
+    "client/attempts/snapshot.json": "fedd95b104b70a42d2722114bb027c194a1ef5fc399f75510e9ea6d4f4d75fdd",
+    "client/control/degraded-orders-fixture.json": "2f58e3b1918e3962a74262233e5025afee42565222825b7ff3151a88edf52963",
+    "server/att-53cc0814-4de2-406a-88c2-820e2c5990ef.intent.json": "37102d42cdc55757d38527fb5422b4dcbdeabee4e4406a1c00880ce1705517a9",
+    "server/att-53cc0814-4de2-406a-88c2-820e2c5990ef.receipt.json": "2986c1458fcd62e1f1e3b6ecf618a3725de8516e80694ef1c31bbe06d4ed5b30",
+    "server/att-b2d47478-bce8-46a4-8bb6-326fbe562c9b.intent.json": "1ece7e05abac332eaa4a9696cbc980b304875bb1e563bee821f6de0026e7a7e5",
+    "server/att-b2d47478-bce8-46a4-8bb6-326fbe562c9b.receipt.json": "151741ff0fb5dc6b2aad5ece7c7094cfa947b659048e92359333d4395db683d2"
+  },
+  "priorTrials": [
+    {
+      "logSha256": "4d46668d6794046e1050dfa642b76903a0908bc6eecd6c4123f877d10f6618bb",
+      "directory": "tmp/remote-r2-isolated-20261002-01",
+      "retained": true,
+      "candidateJarSha256": "8f2010cf5e99511d3a78aca2ded93dc9a4749fcc9c61d5d6ca80dc46095a077f",
+      "status": "FAILED_EXTERNAL_ORACLE_TOO_EARLY"
+    },
+    {
+      "retained": true,
+      "directory": "tmp/remote-r2-isolated-20261002-02",
+      "summarySha256": "b8fccc807a15fb711eaedde07c3f73aa9f8323493468e00624b2552b07979072",
+      "candidateJarSha256": "f874647657f9526a8b8ba5cbef1c532a16edbb669ad483a865137902528c7e0d",
+      "status": "PASSED_BEFORE_FINAL_ATTESTATION_GUARD"
+    }
+  ],
+  "limits": [
+    "controlled disposable fixture, not real remote repair or a model benchmark",
+    "MCP uses in-process transport; real SSH deployment remains untested",
+    "Windows directory fsync is unavailable; this is not power-loss certification",
+    "No remote deployment, remote full-identity qualification or runtime write activation",
+    "Not a model benchmark, production reliability percentage or MTTR result"
+  ],
+  "remoteRegistrationMode": "OBSERVE",
+  "realRemoteRepairVerified": false
+}
