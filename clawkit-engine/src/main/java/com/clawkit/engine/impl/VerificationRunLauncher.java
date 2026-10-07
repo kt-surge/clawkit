@@ -5,11 +5,14 @@ import com.clawkit.engine.PermissionMode;
 import com.clawkit.engine.ThinkingMode;
 import com.clawkit.reliability.attempt.ActionAttempt;
 import com.clawkit.reliability.gate.DeterministicVerifier;
+import com.clawkit.tools.action.VerificationMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 独立 Verification Run（P1-G5）。
+ * 按 Action Contract 分流验证（P1-G5）。
+ * DETERMINISTIC 仅现场重新读取并检查声明的效果，不启动模型；
+ * WORKFLOW 保留隔离的模型复查；MANUAL_REQUIRED 不自动判定成功。
  *
  * <p>隔离要求：
  * <ul>
@@ -41,11 +44,21 @@ public final class VerificationRunLauncher {
     }
 
     public VerificationRunResult verify(ActionAttempt attempt) {
+        if (attempt.descriptor().verificationMode() == VerificationMode.MANUAL_REQUIRED) {
+            return new VerificationRunResult(attempt.attemptId(), false,
+                "manual verification required", "NOT_STARTED_MANUAL_REQUIRED");
+        }
         // 1. 确定性断言先行：新采集证据，observedAt 必然晚于动作结束
         DeterministicVerifier.Verdict verdict =
             DeterministicVerifier.verify(attempt.descriptor().expectedEffects());
 
-        // 2. 独立模型复查：新 root run、全新引擎、只读权限
+        // File setters declare exact effects. Fresh assertions already provide the required verdict.
+        if (attempt.descriptor().verificationMode() == VerificationMode.DETERMINISTIC) {
+            return new VerificationRunResult(attempt.attemptId(), verdict.passed(),
+                verdict.detail(), "NOT_REQUESTED_DETERMINISTIC_MODE");
+        }
+
+        // 2. WORKFLOW 独立模型复查：新 root run、全新引擎、只读权限
         AgentEngine verifier = new AgentEngine(deps, workDir, ThinkingMode.OFF, "");
         verifier.setPermissionMode(PermissionMode.PLAN);
         verifier.enableSubAgents = false;

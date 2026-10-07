@@ -28,6 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class AgentEngineTest {
 
+    @org.junit.jupiter.api.io.TempDir
+    java.nio.file.Path testWorkspace;
+
     private static final ObjectMapper mapper = new ObjectMapper();
 
     // === MockProvider: OFF 模式（单阶段） ===
@@ -124,7 +127,7 @@ class AgentEngineTest {
     void shouldCompleteReActLoopInOffMode() {
         MockProvider mockProvider = new MockProvider();
         MockRegistry mockRegistry = new MockRegistry();
-        AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, "/tmp/work",
+        AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, testWorkspace.toString(),
             ThinkingMode.OFF);
 
         String result = engine.run("Check files in current directory");
@@ -138,7 +141,7 @@ class AgentEngineTest {
     void shouldCompleteTwoStageThinkingLoop() {
         TwoStageMockProvider mockProvider = new TwoStageMockProvider();
         MockRegistry mockRegistry = new MockRegistry();
-        AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, "/tmp/work",
+        AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, testWorkspace.toString(),
             ThinkingMode.TWO_STAGE);
 
         String result = engine.run("Check files in current directory");
@@ -153,7 +156,7 @@ class AgentEngineTest {
     void shouldDefaultToOffMode() {
         MockProvider mockProvider = new MockProvider();
         MockRegistry mockRegistry = new MockRegistry();
-        AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, "/tmp/work");
+        AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, testWorkspace.toString());
 
         assertThat(engine.thinkingMode()).isEqualTo(ThinkingMode.OFF);
     }
@@ -194,7 +197,7 @@ class AgentEngineTest {
     void shouldReturnErrorOnOffModeFailure() {
         FailingOffProvider mockProvider = new FailingOffProvider();
         MockRegistry mockRegistry = new MockRegistry();
-        AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, "/tmp/work",
+        AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, testWorkspace.toString(),
             ThinkingMode.OFF);
 
         String result = engine.run("Do something");
@@ -207,7 +210,7 @@ class AgentEngineTest {
     void shouldReturnErrorOnTwoStagePhase1Failure() {
         FailingPhase1Provider mockProvider = new FailingPhase1Provider();
         MockRegistry mockRegistry = new MockRegistry();
-        AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, "/tmp/work",
+        AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, testWorkspace.toString(),
             ThinkingMode.TWO_STAGE);
 
         String result = engine.run("Check files");
@@ -221,7 +224,7 @@ class AgentEngineTest {
     void shouldReturnErrorOnTwoStagePhase2Failure() {
         FailingPhase2Provider mockProvider = new FailingPhase2Provider();
         MockRegistry mockRegistry = new MockRegistry();
-        AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, "/tmp/work",
+        AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, testWorkspace.toString(),
             ThinkingMode.TWO_STAGE);
 
         String result = engine.run("Check files");
@@ -262,7 +265,7 @@ class AgentEngineTest {
     void shouldPersistConversationAcrossMultipleCalls() {
         MultiTurnProvider provider = new MultiTurnProvider();
         MockRegistry mockRegistry = new MockRegistry();
-        AgentEngine engine = new AgentEngine(provider, mockRegistry, "/tmp/work",
+        AgentEngine engine = new AgentEngine(provider, mockRegistry, testWorkspace.toString(),
             ThinkingMode.OFF);
 
         String result1 = engine.run("list files");
@@ -281,7 +284,7 @@ class AgentEngineTest {
     void shouldClearSessionHistory() {
         MultiTurnProvider provider = new MultiTurnProvider();
         MockRegistry mockRegistry = new MockRegistry();
-        AgentEngine engine = new AgentEngine(provider, mockRegistry, "/tmp/work",
+        AgentEngine engine = new AgentEngine(provider, mockRegistry, testWorkspace.toString(),
             ThinkingMode.OFF);
 
         engine.run("list files");
@@ -320,7 +323,7 @@ class AgentEngineTest {
     void shouldDetectDeadLoopAndInjectWarning() {
         DeadLoopProvider provider = new DeadLoopProvider();
         MockRegistry mockRegistry = new MockRegistry();
-        AgentEngine engine = new AgentEngine(provider, mockRegistry, "/tmp/work",
+        AgentEngine engine = new AgentEngine(provider, mockRegistry, testWorkspace.toString(),
             ThinkingMode.OFF);
 
         String result = engine.run("do something");
@@ -347,7 +350,7 @@ class AgentEngineTest {
     void shouldEnforceHardLimit() {
         InfiniteLoopProvider provider = new InfiniteLoopProvider();
         MockRegistry mockRegistry = new MockRegistry();
-        AgentEngine engine = new AgentEngine(provider, mockRegistry, "/tmp/work",
+        AgentEngine engine = new AgentEngine(provider, mockRegistry, testWorkspace.toString(),
             ThinkingMode.OFF);
 
         String result = engine.run("do something");
@@ -366,7 +369,7 @@ class AgentEngineTest {
             SessionService sessionService = new SessionService(tempDir, null);
             MockProvider mockProvider = new MockProvider();
             MockRegistry mockRegistry = new MockRegistry();
-            AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, "/tmp/work",
+            AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, testWorkspace.toString(),
                 ThinkingMode.OFF);
             engine.setSessionService(sessionService);
             engine.setApprovalHandler(req -> new com.clawkit.engine.ApprovalResult.Approve());
@@ -399,7 +402,7 @@ class AgentEngineTest {
         var gateway = new ObservingProviderGateway(provider, recorder);
         var deps = new AgentRuntimeDependencies(gateway, null, new MockRegistry(),
             128_000, "cl100k_base", recorder, null, null);
-        AgentEngine engine = new AgentEngine(deps, "/tmp/work", ThinkingMode.OFF, "");
+        AgentEngine engine = new AgentEngine(deps, testWorkspace.toString(), ThinkingMode.OFF, "");
 
         assertThat(engine.run("hello")).isEqualTo("done");
 
@@ -410,7 +413,7 @@ class AgentEngineTest {
 
     @Test
     void shouldPublishToolVisualizationCallbacks() {
-        AgentEngine engine = new AgentEngine(new MockProvider(), new MockRegistry(), "/tmp/work");
+        AgentEngine engine = new AgentEngine(new MockProvider(), new MockRegistry(), testWorkspace.toString());
         List<String> started = new ArrayList<>();
         List<String> ended = new ArrayList<>();
         engine.onToolStart(event -> started.add(event.name()));
@@ -447,7 +450,7 @@ class AgentEngineTest {
     @Test
     void shouldRejectRestrictedScopeBeforePlanExecutionStarts() {
         MockProvider provider = new MockProvider();
-        AgentEngine engine = new AgentEngine(provider, new MockRegistry(), "/tmp/work");
+        AgentEngine engine = new AgentEngine(provider, new MockRegistry(), testWorkspace.toString());
         engine.setExecutionMode(com.clawkit.engine.ExecutionMode.PLAN_EXECUTE);
 
         String result = engine.run("inspect remote service",
@@ -476,7 +479,7 @@ class AgentEngineTest {
         Path tempDir = Files.createTempDirectory("clawkit-test-sessions");
         try {
             SessionService sessionService = new SessionService(tempDir, null);
-            AgentEngine engine = new AgentEngine(new MockProvider(), new MockRegistry(), "/tmp/work",
+            AgentEngine engine = new AgentEngine(new MockProvider(), new MockRegistry(), testWorkspace.toString(),
                 ThinkingMode.OFF);
             engine.setSessionService(sessionService);
 
@@ -497,7 +500,7 @@ class AgentEngineTest {
             SessionService sessionService = new SessionService(tempDir, null);
             MockProvider mockProvider = new MockProvider();
             MockRegistry mockRegistry = new MockRegistry();
-            AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, "/tmp/work",
+            AgentEngine engine = new AgentEngine(mockProvider, mockRegistry, testWorkspace.toString(),
                 ThinkingMode.OFF);
             engine.setSessionService(sessionService);
             engine.setApprovalHandler(req -> new com.clawkit.engine.ApprovalResult.Approve());

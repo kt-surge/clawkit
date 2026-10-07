@@ -458,6 +458,8 @@ R10 已消除大部分动态重复采证，因此本阶段只有在新正式基�
 
 ## 10. P2-5：自适应分层 compact
 
+2026-10-03 补充：长历史续接、跨会话记忆和真实 20+ Turn 的对照口径统一见 [上下文与记忆评测合同](context-memory-evaluation.md)。重放、真实全程任务和公共基准分别报告；推进状态见 TODO 的 CM 主链。
+
 PA-3 required anchor 的 snapshot、verify、reinsert、re-budget 和 fail-closed 已进入生产路径；
 26-turn 离线组件场景可稳定触发 L2/L3。由于当前 OPS 正式基线 compact=0，本实现只证明安全与
 控制流正确，真实模型成本、完成率和 P95 收益仍需独立长任务基线确认。

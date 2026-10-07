@@ -105,6 +105,8 @@
 
 下一轮主线为 INTELLIGENCE-E0 → E1 → E2 → E3 → E4，优先完成协议、有效诊断证据与知识复用。真实目标试用按单独范围实施，不要求用户先完成长期 dogfood，也不据本轮规划扩大服务器写权限。
 
+2026-10-03 用户新增上下文与记忆效果研究需求：近期底座先推进 CM-E1 → E2，用独立任务对照定位压缩、任务续接和跨会话记忆的真实缺口，再决定 CM-E3 的检查点/召回修复；之后 CM-E4 冻结验证。需求与长期评分合同见 [上下文与记忆评测](docs/context-memory-evaluation.md)，逐项状态维护在下方 P2。运维近期量化以处置正确性、执行可靠性、交接质量和调用消耗为主；生产 MTTR/工时收益未测量，不将固定恢复等待包装成效率提升。
+
 ### 历史执行顺序（2026-08-04 至 2026-09-20）
 
 以下保留旧 PRODUCT/OPS 状态与来源；其中七天 dogfood/先 Shadow 后 AUTO 的开发顺序不再阻塞本轮隔离实现。真实目标的安全授权与已有回归合同继续有效。
@@ -634,6 +636,43 @@ P1-A 的前三项（失败分类、智能截断、任务感知 compact）直接�
 
 前置：Benchmark 能证明没有牺牲可靠性和完成率。
 
+### CM：上下文与记忆效果证据（2026-10-03）
+
+长期需求、对照、评分、证据和预算草案统一见 [评测合同](docs/context-memory-evaluation.md)；以下只维护实施状态。原 P2 技术项继续在后文维护，不重复列为完成成果。
+
+- **[x] CM-E0：需求与开源评测调研** — 2026-10-03 已核对当前压缩、工作记忆、工作区、长期记忆、Session 和 ScriptedProvider 评测入口；调研 LongMemEval/MemoryAgentBench/MemoryArena/LongMemEval-V2、Letta/Mem0 与 AIOpsLab/ITBench/τ-bench，核验公开版本与许可证。合同区分两套对照、重放与全程真实任务、质量/净消耗与生产效率。本阶段仅完成研究与合同，未调用模型、未运行记忆效果评测，未改变运行时行为。
+- **[x] CM-E1：离线评测基础与来源/用量合同** — 2026-10-03 完成独立机制回放、逐实例 HOME/工作区/Session/Memory/Run 隔离、来源与压缩分区留档、用量账本、机器评分、哈希审计与复算。八类风险共 10 夹具通过，含更新冲突、无关召回、新旧证据、伪造摘要和预算溢出；Java auditor 从已封存原始产物重算通过，不采信汇总得分。真实引擎接入验证续接、现场读取、写工具及独立验证；全阶段共享预算覆盖新 root 验证，缺失 usage 不计为实际零消耗，无效付费响应仍留账。新增 10 项合同测试通过；全仓库 `mvn -B -ntp -Pcontext-memory-replay clean verify` 的 14 个 Reactor 项目 SUCCESS，evaluation 85 项、0 failure/0 error。产物 `tmp/context-memory-e1-replay-20261003-01/`；日志 `tmp/context-memory-e1-clean-verify-01.log`，开发失败日志 `tmp/context-memory-e1-tests-*.log` 保留。无外部模型调用，不产生效果或节省数据，原 16 个脚本回归含义不变。2026-10-04 已执行第二语言审计：Node 脚本从原始产物独立复算 10/10，完整性通过；回执 `tmp/cm-e1-independent-node-audit-20261004-01.json`。此前本地运行阻塞已在用户“继续”后通过直接 Java 启动解决。
+- **[x] CM-E2：真实开发基线** — 2026-10-04 完成六个独立合成开发任务、三组对照各一次，共 18 实例的 `live-continuation`；原始产物 `tmp/cm-development-live-20261004-01/`，完整通过 **2/18**、最终文件字段正确 **9/18**。8 个实例预算耗尽、3 个压缩失败，所有失败保留；不代替正式留出集或真实 20+ Turn。实际请求 **108**、total Token **191182**（input 178352、output 12830，cache hit 130432 / miss 47920 为 input 子项）。摄入、Session 摘要、压缩、主任务和独立验证全部入账；10 次发送前额度拒绝不计实际请求。
+  用户先选择离线后明确纠正为允许本轮 API 额度；范围仅这六个合成任务和隔离文件，18 实例，每实例最多 8 请求/30000 total Token、整轮 144 请求/540000 Token，单次输出 1024、零传输重试。授权回执 `tmp/cm-api-authorization-20261004-01.json`；本轮已结束，历史诊断授权及未花完限额不复用于新轮次。
+  首先通过真实引擎/分词压力准备与完整 `clean verify`：14 个 Reactor 项目 SUCCESS，evaluation 109 项、0 failure/error，日志 `tmp/cm-e2-clean-verify-20261004-04.log`；4096 是显式评测窗口。修正五个旧测试类的临时工作区及原生 M2 全阶段事件捕获，原断言和失败日志保留。
+  首个跨 JVM 独立 audit 因失败列表迭代顺序不同误报；修复比较版本 `OUTCOME_CANONICAL_FAILURE_MULTISET_V2` 仅排序完整错误多重集合，保留缺项/重复项/状态变化检测，不修改封存产物、失败或通过数。13 个相关 Reactor 项目 `verify` SUCCESS，evaluation 110 项、0 failure/error，日志 `tmp/cm-e2-audit-repair-verify-20261004-01.log`。新独立回执 `tmp/cm-development-live-audit-20261004-02.json`：artifactIntegrity=true、outcomesAgree=true、passed=2/18；原失败回执保留。
+  全部九个记忆实例有逐事实、原文与实际模型输入审核；方法为未盲化的开发者语义审核，不称外部盲评。M2 联合 Memory/Session 保留并提供五个已知必要事实；两条修复约定的 Memory 提取为空，由 Session 摘要保留。M2 三个输出均正确，完整通过 0/3，均耗尽额度；未知查询不进入事实分母，Recall@K/Precision@K 未评分。回执 `tmp/cm-development-evidence-audit-20261004-02.json`，审核机制十组合同通过 `tmp/cm-review-contracts-20261004-05.json`；排除独立验证与发送前被拒绝请求，不能把它们算作主任务已见材料。
+  开发结果与逐组/逐阶段账本：`tmp/cm-development-results-20261004-01.md` / `.json`。发现系统/工具输出中的路径形态片段被提升为 required USER_CONSTRAINT，导致锚点预算失败；某实例探索运行时 lock 文件；验证阶段占 36/108 次请求，七个正确文件未完整收尾。E3 先修正来源与必要状态保护、减少无关探索并明确额度分配；E4 留出及 live-full 未完成，本轮不支持简历中的记忆准确率或 Token 节省比例。
+- **[x] CM-E3：开发失败修复与候选交付** — 2026-10-04 首个来源修复已进入普通 DefaultContextPipeline：正则候选按实际消息角色标记，普通系统/工具/模型文本不升级为已确认用户约束，同文本合并时用户来源优先；显式 required 锚点与用户约束超预算仍失败，retainedConstraints 不报告已丢弃文本。六条 planner 合同覆盖原始封存失败输入（7 个非用户路径片段）、来源合并、模型假设与必要证据边界；修复前 3 项失败，修复后通过；另补保留清单真实性回归。原失败日志 `tmp/cm-e3-anchor-red-20261004-02.log` 保留。
+  整仓离线 `clean verify` 14 个 Reactor 项目 SUCCESS，context 69 项、evaluation 110 项、0 failure/error，日志 `tmp/cm-e3-clean-verify-20261004-01.log`；候选压力准备 `tmp/cm-development-prepare-e3-20261004-01/` 无真实请求，git diff --check 通过。以下离线门禁对应修复实现；独立新轮次的模型验证见下文，不追认旧实例通过。2026-10-04 又修正验证模式未分流：普通文件 DETERMINISTIC 动作仅做新鲜断言，WORKFLOW 保留独立只读模型复查，MANUAL_REQUIRED 不自动判成功；文件动作验证仍不代替任务字段评分。三个新回归先失败后通过，engine 131 项、0 failure/error，日志 `tmp/cm-e3-verification-red-20261004-01.log` / `cm-e3-verification-green-20261004-01.log`。真实引擎两次主模型调用能写入并以 journal 当前 VERIFIED_SUCCESS 收尾，目标漂移仍失败；评测的 WORKFLOW 夹具保留四次跨根用量断言，M2 原生摄入和普通文件夹具改为真实路径的六次/两次成本，专项四项通过 `tmp/cm-e3-verification-evaluation-20261004-01.log`。固定响应不证明真实调用节省。整仓 `clean verify` 14 个 Reactor 项目 SUCCESS，engine 131 项、evaluation 110 项、0 failure/error，日志 `tmp/cm-e3-clean-verify-20261004-02.log`；候选压力准备 ready=true、零真实请求，独立 audit 完整性与结果一致性通过 `tmp/cm-e3-prepare-audit-20261004-02.json`。用户“允许本轮修复验证”授权后完成独立新轮次 `tmp/cm-development-live-20261004-02/`：完整通过 **11/18**、输出正确 **11/18**，实际 **82 请求 / 155736 total Token**（input 147734 / output 8002；cache hit 122109 / miss 25625为input子项），无预算耗尽、未发送或未运行。来源修复与验证模式分流均在本轮运行；M2三个任务全部完成，必要五事实仍由联合Memory/Session保留，不能归因于新增记忆算法。独立audit完整性/结果一致性均通过 `tmp/cm-development-live-audit-20261004-03.json`；全部九个记忆实例的未盲化事实审核 `tmp/cm-development-evidence-audit-20261004-03.json`，原文/实际送达材料分开标注。逐组/逐阶段账本 `tmp/cm-development-results-20261004-02.md` / `.json`，当前授权结束，不复用剩余额度。该开发重跑不支持正式提升或简历节省比例。原始三条压缩摘要均保留了关键约定与最新决定，并实际进入主任务请求；原文不再逐字存在不等于任务状态丢失。检查点暂不预设开发，需先检查修复版实际剩余失败；未盲化开发审核 `tmp/cm-e3-history-summary-review-20261004-01.json` 不作为语义准确率。验证修复总回执 `tmp/cm-e3-verification-repair-20261004-01.json`。
+
+  本轮剩余7个失败：5个C0/M0无历史的已知题失败，以及两个保留摘要的阶段续接。真实根目录文件存在，Glob/Grep 的 `**/` 零层目录漏匹配误导模型探索空lock；另有C2在多次探索后达到保护窗口硬上限。修复共用有界NIO匹配器，普通`*`/字符组/转义/备选语义保留，非法模式返回T-002；不提高上下文/Token门限，不改已封存失败。新增5个失败/异常回归先失败后通过，4项匹配边界回归通过；真实Engine续接夹具实际找到并读取根目录现场值healthy=false、保持schema.sql不变、生成验收文件，5次固定响应/60合成Token，独立audit通过，仅证明机制。首个夹具误填healthy=true被Gold拒绝，失败日志保留。整仓 `clean verify` 14个Reactor项目SUCCESS，tools186、engine131、context69、evaluation111、0 failure/error；准备ready=true、零模型调用，独立准备audit通过。日志 `tmp/cm-e3-glob-red-20261004-01.log`、`cm-e3-glob-integration-20261004-01.log`、`cm-e3-clean-verify-20261004-03.log`，回执 `tmp/cm-e3-prepare-audit-20261004-03.json`。Glob修复尚未进行新模型轮次；E3完成候选交付，效果由E4验证。
+
+  2026-10-05：单次USER请求中的多步工具往返此前无法老化，已复现两项失败并补齐完整assistant/tool交换分组；最近3条USER单独原样保护，未完成/重复ID工具图不部分驱逐。上下文74测试、普通引擎132测试通过，固定响应回归实际读取24份文件且25个TurnStarted；不计真实20+模型门禁。原失败、夹具修正及绿灯日志 `tmp/cm-e3-single-task-*.log` / `tmp/cm-e3-single-request-engine-20261005-01.log` 保留。原版41份Context封存不变，公共接口不变。新候选尚未产生模型成绩。
+
+- **[~] CM-E4：冻结效果与真实长任务对照** — 已形成 [冻结验证实施方案](docs/context-memory-frozen-validation-plan.md)，预注册压缩强基线/原版Context/候选Context，以及记忆无历史/完整档案/原生Memory+Session；没有证据要求M3，原生记忆算法保持相同。原版Context的41份主源码来自首轮封存产物并复核哈希，已归档 `benchmarks/baselines/context-memory-context-original-v1/`；离线编译和原版/候选锚点来源装配探针均通过：原版required=7且失败、候选required=0且不失败，两者真实用户保护均fail closed；41份主源码比对中公共类型无变化。回执 `tmp/cm-e4-original-context-build-20261004-01/receipt.json`，原版JAR与共同候选Runtime按哈希冻结；零模型调用。共同Engine、文件工具与验证模式防止成本差异混入压缩归因。
+  正式执行器与24个独立合成留出任务已实现：12压缩/12记忆，每个3组×3次，共216实例；严格拆分开发与正式入口，原版加载来源、共同运行时、多文件评分与新鲜文件来源分别检查。18条针对性Java合同通过；12条来源审核合同、10条统计/原始账本合同通过。首版正式准备 `tmp/cm-frozen-prepare-20261004-02/` 的12项压缩压力均达标，全部216个NOT_RUN保留；独立Java/Node复算通过。固定摘要首轮探针12项无压缩失败，仅机制证据。
+  上一候选的离线验收已通过（当前改动后须重新冻结）：`tmp/cm-e4-clean-verify-20261004-01.log` 整仓14模块SUCCESS、评测116测试通过；最终封存 `tmp/cm-frozen-prepare-20261004-03/` 源码未变、12项压力达标、216实例全部NOT_RUN且零模型调用。独立Java回执 `tmp/cm-e4-final-prepare-audit-20261004-03.json` 与Node统计 `tmp/cm-e4-final-prepare-statistics-20261004-03.json` 通过；12条来源、10条统计合同再次通过。
+  2026-10-05 已获两轮明确授权并执行：正式216/216均尝试、70通过、0未运行；851实际请求/1834182 Token。C1 1/36、C2 0/36、C3 0/36；M0 9/36、M1 34/36、M2 26/36，完整失败保留。Java原始产物重评分、Node账本与任务块bootstrap复算、108记忆实例非盲开发者事实审核均完成。M2历史事实提取/实际输入各51/51支持，但未优于完整档案检索；不得宣称成本/准确率收益。独立live-full六个实例均因OUTPUT_TRUNCATED停止，20请求/76047 Token含付费失败响应，真实20+Turn门禁未满足；原始轮次均封存，两个一次性授权结束。详见 [首轮正式结果](docs/context-memory-frozen-results-20261005.md)。
+  输出截断修复已进入普通ReAct：只对有完整actual用量的OUTPUT_TRUNCATED进行最多两次恢复，部分工具不执行，原失败用量保留；下一轮重新经过取消/deadline/共享预算，运行结束移除临时提示。7条有意义用例先失败后通过；整仓clean verify 14模块SUCCESS、206 suites/1659 tests、0 failure/error、6 skipped。新版长任务prepare ready=true、6个NOT_RUN、0 Provider，独立审计通过；542份源码哈希及12个关键加载类与clean构建字节一致，原版JAR/长任务数据哈希不变。回执 `tmp/cm-e4-output-recovery-readiness-20261005-01.json`。
+  第六轮（历史，2026-10-05）：有界任务说明保留和相对路径修复已实际复验，6/6 尝试、2/6 通过；156 实际请求 / 1197427 total Token，6 个付费失败计账。候选配置 27 实际 main / 2 有效压力压缩 / 25/25 文件且 PASS；候选动态 37 main / 1 有效压力压缩 / 20/21 文件且 FAIL。首次读取后规则逐字保留覆盖 26/26、36/36；唯一动态动作错误发生时规则与 revision 3 原文均可见。Java/Node 独立复算通过，549 来源未变；详情见 [长任务结果](docs/context-memory-live-full-results-20261005.md)。本轮授权结束，整体门槛仍未通过。
+  第七轮（历史，2026-10-05）：通用 ASK/AUTO 收尾指引已按用户“确认”完成真实回归，6/6 尝试、0/6 完整通过；158 实际请求 / 1280564 total Token，6 付费失败计账。指引实际送达 151/151 主任务请求。候选配置 24 main / 1 压力 / 17/25 文件，prod 域名误增 .prod；规则 23/23 保留，但环境原文在 L3 后缺失且摘要未保留 domain。候选动态 34 main / 2 压力 / 20/21 文件，worker-01 在首个压力事件之前、完整规则与 revision 3 在场时误写 INVESTIGATE。Java/Node 审计一致，549 来源 / 17 加载类未变。不能认定提示收益或仅归因压缩，长任务门槛仍未通过，详情见 [最新结果](docs/context-memory-live-full-results-20261005.md)。
+  第七轮明确范围授权已执行完并结束，不复用余额；结果 `tmp/cm-full-results-20261005-07.json`、结束收据 `tmp/cm-api-execution-full-20261005-07.json`。当前已完成下一阶段底座的离线交付：原生来源逐条标记 PRESENT/MISSING，最新失败读取撤销旧引用；可选单Run TaskCompletionCheck 接入两类普通 ReAct 收尾，提供应用 ACCEPT/RETRY/REJECT，最多两次纠正，失败不能返回完成，权限/取消/原预算继续生效。初始6条验收回归先失败后通过；最终14模块 clean verify、211 suites/1689项/0失败/0错误/6跳过。full 6 NOT_RUN 与 frozen 216 NOT_RUN 的零网络预检/独立封存审计通过，552来源/23加载类一致。回执 `tmp/cm-task-acceptance-readiness-20261005-01.json`。新增真实模型调用0，CLI及现有v1评测默认尚未装配业务验收，不能宣称质量收益。
+  第二阶段离线接入已完成：另设 acceptance-v2 数据/合同，三组共用公开迁移与动态处置规则验收；检查当前实际文件和保护源，反馈仅含错误位置/规则/来源，回调只读，纠正最多两次。旧v1数据、环境推进、Gold、独立评分器与全部失败不改，默认CLI/v1仍不启用。6条新版合同回归通过；最终14模块 clean verify、212 suites/1695项/0失败/0错误/6跳过。v2和兼容v1各6 NOT_RUN、frozen 216 NOT_RUN/12压力预检，三套零网络预检及隔离JVM封存审计通过；555来源/26加载类匹配。回执 `tmp/cm-public-acceptance-readiness-20261005-01.json`，新版合同见 [真实长任务第6节](docs/context-memory-live-full-plan.md#6-公开规则验收修订-v2离线交付真实效果待验证)。新增真实模型调用0。
+  公开规则验收 v2 首轮已按用户“允许本轮 v2 复验”完成：6/6尝试、1/6完整通过（C1动态），C3候选0/2；177实际请求/1442697 total Token，8个付费失败完整计账。候选配置25/25文件正确，但最后写入后又有7次读取请求/69175 Token，未触发完成验收；35 main/2压力，因41059预留大于32864余额停止。候选动态16/21文件、36 main/3压力，最终修订更新中断；41665预留大于34243余额。两次错误完成提议被公开规则验收阻断并送达反馈，尚无成功纠正证据。Java/Node重评分、来源/反馈送达、写入账本、555来源/26加载类审计一致。结果 tmp/cm-public-v2-results-20261005-01.json；结束收据 tmp/cm-api-execution-public-v2-20261005-01.json，授权已结束不复用。
+  v2 后第一批离线修复已交付：MISSING 只表示原始 TOOL 文本不可见，不要求逐条重读；普通 ReAct 对连续三批相同、可信内置且执行成功的成组只读返回提示一次，必要的新鲜采证和应用验收继续生效。真实双文件回归先失败后通过，缺失产物仍被验收拒绝；整仓 14 模块 SUCCESS、213 suites/1700 项/0 失败/0 错误/6 跳过。最终 v2/v1 各 6 NOT_RUN，frozen 216 NOT_RUN/12 压力预检；三套零网络预检和隔离 JVM 封存审计通过，557 来源/27 加载类一致。回执 `tmp/cm-read-batch-readiness-20261005-01.json`。新增模型调用 0，三个组共用运行时修订，不能归因候选 Context。多个不同文件组轮换重读尚未覆盖，不能称上一轮重复读取已全部解决。
+  2026-10-06 第二批离线修复已交付：普通 ReAct 观察连续多组读取阶段，达到6批后相同参数/返回组重访可提示一次，最近12组有界；变化、写入或不合格结果重置。full 三组共用原 UTF-8 发送预留口径的输入规划，实际账本和硬门禁不变；候选 GENERAL 在较小容量下按完整交换移除旧历史，保护 SYSTEM/USER/任务说明/最近3组，可选锚点按既有比例缩减，必要约束不足仍失败。65项定向回归通过；整仓14模块 SUCCESS、214 suites/1711项/0失败/0错误/6跳过。v2/v1 各6 NOT_RUN、frozen216 NOT_RUN/12压力预检，三套封存独立JVM审计通过；558来源/33加载类匹配。
+  最终包回放 v2 首轮两个候选的真实末端输入：配置发送预留41059→31836（余额32864），动态41665→24666（余额34243）；此前仅缩小规划与仅移除历史的失败尝试完整保留。0模型/摘要/远程调用，回放只证明可发送，不代表修订传播成功或成本/完成率提升。回执 `tmp/cm-progress-budget-readiness-20261006-01.json`，实际 v2 首轮1/6、C3 0/2保持不变。下一步按 [第7节合同](docs/context-memory-live-full-plan.md#7-发送预留与输入规划离线修订) 单独申请新版6实例的同范围开发回归授权，再验证收尾与最终修订传播；不提高预算、不重贴PASS，不安排216实跑。运维展示聚焦发现→授权→处置→独立验证→回放。任务已观察，不能归为新留出泛化；质量门禁与主目标仍未完成。
+  未完成：长任务质量门禁及后续修复验证；本v1留出集已被观察，修复后只能用于回归，新的泛化结论需未观察任务。保持CM-E4进行中，不以运行规模或正确阻断替代效果门禁。
+- **[ ] CM-E5：公共数据外部参照（后续）** — LongMemEval cleaned 分层子集/完整运行分别命名；记录 revision、许可证和评分器，保留原时间与答案来源，禁止真值进入记忆模块。
+
+### 既有技术项
+
 - **[~] 自适应分层 compact**。
   已落地 L0 无动作、L1 确定性去重、L2 抽取式 mask/pressure、L3 带边际 token 收益门禁的
   生成式 map-reduce、L4 结构化失败；决策计入输出预留、安全余量、required anchor 和剩余 run
@@ -900,3 +939,76 @@ ops-fixtures/
   **第二轮（P1 生命周期修复）**：BashTool 覆盖 execute(ToolExecutionRequest) → TIMED_OUT/NON_ZERO_EXIT/exitCode/outputStats、WriteTool requireWriteAccess 处理新文件、MCP annotations 缺失字段用保守默认值（fieldBool）、ProcessRunner 进程树先快照再终止 + exitValue try-catch、ToolMetadata compact constructor 验证平铺字段与 ToolBehavior 一致、RunAccumulator 审批指标修正（NOT_REQUIRED 不计入 approvalRequested）。
 
   **已删除**：engine RiskLevel.java、McpAuditLogger.java。engine main 源码中无活跃的 registry.execute() 调用。
+
+### 2026-10-05 CM-E4候选刷新与完整任务准备
+
+正式216实例授权尚待回复；已有18开发实例授权已结束，不能复用。补单请求工具往返后须保存新的clean verify、正式prepare与独立审计，旧20261004-03只作为未运行的历史候选。独立完整任务合同见 docs/context-memory-live-full-plan.md；已创建两类空历史合成任务、执行器、阶段共享预算、环境结构推进与独立重评分。离线合同正在验证，真实运行未授权、零本轮模型调用。
+
+  2026-10-05 最终刷新：完整配置迁移夹具又定位到Token估算遗漏工具参数，已统一修正Tokenizer/ContextBudgetAnalyzer（公开ABI反射核对不变），所有组共用修正计数器、原版私有策略封存不变。同一16384窗口的24份配置/汇总与重评分通过并触发L3；固定响应28个主轮仍报告0真实main、live-full=false。没有缩窗、追加聊天或增加工作量；前述16384/8192失败探针均保留。
+
+  `tmp/cm-e4-clean-verify-20261005-02.log` 整仓14模块SUCCESS；按13个测试模块顶层XML核对204 suites/1651 tests、0 failure/error、6 skipped。上下文76、引擎132、评测122通过，长任务6合同全绿。最终正式prepare `tmp/cm-frozen-prepare-20261005-02/` 的216实例全NOT_RUN、12项压力通过；独立Java和Node审计/12来源/10统计合同通过。独立full prepare `tmp/cm-full-prepare-20261005-02/` 的6实例全NOT_RUN、零Provider、封存审计通过。24项实际加载顶层字节码与clean编译匹配；准备与夹具不是实际模型效果。完整回执 `tmp/cm-e4-readiness-20261005-02.json`。两项新轮次授权问题均待回复，旧18实例授权已结束；本次新增开发零真实模型调用，CM-E4和主目标保持未完成。
+
+#### CM-E4 离线推进补记（2026-10-05：动态证据完整链）
+
+- [x] 修复近期工具结果在MessageMasker Tier0与LadderedCompactor保护区的双重首尾截断；最新原生read返回保持完整，仍受工具输出策略和上下文预算限制。封存原版策略不变。
+- [x] 最新现场资格关联根任务runId、实际工具提议路径、执行完成事件、观测时间和返回字节/文件/最后快照哈希；两次环境推进也关联实际write路径。
+- [x] 新增不以gold生成提议的完整动态固定响应回归：实际读取3次状态、推进2次revision、生成最后21份输出、独立重评分；哈希/路径/runId/revision错误关联均被拒绝。真实模型轮数为0，不能关闭长任务门禁。原失败日志保留。
+- [x] 最新整仓clean verify通过14模块；13模块顶层Surefire XML共205套/1652项/0失败/0错误/6跳过。日志tmp/cm-e4-clean-verify-20261005-03.log。
+- [x] 最新正式对照/完整任务prepare为tmp/cm-frozen-prepare-20261005-03和tmp/cm-full-prepare-20261005-03；均ready，分别216和6行NOT_RUN。独立Java审计及正式轮Node统计审计通过，22项离线合同通过；24项加载字节码与干净编译一致。回执tmp/cm-e4-readiness-20261005-03.json。
+- [~] 本次没有新API调用。216正式重放与6独立长任务仍待各自已发送的范围/预算授权回复；不追加授权请求，不将prepare或固定响应记作模型效果/生产收益。CM-E4及持续目标仍未完成。
+
+#### 持续目标阻塞审计（2026-10-05）
+
+按原目标核对：正式216实例、独立6实例及其实际用量/来源审核均未完成；不得用离线门禁关闭CM-E4。当前两套封存各541项来源哈希与工作区一致，先前验证/准备/审计进程已终止且PID均不存在。原18开发实例授权结束，两个新范围的授权请求连续三个目标轮仍待人类回复；当前可执行的模型前工作已完成。主目标转为blocked等待已发送问题的回复，不新增授权请求，不调用API，不重复启动prepare或测试。审计tmp/cm-goal-completion-blocked-audit-20261005-01.json。
+
+#### CM-E4 两个新轮次获准（2026-10-05）
+
+用户回复“授权”，覆盖已说明的216正式实例及6独立长任务，分别按原固定数据/参数/预算执行一次；来源哈希与20261005-03准备一致。授权回执tmp/cm-api-authorization-frozen-20261005-01.json和tmp/cm-api-authorization-full-20261005-01.json。先运行完整任务，再运行正式对照；期间不改生产源码、任务、提示或评分。各轮剩余额度不复用，全部失败保留，目标恢复执行且未完成。
+
+#### CM-E4 独立完整任务首轮结果（2026-10-05）
+
+获准6实例已全部尝试，0满足任务质量/长任务门禁；均在OUTPUT_TRUNCATED后终止，actual main 3–4，未触发压力压缩。20实际请求/76047 total Token（61287 input、14760 output），6个失败响应计费入账；全部失败保留。独立Java审计完整性/结果一致性通过，源码未变。结果tmp/cm-full-results-20261005-01.md/json，原始tmp/cm-full-live-20261005-01，授权本轮已结束。正式216实例按同一冻结版本继续执行；期间不修改Runtime。之后仅针对实际输出截断的可恢复性补离线修复，再请求新范围，不覆盖原始分母。
+
+
+#### CM-E4 长任务修复复验完成（2026-10-05）
+
+用户“允许本轮长任务复验”后完整执行同批2任务×3组，共6实例，0完整通过；198实际请求/1447681 total Token，6项付费失败均计账。候选配置36实际main/2压力压缩、17/25文件正确但整体失败；候选动态44实际main、预算停止、0/21文件正确。Java封存/重评分和Node公开规则独立重建均通过，源码运行中不变。结果见 [长任务复验](docs/context-memory-live-full-results-20261005.md)，原始tmp/cm-full-live-20261005-02/。授权回执已结束，不复用剩余额度。下一步先离线开发有界来源/进度导航及恢复提示批量修正，再申请独立新轮次；当前没有质量收益结论，CM-E4及主目标保持进行中。
+
+
+#### CM-E4 文件来源/进度导航已完成离线交付（2026-10-05）
+
+普通ReAct新增单Run文件轨迹，实际内置read的返回文本摘要与确认write/edit路径分别记录；同路径后续未知/部分/待验证撤销旧确认。预警/压缩后导航经统一ContextPipeline计费、每轮替换、finally移除。截断提示允许两个短工具调用的建议，仍最多两次恢复，不改重试/预算/输出上限。需求与调研见[文件检查点合同](docs/context-memory-file-checkpoint.md)。原生压力压缩→来源导航→重读更新数据→写入并独立核验及不跨run泄漏的5条合同通过，原7条截断合同通过；固定响应不算模型效果。首轮整仓失败揭示旧夹具把摘要调用当主任务序号，已按阶段修正并逐项计账，3条专项通过，失败保留。
+
+最终clean verify 14模块SUCCESS，207 suites/1664项/0 failure/error/6 skipped；日志tmp/cm-file-checkpoint-clean-verify-20261005-02.log。长任务prepare tmp/cm-full-prepare-20261005-05 ready=true/6 NOT_RUN/0 Provider/空初始历史；封存审计完整性与一致性通过，545份来源哈希、15个加载类与clean编译一致，原版JAR/任务数据未变。回执tmp/cm-file-checkpoint-readiness-20261005-01.json。当前没有新API调用，上一轮授权已结束，新轮真实6实例回归仍需逐轮范围/预算授权；本v1已观察，CM-E4与主目标保持进行中，效果收益未证明。
+
+
+#### CM-E4 来源送达与完成门禁补充核对（2026-10-05）
+
+六实例原生来源与实际模型请求逐字送达复核归档tmp/cm-full-source-delivery-20261005-03.json：配置三组12/12静态来源送达；动态两份静态来源三组均送达。原版动态读取了revision 2但未完整送达模型即压缩停止；候选动态revision 2送达后，最后写入触发revision 3并预算停止，未再次原生读取；摘要基线revision 3已送达但质量未通过。结构验证报告按环境生成来源单列，不与初始空占位混比。来源可用性不证明语义应用或质量收益，原评分和所有失败不变。
+
+完成审计tmp/cm-goal-completion-audit-20261005-02.json逐项核对CM-E1—E4：正式216运行/账本/来源审阅已完成，但候选完整任务质量+20实际main+压力门禁仍未满足。当前545来源与准备快照一致，所有旧构建/预检/审计进程终止，新候选6 NOT_RUN。新限定轮次授权问题仍待人类回复，本轮新增API调用0；不重复发送问题、不复用旧额度，CM-E4与主目标保持active，尚未满足blocked阈值。
+
+
+#### CM-E4 目标等待新轮授权（2026-10-05）
+
+同一新轮范围/预算授权等待已连续三轮，当前重新核对：上轮ROUND_COMPLETED_AUTHORIZATION_ENDED且余额不可复用；没有新授权/执行回执或活动模型进程，原clean/prepare/audit句柄均exit 0。新候选545份源码与准备快照一致，6实例仍NOT_RUN。当前候选所需离线修复、整仓验证、来源/字节码/封存审计已完成，真实质量门禁仍未通过；没有可替代新授权的后续必需离线动作。已将主目标设为blocked等待已发送问题回复，未将目标完成或缩小范围，新增API调用0，未重发问题或重复跑测试。审计tmp/cm-goal-authorization-blocked-audit-20261005-02.json；人类明确批准后按同一2合成任务/6实例和原预算恢复执行。
+
+- 2026-10-05：用户直接回复“批准”，新授权已单独记录于 `tmp/cm-api-authorization-full-20261005-03.json`；文件任务检查点修复版开始同一批 2 个合成任务 / 6 实例回归，输出 `tmp/cm-full-live-20261005-03/`。每实例 60 请求 / 360000 Token，整轮 360 请求 / 2160000 Token / 1 小时；旧授权均已结束。历史 v1 已观测，按修复回归解释，完成审计前不宣称实际效果。
+
+- 2026-10-05 第三轮6实例回归已结束：159请求/1262668 total Token，1/6完整通过（摘要基线配置）；候选配置17/25、候选动态0/21，门禁false。Java完整性/评分一致性与Node公开规则/送达审计通过，原始记录完整封存；详见 `docs/context-memory-live-full-results-20261005.md`。发现原生write写前覆盖拒绝被误归结果未知并持有目标锁；接下来离线修复分类。本轮授权已结束，后续API需新逐轮范围授权；目标未完成。
+
+- 2026-10-05 原生write覆盖拒绝修复已离线就绪：写前自身检查直接返回LOCAL_ERROR_NO_EFFECT/NO_EFFECT_CONFIRMED，确认失败释放目标锁，执行期同名错误仍按未知保留；固定响应验证显式修正与独立文件验证。整仓clean verify：208 suites/1668 tests/0失败/0错误/6跳过，14模块成功；prepare `tmp/cm-full-prepare-20261005-06/` 6项NOT_RUN/0模型调用/初始空历史，封存audit通过，546源码与15个关键类哈希相符，原版JAR/数据不变。就绪证据 `tmp/cm-write-precheck-readiness-20261005-01.json`。模型效果未验证；prod空值规则与成对只读循环检测仍开放。旧授权结束，新API需独立逐轮授权，目标未完成。
+
+- 2026-10-05：用户在限定复验授权请求后直接回复“继续”，原生write写前覆盖拒绝修复版开始第四轮同批2合成任务/6实例回归。授权 `tmp/cm-api-authorization-full-20261005-04.json`，执行 `tmp/cm-api-execution-full-20261005-04.json`，新输出 `tmp/cm-full-live-20261005-04/`。每实例60请求/360000 Token，整轮360请求/2160000 Token/1小时；前3轮授权结束。来源546文件/15关键类与运行包核对一致，旧数据/评分/预算不变；完成封存审计前不宣称效果。
+
+- 2026-10-05 第四轮6实例已结束：155请求/1251018 total Token，0完整通过；候选配置17/25，候选动态8/21，摘要动态21/21但预算停止仍不计完成。Java封存/评分与Node公开规则/来源送达审计通过；账本复核2次真实覆盖拒绝FAILED_NO_EFFECT、随后2次验证更新，全轮0目标锁阻断。546源码与运行记录一致；旧失败保留。最新源在第30–37轮被遮蔽且导航未启用，离线补齐低于预警的来源丢失触发；配置空值、早期动作误用另行保留，不能全归因于压缩。详见docs/context-memory-live-full-results-20261005.md；本轮授权结束，目标未完成。
+
+- 2026-10-05 来源丢失触发修复已离线就绪：原始预算OK但压缩决策计入预留后L2遮蔽来源时，按最新原生read调用ID摘要+返回文本摘要检查可见性，下一主模型请求前补入单Run导航；最多再经过一遍唯一ContextPipeline，全部提示计费，失败停止。10项针对性回归通过，整仓208 suites/1670 tests/0失败/0错误/6跳过、14模块成功；prepare `tmp/cm-full-prepare-20261005-07/` 为6 NOT_RUN/0模型/空初始历史，封存audit通过，546源码/15关键类一致，旧数据/原版JAR未变。证据 `tmp/cm-source-loss-checkpoint-readiness-20261005-01.json`。同时澄清第四轮动态确有L2执行，压力计数0指未满足冻结预警口径，不能称从未L2；旧评分不变。新修复未验证模型效果，prod空值及早期动作误用仍开放，下一API需新逐轮授权，目标未完成。
+
+- 2026-10-05：用户在来源丢失触发修复的限定复验问题后直接回复“继续”，第五轮同批2合成任务/6实例开始。授权 `tmp/cm-api-authorization-full-20261005-05.json`，执行 `tmp/cm-api-execution-full-20261005-05.json`，输出 `tmp/cm-full-live-20261005-05/`；每实例60请求/360000 Token，整轮360请求/2160000 Token/1小时，旧授权均已结束。546来源/15关键类与准备和运行包一致，数据/评分/预算未改；封存审计前不宣称效果。
+
+- 2026-10-05 第五轮已结束并完成独立审计：164实际请求/1252843 total Token，6项付费失败计账，2/6完整通过（摘要配置、候选动态）。候选动态39实际main/2压力压缩、21/21产物及新鲜revision 3通过；候选配置16/25，8项遥测空值、指定汇总缺失，另写preview/summary.json被评分记1次越出指定产物范围，源及production未变。规则虽重读，部分错误在可见时仍持续，不能只归因压缩；单次已观察v1回归不构成泛化/效率收益。Java/公开规则/送达/CRC账本/导航审计通过，546来源未变，结果见docs/context-memory-live-full-results-20261005.md及tmp/cm-full-results-20261005-05.json；全部旧失败保留，授权结束。下一步离线保留有来源的任务规则、修正相对路径提取；原数据/评分/预算/验证器不改，CM-E4及目标未完成。
+
+- 2026-10-05 有界任务说明原文保留已离线交付：候选Context选取最近USER引用路径的最新read结果，最多2个选择/4096字符单返回/8192完整交换开销；原角色/调用链不变，全部预算受限。完整相对路径、URI/枚举排除、SYSTEM派生锚点清理与原版提取器私有隔离已验证；19项首轮针对性及18项最终整合通过，最终210 suites/1679 tests/0失败/0错误/6跳过、14模块成功。新full prepare 6 NOT_RUN、正式prepare 216 NOT_RUN/12压力通过，均零模型且独立audit通过，549来源/17加载类一致。回执tmp/cm-task-source-readiness-20261005-01.json；新机制真实效果未测，下一6实例待新逐轮授权，旧失败/评分/数据/预算不变，目标继续开放。
+
+- 2026-10-05 第六轮已按“允许本轮复验”完成并封存，授权 `tmp/cm-api-authorization-full-20261005-06.json`，结束收据 `tmp/cm-api-execution-full-20261005-06.json`。有界任务说明保留的实际请求覆盖已验证，候选配置通过；动态 worker-01 在规则及最终状态均可见时误用动作，保留 20/21 与整体 FAIL。下一步梳理应用层规则—证据—决策一致性校验，避免将结构验证或确定性写入当作业务完成；原数据/评分/预算不改，全部失败保留，CM-E4 与主目标未完成，新的模型轮次需独立范围授权。

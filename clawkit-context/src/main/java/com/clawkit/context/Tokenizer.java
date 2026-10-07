@@ -4,7 +4,7 @@ import com.clawkit.tools.schema.Message;
 import java.util.List;
 
 /**
- * Token 计数器 — 提供与模型一致的真实 token 计数。
+ * Token 计数器 — 对实际发送字段分词，并估算协议开销；不代替供应商 actual usage。
  * 优先使用 {@link com.clawkit.context.impl.TiktokenTokenizer}，
  * 不可用时降级到 {@link com.clawkit.context.impl.CharFallbackTokenizer}。
  */
@@ -24,6 +24,14 @@ public interface Tokenizer {
             String content = msg.content();
             if (content != null && !content.isEmpty()) {
                 total += countTokens(content);
+            }
+            if (msg.reasoningContent() != null) total += countTokens(msg.reasoningContent());
+            if (msg.toolCallId() != null) total += countTokens(msg.toolCallId());
+            if (msg.toolCalls() != null) for (var call : msg.toolCalls()) {
+                total += tokensPerMessageOverhead();
+                if (call.id() != null) total += countTokens(call.id());
+                if (call.name() != null) total += countTokens(call.name());
+                if (call.arguments() != null) total += countTokens(call.arguments().toString());
             }
         }
         return total;

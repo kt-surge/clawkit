@@ -161,6 +161,51 @@ class DefaultContextPipelineAdaptiveTest {
     }
 
     @Test
+    void lowRunBudgetDropsOnlyWholeOldExchangesAndKeepsTheLatestExactSources() {
+        var policy=ContextBudgetPolicy.of(16_384);
+        var counter=com.clawkit.context.impl.TokenizerFactory.create("cl100k_base");
+        var pipeline=new DefaultContextPipeline(new LadderedCompactor(null,counter),new ContextBudgetAnalyzer(counter,policy),counter,policy);
+        var input=new ArrayList<Message>();input.add(Message.system("Preserve original scope and permissions."));
+        input.add(Message.user("Use docs/rules.md and keep the exact declared conditions."));
+        var json=new com.fasterxml.jackson.databind.ObjectMapper();
+        var sourceCall=new com.clawkit.tools.schema.ToolCall("rules","read",json.createObjectNode().put("path","docs/rules.md"));
+        input.add(Message.assistantWithTools("read rules",List.of(sourceCall),null));
+        input.add(Message.toolResult("rules","Important exact rule: preserve latest source evidence."));
+        for(int i=1;i<=8;i++) {
+            var call=new com.clawkit.tools.schema.ToolCall("write-"+i,"write",json.createObjectNode().put("path","preview/"+i+".json").put("content","legacy synthetic payload ".repeat(160)));
+            input.add(Message.assistantWithTools("write preview "+i,List.of(call),null));
+            input.add(Message.toolResult(call.id(),"confirmed local write "+i));
+        }
+        var result=pipeline.compact(new CompactionRequest(input,200,10,CompactionHint.GENERAL,2_048,81,8_000));
+        assertThat(result.audit().failed()).isFalse();
+        assertThat(counter.countTokens(result.messages())).isLessThanOrEqualTo((int)(8_000*policy.targetRatio())-200-2_048-81);
+        assertThat(counter.countTokens(result.messages())).isLessThan(counter.countTokens(input));
+        assertThat(result.messages()).contains(input.get(0),input.get(1),input.get(2),input.get(3));
+        for(int i=input.size()-6;i<input.size();i++)assertThat(result.messages()).contains(input.get(i));
+        var assistantIds=result.messages().stream().filter(m->m.toolCalls()!=null).flatMap(m->m.toolCalls().stream()).map(com.clawkit.tools.schema.ToolCall::id).toList();
+        var resultIds=result.messages().stream().filter(m->m.role()==com.clawkit.tools.schema.Role.TOOL).map(Message::toolCallId).toList();
+        assertThat(assistantIds).containsExactlyInAnyOrderElementsOf(resultIds);
+        assertThat(result.appliedRules()).contains("l2-budget-exchange-eviction");
+        assertThat(result.audit().discardedRanges()).anyMatch(range->range.reason().equals("LOW_RUN_BUDGET_COMPLETE_EXCHANGE"));
+    }
+
+    @Test
+    void lowBudgetNeverPartiallyEvictsAnIncompleteToolGraph() {
+        var counter=com.clawkit.context.impl.TokenizerFactory.create("cl100k_base");var policy=ContextBudgetPolicy.of(16_384);
+        var pipeline=new DefaultContextPipeline(new LadderedCompactor(null,counter),new ContextBudgetAnalyzer(counter,policy),counter,policy);
+        var input=new ArrayList<Message>();input.add(Message.system("scope"));input.add(Message.user("preserve scope"));
+        for(int i=0;i<8;i++) {
+            var call=new com.clawkit.tools.schema.ToolCall("complete-"+i,"read",new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode().put("path","source-"+i+".json"));
+            input.add(Message.assistantWithTools("read source",List.of(call),null));input.add(Message.toolResult(call.id(),"exact source ".repeat(100)));
+        }
+        input.add(Message.assistantWithTools("pending read",List.of(new com.clawkit.tools.schema.ToolCall("pending","read",null)),null));
+        var result=pipeline.compact(new CompactionRequest(input,100,10,CompactionHint.GENERAL,2_048,81,4_000));
+        assertThat(result.messages()).containsAll(input);
+        assertThat(result.appliedRules()).doesNotContain("l2-budget-exchange-eviction");
+        assertThat(result.audit().discardedRanges()).isEmpty();
+    }
+
+    @Test
     void includesReservedOutputSafetyMarginAndRunBudgetInTheDecision() {
         var pipeline = pipeline(4_000, null,
             new AdaptiveCompactionPolicy(0, 64, 0.50, 1_000));
@@ -173,6 +218,23 @@ class DefaultContextPipelineAdaptiveTest {
         assertThat(normal.audit().level()).isEqualTo(CompactionLevel.L0_NONE);
         assertThat(budgetConstrained.audit().level()).isEqualTo(CompactionLevel.L2_EXTRACTIVE);
         assertThat(budgetConstrained.audit().decisionReason()).isEqualTo("above-compact-threshold");
+    }
+
+    @Test
+    void doesNotReportEvictedUnselectedToolPathsAsRetainedConstraints() {
+        var pipeline = pipeline(1_600, messages -> "bounded summary",
+            new AdaptiveCompactionPolicy(0, 64, 0.10, 1_000));
+        var input = new ArrayList<>(longConversation(26, 100));
+        String paths = java.util.stream.IntStream.range(0, 7).mapToObj(i ->
+            "/srv/orders/old-tool-output/config-" + i + ".json")
+            .collect(java.util.stream.Collectors.joining("\n"));
+        input.set(3, Message.toolResult("call-1", paths));
+        var result = pipeline.compact(new CompactionRequest(input, 0, 26));
+        assertThat(result.audit().failureCode()).isNull();
+        assertThat(result.retainedConstraints()).allSatisfy(text ->
+            assertThat(result.messages()).anyMatch(message ->
+                message.content() != null && message.content().contains(text)));
+        assertThat(result.retainedConstraints()).doesNotContain("/srv/orders/old-tool-output/config-6.json");
     }
 
     private DefaultContextPipeline pipeline(int contextWindow, Summarizer summarizer,
@@ -188,7 +250,8 @@ class DefaultContextPipelineAdaptiveTest {
         messages.add(Message.system("stable system prompt"));
         for (int turn = 1; turn <= turns; turn++) {
             messages.add(Message.user("question " + turn + " " + "u".repeat(contentSize)));
-            messages.add(Message.assistant("answer " + turn + " " + "a".repeat(contentSize)));
+            messages.add(Message.assistantWithTools("answer " + turn + " " + "a".repeat(contentSize),
+                List.of(new com.clawkit.tools.schema.ToolCall("call-" + turn, "read", null)), null));
             messages.add(Message.toolResult("call-" + turn, "tool " + "t".repeat(contentSize)));
         }
         return messages;

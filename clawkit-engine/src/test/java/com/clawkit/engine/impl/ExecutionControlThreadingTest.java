@@ -39,6 +39,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** P1-G1：取消、deadline 和预算贯穿 ReAct / Tool / SubAgent 链路。 */
 class ExecutionControlThreadingTest {
 
+    @org.junit.jupiter.api.io.TempDir
+    java.nio.file.Path testWorkspace;
+
     private static final ObjectMapper mapper = new ObjectMapper();
 
     /** 计数 Provider：永远返回纯文本（除非配置了行为） */
@@ -195,7 +198,7 @@ class ExecutionControlThreadingTest {
     void shouldRefuseProviderCallWhenBudgetExhausted() {
         CountingProvider provider = new CountingProvider();
         AgentEngine engine = new AgentEngine(provider, new AgentEngineTest.MockRegistry(),
-            "/tmp/work", ThinkingMode.OFF);
+            testWorkspace.toString(), ThinkingMode.OFF);
         engine.setRunLimits(null, 0L);
         List<RunEventPayload> events = new CopyOnWriteArrayList<>();
         engine.addRecorder((p, rid, prid, tn, at) -> events.add(p));
@@ -211,7 +214,7 @@ class ExecutionControlThreadingTest {
     void shouldRefuseProviderCallWhenOnlyPartialTokenReservationIsAvailable() {
         CountingProvider provider = new CountingProvider();
         AgentEngine engine = new AgentEngine(provider, new AgentEngineTest.MockRegistry(),
-            "/tmp/work", ThinkingMode.OFF);
+            testWorkspace.toString(), ThinkingMode.OFF);
         engine.setRunLimits(null, 100L);
 
         String result = engine.run("hello");
@@ -224,7 +227,7 @@ class ExecutionControlThreadingTest {
     void shouldEnforceProviderCallCountBudgetBeforeNetworkCall() {
         CountingProvider provider = new CountingProvider();
         AgentEngine engine = new AgentEngine(provider, new AgentEngineTest.MockRegistry(),
-            "/tmp/work", ThinkingMode.OFF);
+            testWorkspace.toString(), ThinkingMode.OFF);
         engine.setRunLimits(null, null, 0L, null);
 
         String result = engine.run("hello");
@@ -257,7 +260,7 @@ class ExecutionControlThreadingTest {
     void shouldRefuseProviderCallWhenDeadlineExceeded() {
         CountingProvider provider = new CountingProvider();
         AgentEngine engine = new AgentEngine(provider, new AgentEngineTest.MockRegistry(),
-            "/tmp/work", ThinkingMode.OFF);
+            testWorkspace.toString(), ThinkingMode.OFF);
         engine.setRunLimits(Duration.ZERO, null);
         List<RunEventPayload> events = new CopyOnWriteArrayList<>();
         engine.addRecorder((p, rid, prid, tn, at) -> events.add(p));
@@ -278,7 +281,7 @@ class ExecutionControlThreadingTest {
         ToolRegistry registry = new ToolRegistry();
         registry.register(probe);
 
-        AgentEngine engine = new AgentEngine(provider, registry, "/tmp/work", ThinkingMode.OFF);
+        AgentEngine engine = new AgentEngine(provider, registry, testWorkspace.toString(), ThinkingMode.OFF);
         provider.onFirstCall = engine::interrupt; // 模型响应期间用户按下 Ctrl+C
 
         String result = engine.run("hello");
@@ -294,7 +297,7 @@ class ExecutionControlThreadingTest {
     void shouldCascadeParentCancelIntoChildEngine() {
         CountingProvider provider = new CountingProvider();
         AgentEngine child = new AgentEngine(provider, new AgentEngineTest.MockRegistry(),
-            "/tmp/work", ThinkingMode.OFF);
+            testWorkspace.toString(), ThinkingMode.OFF);
         CancellationTree parent = CancellationTree.unbounded();
         child.attachParentControl(parent);
         parent.cancel();
@@ -311,7 +314,7 @@ class ExecutionControlThreadingTest {
     void shouldShareParentBudgetWithChildEngine() {
         CountingProvider provider = new CountingProvider();
         AgentEngine child = new AgentEngine(provider, new AgentEngineTest.MockRegistry(),
-            "/tmp/work", ThinkingMode.OFF);
+            testWorkspace.toString(), ThinkingMode.OFF);
         CancellationTree parent = CancellationTree.root(null,
             com.clawkit.reliability.BudgetLedger.of(0));
         child.attachParentControl(parent);

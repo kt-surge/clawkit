@@ -37,6 +37,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class AdaptiveCompactionEngineTest {
 
+    @org.junit.jupiter.api.io.TempDir
+    java.nio.file.Path testWorkspace;
+
     @Test
     void compactFailureStopsBeforeMainProviderCallAndIsObservable() {
         AtomicInteger providerCalls = new AtomicInteger();
@@ -74,7 +77,7 @@ class AdaptiveCompactionEngineTest {
             (payload, runId, parentRunId, turn, time) -> events.add(payload);
         var deps = new AgentRuntimeDependencies(gateway, pipeline, new EmptyRegistry(),
             1_000, "cl100k_base", recorder, null, null);
-        AgentEngine engine = new AgentEngine(deps, "/tmp/work", ThinkingMode.OFF, "");
+        AgentEngine engine = new AgentEngine(deps, testWorkspace.toString(), ThinkingMode.OFF, "");
 
         String output = engine.run("continue");
 

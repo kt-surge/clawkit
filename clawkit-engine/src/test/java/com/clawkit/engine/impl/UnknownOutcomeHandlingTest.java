@@ -31,6 +31,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** P1-G2：结果未知（EFFECT_UNKNOWN）不得被当作确定失败注入推理。 */
 class UnknownOutcomeHandlingTest {
 
+    @org.junit.jupiter.api.io.TempDir
+    java.nio.file.Path testWorkspace;
+
     private static final ObjectMapper mapper = new ObjectMapper();
 
     /** 副作用工具：执行返回 TIMED_OUT（远端结果未知） */
@@ -98,7 +101,7 @@ class UnknownOutcomeHandlingTest {
         SpyProvider provider = new SpyProvider();
         ToolRegistry registry = new ToolRegistry();
         registry.register(new TimingOutWriteTool());
-        AgentEngine engine = new AgentEngine(provider, registry, "/tmp/work", ThinkingMode.OFF);
+        AgentEngine engine = new AgentEngine(provider, registry, testWorkspace.toString(), ThinkingMode.OFF);
 
         String result = engine.run("write something");
 

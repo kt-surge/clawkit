@@ -1,0 +1,2567 @@
+{
+  "version": "context-memory-live-full-v1",
+  "split": "INDEPENDENT_LIVE_FULL",
+  "mode": "live-full",
+  "plannedTasks": 2,
+  "plannedInstances": 6,
+  "repetitions": 1,
+  "modelDraft": {
+    "endpoint": "https://api.deepseek.com",
+    "model": "deepseek-v4-flash"
+  },
+  "limitsDraft": {
+    "instanceProviderCalls": 60,
+    "instanceTotalTokens": 360000,
+    "totalProviderCalls": 360,
+    "totalTokens": 2160000,
+    "outputTokensPerCall": 2048,
+    "maxRetries": 0,
+    "roundDeadlineSeconds": 3600
+  },
+  "settingsDraft": {
+    "contextWindow": 16384,
+    "recentWholeTurns": 3,
+    "framingReserveTokens": 1024,
+    "instanceDeadlineSeconds": 900,
+    "instanceToolCalls": 160,
+    "encoding": "cl100k_base"
+  },
+  "tasks": [
+    {
+      "id": "configuration-migration",
+      "agentInput": {
+        "query": "Read docs/migration.md and migrate this synthetic project into the required v2 preview configurations and summary. Validate the actual preview structure, preserve sources and production, and finish when complete.",
+        "workspaceFiles": {
+          "config/v1/gateway.json": "{\n  \"service\": \"gateway\",\n  \"version\": 1,\n  \"port\": 8100,\n  \"workers\": 2,\n  \"timeout_ms\": 2000,\n  \"connect_timeout_ms\": 1000,\n  \"retry_attempts\": 2,\n  \"retry_delay_ms\": 1000,\n  \"cpu_millicores\": 250,\n  \"memory_mb\": 128,\n  \"min_replicas\": 1,\n  \"max_replicas\": 3,\n  \"upstream\": \"accounts\",\n  \"upstream_port\": 8101,\n  \"log_level\": \"INFO\",\n  \"log_format\": \"json\",\n  \"redact_fields\": [\n    \"authorization\",\n    \"cookie\",\n    \"api_key\"\n  ],\n  \"trace_sample_percent\": 10,\n  \"metrics_path\": \"/metrics\",\n  \"health_path\": \"/health\",\n  \"drain_timeout_ms\": 30000,\n  \"max_connections\": 100,\n  \"queue_size\": 50,\n  \"tls_min_version\": \"TLSv1.2\",\n  \"cors_origins\": [\n    \"https://app.example.test\"\n  ],\n  \"rollout_batch_size\": 1,\n  \"rollback_on_failure\": true,\n  \"storage_enabled\": true,\n  \"storage_retention_days\": 7,\n  \"owner_team\": \"platform-0\",\n  \"alert_channel\": \"synthetic-ops\",\n  \"zone_spread\": true\n}\n",
+          "config/v1/accounts.json": "{\n  \"service\": \"accounts\",\n  \"version\": 1,\n  \"port\": 8101,\n  \"workers\": 3,\n  \"timeout_ms\": 3000,\n  \"connect_timeout_ms\": 1000,\n  \"retry_attempts\": 3,\n  \"retry_delay_ms\": 1000,\n  \"cpu_millicores\": 300,\n  \"memory_mb\": 192,\n  \"min_replicas\": 1,\n  \"max_replicas\": 4,\n  \"upstream\": \"catalog\",\n  \"upstream_port\": 8102,\n  \"log_level\": \"INFO\",\n  \"log_format\": \"json\",\n  \"redact_fields\": [\n    \"authorization\",\n    \"cookie\",\n    \"api_key\"\n  ],\n  \"trace_sample_percent\": 15,\n  \"metrics_path\": \"/metrics\",\n  \"health_path\": \"/health\",\n  \"drain_timeout_ms\": 30000,\n  \"max_connections\": 120,\n  \"queue_size\": 60,\n  \"tls_min_version\": \"TLSv1.2\",\n  \"cors_origins\": [\n    \"https://app.example.test\"\n  ],\n  \"rollout_batch_size\": 1,\n  \"rollback_on_failure\": true,\n  \"storage_enabled\": false,\n  \"storage_retention_days\": 8,\n  \"owner_team\": \"platform-1\",\n  \"alert_channel\": \"synthetic-ops\",\n  \"zone_spread\": true\n}\n",
+          "config/v1/catalog.json": "{\n  \"service\": \"catalog\",\n  \"version\": 1,\n  \"port\": 8102,\n  \"workers\": 4,\n  \"timeout_ms\": 4000,\n  \"connect_timeout_ms\": 1000,\n  \"retry_attempts\": 2,\n  \"retry_delay_ms\": 1000,\n  \"cpu_millicores\": 350,\n  \"memory_mb\": 256,\n  \"min_replicas\": 1,\n  \"max_replicas\": 5,\n  \"upstream\": \"checkout\",\n  \"upstream_port\": 8103,\n  \"log_level\": \"INFO\",\n  \"log_format\": \"json\",\n  \"redact_fields\": [\n    \"authorization\",\n    \"cookie\",\n    \"api_key\"\n  ],\n  \"trace_sample_percent\": 20,\n  \"metrics_path\": \"/metrics\",\n  \"health_path\": \"/health\",\n  \"drain_timeout_ms\": 30000,\n  \"max_connections\": 140,\n  \"queue_size\": 70,\n  \"tls_min_version\": \"TLSv1.2\",\n  \"cors_origins\": [\n    \"https://app.example.test\"\n  ],\n  \"rollout_batch_size\": 1,\n  \"rollback_on_failure\": true,\n  \"storage_enabled\": true,\n  \"storage_retention_days\": 9,\n  \"owner_team\": \"platform-2\",\n  \"alert_channel\": \"synthetic-ops\",\n  \"zone_spread\": true\n}\n",
+          "config/v1/checkout.json": "{\n  \"service\": \"checkout\",\n  \"version\": 1,\n  \"port\": 8103,\n  \"workers\": 2,\n  \"timeout_ms\": 5000,\n  \"connect_timeout_ms\": 1000,\n  \"retry_attempts\": 3,\n  \"retry_delay_ms\": 1000,\n  \"cpu_millicores\": 400,\n  \"memory_mb\": 320,\n  \"min_replicas\": 1,\n  \"max_replicas\": 3,\n  \"upstream\": \"payments\",\n  \"upstream_port\": 8104,\n  \"log_level\": \"INFO\",\n  \"log_format\": \"json\",\n  \"redact_fields\": [\n    \"authorization\",\n    \"cookie\",\n    \"api_key\"\n  ],\n  \"trace_sample_percent\": 25,\n  \"metrics_path\": \"/metrics\",\n  \"health_path\": \"/health\",\n  \"drain_timeout_ms\": 30000,\n  \"max_connections\": 160,\n  \"queue_size\": 80,\n  \"tls_min_version\": \"TLSv1.2\",\n  \"cors_origins\": [\n    \"https://app.example.test\"\n  ],\n  \"rollout_batch_size\": 1,\n  \"rollback_on_failure\": true,\n  \"storage_enabled\": false,\n  \"storage_retention_days\": 10,\n  \"owner_team\": \"platform-0\",\n  \"alert_channel\": \"synthetic-ops\",\n  \"zone_spread\": true\n}\n",
+          "config/v1/payments.json": "{\n  \"service\": \"payments\",\n  \"version\": 1,\n  \"port\": 8104,\n  \"workers\": 3,\n  \"timeout_ms\": 6000,\n  \"connect_timeout_ms\": 1000,\n  \"retry_attempts\": 2,\n  \"retry_delay_ms\": 1000,\n  \"cpu_millicores\": 450,\n  \"memory_mb\": 384,\n  \"min_replicas\": 1,\n  \"max_replicas\": 4,\n  \"upstream\": \"inventory\",\n  \"upstream_port\": 8105,\n  \"log_level\": \"INFO\",\n  \"log_format\": \"json\",\n  \"redact_fields\": [\n    \"authorization\",\n    \"cookie\",\n    \"api_key\"\n  ],\n  \"trace_sample_percent\": 30,\n  \"metrics_path\": \"/metrics\",\n  \"health_path\": \"/health\",\n  \"drain_timeout_ms\": 30000,\n  \"max_connections\": 180,\n  \"queue_size\": 90,\n  \"tls_min_version\": \"TLSv1.2\",\n  \"cors_origins\": [\n    \"https://app.example.test\"\n  ],\n  \"rollout_batch_size\": 1,\n  \"rollback_on_failure\": true,\n  \"storage_enabled\": true,\n  \"storage_retention_days\": 11,\n  \"owner_team\": \"platform-1\",\n  \"alert_channel\": \"synthetic-ops\",\n  \"zone_spread\": true\n}\n",
+          "config/v1/inventory.json": "{\n  \"service\": \"inventory\",\n  \"version\": 1,\n  \"port\": 8105,\n  \"workers\": 4,\n  \"timeout_ms\": 7000,\n  \"connect_timeout_ms\": 1000,\n  \"retry_attempts\": 3,\n  \"retry_delay_ms\": 1000,\n  \"cpu_millicores\": 500,\n  \"memory_mb\": 448,\n  \"min_replicas\": 1,\n  \"max_replicas\": 5,\n  \"upstream\": \"notifications\",\n  \"upstream_port\": 8106,\n  \"log_level\": \"INFO\",\n  \"log_format\": \"json\",\n  \"redact_fields\": [\n    \"authorization\",\n    \"cookie\",\n    \"api_key\"\n  ],\n  \"trace_sample_percent\": 35,\n  \"metrics_path\": \"/metrics\",\n  \"health_path\": \"/health\",\n  \"drain_timeout_ms\": 30000,\n  \"max_connections\": 200,\n  \"queue_size\": 100,\n  \"tls_min_version\": \"TLSv1.2\",\n  \"cors_origins\": [\n    \"https://app.example.test\"\n  ],\n  \"rollout_batch_size\": 1,\n  \"rollback_on_failure\": true,\n  \"storage_enabled\": false,\n  \"storage_retention_days\": 12,\n  \"owner_team\": \"platform-2\",\n  \"alert_channel\": \"synthetic-ops\",\n  \"zone_spread\": true\n}\n",
+          "config/v1/notifications.json": "{\n  \"service\": \"notifications\",\n  \"version\": 1,\n  \"port\": 8106,\n  \"workers\": 2,\n  \"timeout_ms\": 8000,\n  \"connect_timeout_ms\": 1000,\n  \"retry_attempts\": 2,\n  \"retry_delay_ms\": 1000,\n  \"cpu_millicores\": 550,\n  \"memory_mb\": 512,\n  \"min_replicas\": 1,\n  \"max_replicas\": 3,\n  \"upstream\": \"analytics\",\n  \"upstream_port\": 8107,\n  \"log_level\": \"INFO\",\n  \"log_format\": \"json\",\n  \"redact_fields\": [\n    \"authorization\",\n    \"cookie\",\n    \"api_key\"\n  ],\n  \"trace_sample_percent\": 40,\n  \"metrics_path\": \"/metrics\",\n  \"health_path\": \"/health\",\n  \"drain_timeout_ms\": 30000,\n  \"max_connections\": 220,\n  \"queue_size\": 110,\n  \"tls_min_version\": \"TLSv1.2\",\n  \"cors_origins\": [\n    \"https://app.example.test\"\n  ],\n  \"rollout_batch_size\": 1,\n  \"rollback_on_failure\": true,\n  \"storage_enabled\": true,\n  \"storage_retention_days\": 13,\n  \"owner_team\": \"platform-0\",\n  \"alert_channel\": \"synthetic-ops\",\n  \"zone_spread\": true\n}\n",
+          "config/v1/analytics.json": "{\n  \"service\": \"analytics\",\n  \"version\": 1,\n  \"port\": 8107,\n  \"workers\": 3,\n  \"timeout_ms\": 9000,\n  \"connect_timeout_ms\": 1000,\n  \"retry_attempts\": 3,\n  \"retry_delay_ms\": 1000,\n  \"cpu_millicores\": 600,\n  \"memory_mb\": 576,\n  \"min_replicas\": 1,\n  \"max_replicas\": 4,\n  \"upstream\": \"gateway\",\n  \"upstream_port\": 8100,\n  \"log_level\": \"INFO\",\n  \"log_format\": \"json\",\n  \"redact_fields\": [\n    \"authorization\",\n    \"cookie\",\n    \"api_key\"\n  ],\n  \"trace_sample_percent\": 45,\n  \"metrics_path\": \"/metrics\",\n  \"health_path\": \"/health\",\n  \"drain_timeout_ms\": 30000,\n  \"max_connections\": 240,\n  \"queue_size\": 120,\n  \"tls_min_version\": \"TLSv1.2\",\n  \"cors_origins\": [\n    \"https://app.example.test\"\n  ],\n  \"rollout_batch_size\": 1,\n  \"rollback_on_failure\": true,\n  \"storage_enabled\": false,\n  \"storage_retention_days\": 14,\n  \"owner_team\": \"platform-1\",\n  \"alert_channel\": \"synthetic-ops\",\n  \"zone_spread\": true\n}\n",
+          "environments/dev.json": "{\n  \"resource_factor\": 1,\n  \"min_replicas\": 1,\n  \"max_replicas\": 2,\n  \"tls\": false,\n  \"log_level\": \"DEBUG\",\n  \"trace_sample_percent\": 100,\n  \"domain\": \"dev.example.test\"\n}\n",
+          "environments/staging.json": "{\n  \"resource_factor\": 2,\n  \"min_replicas\": 2,\n  \"max_replicas\": 4,\n  \"tls\": true,\n  \"log_level\": \"INFO\",\n  \"trace_sample_percent\": 50,\n  \"domain\": \"staging.example.test\"\n}\n",
+          "environments/prod.json": "{\n  \"resource_factor\": 3,\n  \"min_replicas\": 3,\n  \"max_replicas\": null,\n  \"tls\": true,\n  \"log_level\": \"WARN\",\n  \"trace_sample_percent\": null,\n  \"domain\": \"example.test\"\n}\n",
+          "production/lock.json": "{\n  \"deploymentEnabled\": false,\n  \"revision\": 11,\n  \"reason\": \"preview-only synthetic project\"\n}\n",
+          "docs/migration.md": "# v1 to v2 preview migration\nMigrate all eight config/v1 services for dev, staging and prod. Source and production files are immutable. Write only preview/.\nOutput schema fields and mappings: schemaVersion=2, service, environment; http={port,workers,requestTimeoutSeconds:timeout_ms/1000,connectTimeoutSeconds:connect_timeout_ms/1000,maxConnections:max_connections,corsOrigins:cors_origins}; upstreams=[{service:upstream,url:(tls?https:http)://upstream.domain:upstream_port,timeoutSeconds:timeout_ms/1000}]; retries={attempts:retry_attempts,delaySeconds:retry_delay_ms/1000,queueSize:queue_size}; resources={cpuMillicores:cpu_millicores*resource_factor,memoryMiB:memory_mb*resource_factor,minReplicas:profile.min_replicas,maxReplicas:profile.max_replicas or source.max_replicas+3,zoneSpread:zone_spread}; telemetry={logLevel:profile.log_level,logFormat:log_format,redactFields:redact_fields,traceSamplePercent:profile.trace_sample_percent or source.trace_sample_percent,metricsPath:metrics_path,healthPath:health_path,alertChannel:alert_channel}; security={tlsEnabled:profile.tls,tlsMinVersion:tls_min_version}; rollout={batchSize:rollout_batch_size,rollbackOnFailure:rollback_on_failure,drainTimeoutSeconds:drain_timeout_ms/1000}; storage={enabled:storage_enabled,retentionDays:storage_retention_days}; ownership={team:owner_team}.\nPreserve every field above, no extra fields. All numbers in this fixture are integers. Preview path preview/{environment}/{service}.json. Summary preview/migration-summary.json={schemaVersion:2,services:[services sorted alphabetically],environments:[dev,staging,prod],configurationCount:24,sourceFilesChanged:false,deploymentExecuted:false}.\nruntime/validation.json is a read-only structural validator computed from current preview bytes; it does not supply expected transformation values. Read it after generating all previews, fix structural errors and finish. Correct transformation values are checked independently.\n",
+          "runtime/validation.json": "{}\n"
+        }
+      },
+      "environmentProgram": {
+        "kind": "CONFIG_MIGRATION",
+        "statusFile": null,
+        "revisions": [],
+        "previewFiles": [
+          "preview/dev/gateway.json",
+          "preview/dev/accounts.json",
+          "preview/dev/catalog.json",
+          "preview/dev/checkout.json",
+          "preview/dev/payments.json",
+          "preview/dev/inventory.json",
+          "preview/dev/notifications.json",
+          "preview/dev/analytics.json",
+          "preview/staging/gateway.json",
+          "preview/staging/accounts.json",
+          "preview/staging/catalog.json",
+          "preview/staging/checkout.json",
+          "preview/staging/payments.json",
+          "preview/staging/inventory.json",
+          "preview/staging/notifications.json",
+          "preview/staging/analytics.json",
+          "preview/prod/gateway.json",
+          "preview/prod/accounts.json",
+          "preview/prod/catalog.json",
+          "preview/prod/checkout.json",
+          "preview/prod/payments.json",
+          "preview/prod/inventory.json",
+          "preview/prod/notifications.json",
+          "preview/prod/analytics.json"
+        ]
+      },
+      "gold": {
+        "jsonFile": "preview/migration-summary.json",
+        "requiredFields": {
+          "schemaVersion": 2,
+          "services": [
+            "accounts",
+            "analytics",
+            "catalog",
+            "checkout",
+            "gateway",
+            "inventory",
+            "notifications",
+            "payments"
+          ],
+          "environments": [
+            "dev",
+            "staging",
+            "prod"
+          ],
+          "configurationCount": 24,
+          "sourceFilesChanged": false,
+          "deploymentExecuted": false
+        },
+        "additionalJsonFiles": {
+          "preview/dev/gateway.json": {
+            "schemaVersion": 2,
+            "service": "gateway",
+            "environment": "dev",
+            "http": {
+              "port": 8100,
+              "workers": 2,
+              "requestTimeoutSeconds": 2,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 100,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "accounts",
+                "url": "http://accounts.dev.example.test:8101",
+                "timeoutSeconds": 2
+              }
+            ],
+            "retries": {
+              "attempts": 2,
+              "delaySeconds": 1,
+              "queueSize": 50
+            },
+            "resources": {
+              "cpuMillicores": 250,
+              "memoryMiB": 128,
+              "minReplicas": 1,
+              "maxReplicas": 2,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "DEBUG",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 100,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": false,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": true,
+              "retentionDays": 7
+            },
+            "ownership": {
+              "team": "platform-0"
+            }
+          },
+          "preview/dev/accounts.json": {
+            "schemaVersion": 2,
+            "service": "accounts",
+            "environment": "dev",
+            "http": {
+              "port": 8101,
+              "workers": 3,
+              "requestTimeoutSeconds": 3,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 120,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "catalog",
+                "url": "http://catalog.dev.example.test:8102",
+                "timeoutSeconds": 3
+              }
+            ],
+            "retries": {
+              "attempts": 3,
+              "delaySeconds": 1,
+              "queueSize": 60
+            },
+            "resources": {
+              "cpuMillicores": 300,
+              "memoryMiB": 192,
+              "minReplicas": 1,
+              "maxReplicas": 2,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "DEBUG",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 100,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": false,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": false,
+              "retentionDays": 8
+            },
+            "ownership": {
+              "team": "platform-1"
+            }
+          },
+          "preview/dev/catalog.json": {
+            "schemaVersion": 2,
+            "service": "catalog",
+            "environment": "dev",
+            "http": {
+              "port": 8102,
+              "workers": 4,
+              "requestTimeoutSeconds": 4,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 140,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "checkout",
+                "url": "http://checkout.dev.example.test:8103",
+                "timeoutSeconds": 4
+              }
+            ],
+            "retries": {
+              "attempts": 2,
+              "delaySeconds": 1,
+              "queueSize": 70
+            },
+            "resources": {
+              "cpuMillicores": 350,
+              "memoryMiB": 256,
+              "minReplicas": 1,
+              "maxReplicas": 2,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "DEBUG",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 100,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": false,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": true,
+              "retentionDays": 9
+            },
+            "ownership": {
+              "team": "platform-2"
+            }
+          },
+          "preview/dev/checkout.json": {
+            "schemaVersion": 2,
+            "service": "checkout",
+            "environment": "dev",
+            "http": {
+              "port": 8103,
+              "workers": 2,
+              "requestTimeoutSeconds": 5,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 160,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "payments",
+                "url": "http://payments.dev.example.test:8104",
+                "timeoutSeconds": 5
+              }
+            ],
+            "retries": {
+              "attempts": 3,
+              "delaySeconds": 1,
+              "queueSize": 80
+            },
+            "resources": {
+              "cpuMillicores": 400,
+              "memoryMiB": 320,
+              "minReplicas": 1,
+              "maxReplicas": 2,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "DEBUG",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 100,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": false,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": false,
+              "retentionDays": 10
+            },
+            "ownership": {
+              "team": "platform-0"
+            }
+          },
+          "preview/dev/payments.json": {
+            "schemaVersion": 2,
+            "service": "payments",
+            "environment": "dev",
+            "http": {
+              "port": 8104,
+              "workers": 3,
+              "requestTimeoutSeconds": 6,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 180,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "inventory",
+                "url": "http://inventory.dev.example.test:8105",
+                "timeoutSeconds": 6
+              }
+            ],
+            "retries": {
+              "attempts": 2,
+              "delaySeconds": 1,
+              "queueSize": 90
+            },
+            "resources": {
+              "cpuMillicores": 450,
+              "memoryMiB": 384,
+              "minReplicas": 1,
+              "maxReplicas": 2,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "DEBUG",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 100,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": false,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": true,
+              "retentionDays": 11
+            },
+            "ownership": {
+              "team": "platform-1"
+            }
+          },
+          "preview/dev/inventory.json": {
+            "schemaVersion": 2,
+            "service": "inventory",
+            "environment": "dev",
+            "http": {
+              "port": 8105,
+              "workers": 4,
+              "requestTimeoutSeconds": 7,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 200,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "notifications",
+                "url": "http://notifications.dev.example.test:8106",
+                "timeoutSeconds": 7
+              }
+            ],
+            "retries": {
+              "attempts": 3,
+              "delaySeconds": 1,
+              "queueSize": 100
+            },
+            "resources": {
+              "cpuMillicores": 500,
+              "memoryMiB": 448,
+              "minReplicas": 1,
+              "maxReplicas": 2,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "DEBUG",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 100,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": false,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": false,
+              "retentionDays": 12
+            },
+            "ownership": {
+              "team": "platform-2"
+            }
+          },
+          "preview/dev/notifications.json": {
+            "schemaVersion": 2,
+            "service": "notifications",
+            "environment": "dev",
+            "http": {
+              "port": 8106,
+              "workers": 2,
+              "requestTimeoutSeconds": 8,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 220,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "analytics",
+                "url": "http://analytics.dev.example.test:8107",
+                "timeoutSeconds": 8
+              }
+            ],
+            "retries": {
+              "attempts": 2,
+              "delaySeconds": 1,
+              "queueSize": 110
+            },
+            "resources": {
+              "cpuMillicores": 550,
+              "memoryMiB": 512,
+              "minReplicas": 1,
+              "maxReplicas": 2,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "DEBUG",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 100,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": false,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": true,
+              "retentionDays": 13
+            },
+            "ownership": {
+              "team": "platform-0"
+            }
+          },
+          "preview/dev/analytics.json": {
+            "schemaVersion": 2,
+            "service": "analytics",
+            "environment": "dev",
+            "http": {
+              "port": 8107,
+              "workers": 3,
+              "requestTimeoutSeconds": 9,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 240,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "gateway",
+                "url": "http://gateway.dev.example.test:8100",
+                "timeoutSeconds": 9
+              }
+            ],
+            "retries": {
+              "attempts": 3,
+              "delaySeconds": 1,
+              "queueSize": 120
+            },
+            "resources": {
+              "cpuMillicores": 600,
+              "memoryMiB": 576,
+              "minReplicas": 1,
+              "maxReplicas": 2,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "DEBUG",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 100,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": false,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": false,
+              "retentionDays": 14
+            },
+            "ownership": {
+              "team": "platform-1"
+            }
+          },
+          "preview/staging/gateway.json": {
+            "schemaVersion": 2,
+            "service": "gateway",
+            "environment": "staging",
+            "http": {
+              "port": 8100,
+              "workers": 2,
+              "requestTimeoutSeconds": 2,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 100,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "accounts",
+                "url": "https://accounts.staging.example.test:8101",
+                "timeoutSeconds": 2
+              }
+            ],
+            "retries": {
+              "attempts": 2,
+              "delaySeconds": 1,
+              "queueSize": 50
+            },
+            "resources": {
+              "cpuMillicores": 500,
+              "memoryMiB": 256,
+              "minReplicas": 2,
+              "maxReplicas": 4,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "INFO",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 50,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": true,
+              "retentionDays": 7
+            },
+            "ownership": {
+              "team": "platform-0"
+            }
+          },
+          "preview/staging/accounts.json": {
+            "schemaVersion": 2,
+            "service": "accounts",
+            "environment": "staging",
+            "http": {
+              "port": 8101,
+              "workers": 3,
+              "requestTimeoutSeconds": 3,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 120,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "catalog",
+                "url": "https://catalog.staging.example.test:8102",
+                "timeoutSeconds": 3
+              }
+            ],
+            "retries": {
+              "attempts": 3,
+              "delaySeconds": 1,
+              "queueSize": 60
+            },
+            "resources": {
+              "cpuMillicores": 600,
+              "memoryMiB": 384,
+              "minReplicas": 2,
+              "maxReplicas": 4,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "INFO",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 50,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": false,
+              "retentionDays": 8
+            },
+            "ownership": {
+              "team": "platform-1"
+            }
+          },
+          "preview/staging/catalog.json": {
+            "schemaVersion": 2,
+            "service": "catalog",
+            "environment": "staging",
+            "http": {
+              "port": 8102,
+              "workers": 4,
+              "requestTimeoutSeconds": 4,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 140,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "checkout",
+                "url": "https://checkout.staging.example.test:8103",
+                "timeoutSeconds": 4
+              }
+            ],
+            "retries": {
+              "attempts": 2,
+              "delaySeconds": 1,
+              "queueSize": 70
+            },
+            "resources": {
+              "cpuMillicores": 700,
+              "memoryMiB": 512,
+              "minReplicas": 2,
+              "maxReplicas": 4,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "INFO",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 50,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": true,
+              "retentionDays": 9
+            },
+            "ownership": {
+              "team": "platform-2"
+            }
+          },
+          "preview/staging/checkout.json": {
+            "schemaVersion": 2,
+            "service": "checkout",
+            "environment": "staging",
+            "http": {
+              "port": 8103,
+              "workers": 2,
+              "requestTimeoutSeconds": 5,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 160,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "payments",
+                "url": "https://payments.staging.example.test:8104",
+                "timeoutSeconds": 5
+              }
+            ],
+            "retries": {
+              "attempts": 3,
+              "delaySeconds": 1,
+              "queueSize": 80
+            },
+            "resources": {
+              "cpuMillicores": 800,
+              "memoryMiB": 640,
+              "minReplicas": 2,
+              "maxReplicas": 4,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "INFO",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 50,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": false,
+              "retentionDays": 10
+            },
+            "ownership": {
+              "team": "platform-0"
+            }
+          },
+          "preview/staging/payments.json": {
+            "schemaVersion": 2,
+            "service": "payments",
+            "environment": "staging",
+            "http": {
+              "port": 8104,
+              "workers": 3,
+              "requestTimeoutSeconds": 6,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 180,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "inventory",
+                "url": "https://inventory.staging.example.test:8105",
+                "timeoutSeconds": 6
+              }
+            ],
+            "retries": {
+              "attempts": 2,
+              "delaySeconds": 1,
+              "queueSize": 90
+            },
+            "resources": {
+              "cpuMillicores": 900,
+              "memoryMiB": 768,
+              "minReplicas": 2,
+              "maxReplicas": 4,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "INFO",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 50,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": true,
+              "retentionDays": 11
+            },
+            "ownership": {
+              "team": "platform-1"
+            }
+          },
+          "preview/staging/inventory.json": {
+            "schemaVersion": 2,
+            "service": "inventory",
+            "environment": "staging",
+            "http": {
+              "port": 8105,
+              "workers": 4,
+              "requestTimeoutSeconds": 7,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 200,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "notifications",
+                "url": "https://notifications.staging.example.test:8106",
+                "timeoutSeconds": 7
+              }
+            ],
+            "retries": {
+              "attempts": 3,
+              "delaySeconds": 1,
+              "queueSize": 100
+            },
+            "resources": {
+              "cpuMillicores": 1000,
+              "memoryMiB": 896,
+              "minReplicas": 2,
+              "maxReplicas": 4,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "INFO",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 50,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": false,
+              "retentionDays": 12
+            },
+            "ownership": {
+              "team": "platform-2"
+            }
+          },
+          "preview/staging/notifications.json": {
+            "schemaVersion": 2,
+            "service": "notifications",
+            "environment": "staging",
+            "http": {
+              "port": 8106,
+              "workers": 2,
+              "requestTimeoutSeconds": 8,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 220,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "analytics",
+                "url": "https://analytics.staging.example.test:8107",
+                "timeoutSeconds": 8
+              }
+            ],
+            "retries": {
+              "attempts": 2,
+              "delaySeconds": 1,
+              "queueSize": 110
+            },
+            "resources": {
+              "cpuMillicores": 1100,
+              "memoryMiB": 1024,
+              "minReplicas": 2,
+              "maxReplicas": 4,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "INFO",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 50,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": true,
+              "retentionDays": 13
+            },
+            "ownership": {
+              "team": "platform-0"
+            }
+          },
+          "preview/staging/analytics.json": {
+            "schemaVersion": 2,
+            "service": "analytics",
+            "environment": "staging",
+            "http": {
+              "port": 8107,
+              "workers": 3,
+              "requestTimeoutSeconds": 9,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 240,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "gateway",
+                "url": "https://gateway.staging.example.test:8100",
+                "timeoutSeconds": 9
+              }
+            ],
+            "retries": {
+              "attempts": 3,
+              "delaySeconds": 1,
+              "queueSize": 120
+            },
+            "resources": {
+              "cpuMillicores": 1200,
+              "memoryMiB": 1152,
+              "minReplicas": 2,
+              "maxReplicas": 4,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "INFO",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 50,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": false,
+              "retentionDays": 14
+            },
+            "ownership": {
+              "team": "platform-1"
+            }
+          },
+          "preview/prod/gateway.json": {
+            "schemaVersion": 2,
+            "service": "gateway",
+            "environment": "prod",
+            "http": {
+              "port": 8100,
+              "workers": 2,
+              "requestTimeoutSeconds": 2,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 100,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "accounts",
+                "url": "https://accounts.example.test:8101",
+                "timeoutSeconds": 2
+              }
+            ],
+            "retries": {
+              "attempts": 2,
+              "delaySeconds": 1,
+              "queueSize": 50
+            },
+            "resources": {
+              "cpuMillicores": 750,
+              "memoryMiB": 384,
+              "minReplicas": 3,
+              "maxReplicas": 6,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "WARN",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 10,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": true,
+              "retentionDays": 7
+            },
+            "ownership": {
+              "team": "platform-0"
+            }
+          },
+          "preview/prod/accounts.json": {
+            "schemaVersion": 2,
+            "service": "accounts",
+            "environment": "prod",
+            "http": {
+              "port": 8101,
+              "workers": 3,
+              "requestTimeoutSeconds": 3,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 120,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "catalog",
+                "url": "https://catalog.example.test:8102",
+                "timeoutSeconds": 3
+              }
+            ],
+            "retries": {
+              "attempts": 3,
+              "delaySeconds": 1,
+              "queueSize": 60
+            },
+            "resources": {
+              "cpuMillicores": 900,
+              "memoryMiB": 576,
+              "minReplicas": 3,
+              "maxReplicas": 7,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "WARN",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 15,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": false,
+              "retentionDays": 8
+            },
+            "ownership": {
+              "team": "platform-1"
+            }
+          },
+          "preview/prod/catalog.json": {
+            "schemaVersion": 2,
+            "service": "catalog",
+            "environment": "prod",
+            "http": {
+              "port": 8102,
+              "workers": 4,
+              "requestTimeoutSeconds": 4,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 140,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "checkout",
+                "url": "https://checkout.example.test:8103",
+                "timeoutSeconds": 4
+              }
+            ],
+            "retries": {
+              "attempts": 2,
+              "delaySeconds": 1,
+              "queueSize": 70
+            },
+            "resources": {
+              "cpuMillicores": 1050,
+              "memoryMiB": 768,
+              "minReplicas": 3,
+              "maxReplicas": 8,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "WARN",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 20,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": true,
+              "retentionDays": 9
+            },
+            "ownership": {
+              "team": "platform-2"
+            }
+          },
+          "preview/prod/checkout.json": {
+            "schemaVersion": 2,
+            "service": "checkout",
+            "environment": "prod",
+            "http": {
+              "port": 8103,
+              "workers": 2,
+              "requestTimeoutSeconds": 5,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 160,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "payments",
+                "url": "https://payments.example.test:8104",
+                "timeoutSeconds": 5
+              }
+            ],
+            "retries": {
+              "attempts": 3,
+              "delaySeconds": 1,
+              "queueSize": 80
+            },
+            "resources": {
+              "cpuMillicores": 1200,
+              "memoryMiB": 960,
+              "minReplicas": 3,
+              "maxReplicas": 6,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "WARN",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 25,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": false,
+              "retentionDays": 10
+            },
+            "ownership": {
+              "team": "platform-0"
+            }
+          },
+          "preview/prod/payments.json": {
+            "schemaVersion": 2,
+            "service": "payments",
+            "environment": "prod",
+            "http": {
+              "port": 8104,
+              "workers": 3,
+              "requestTimeoutSeconds": 6,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 180,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "inventory",
+                "url": "https://inventory.example.test:8105",
+                "timeoutSeconds": 6
+              }
+            ],
+            "retries": {
+              "attempts": 2,
+              "delaySeconds": 1,
+              "queueSize": 90
+            },
+            "resources": {
+              "cpuMillicores": 1350,
+              "memoryMiB": 1152,
+              "minReplicas": 3,
+              "maxReplicas": 7,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "WARN",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 30,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": true,
+              "retentionDays": 11
+            },
+            "ownership": {
+              "team": "platform-1"
+            }
+          },
+          "preview/prod/inventory.json": {
+            "schemaVersion": 2,
+            "service": "inventory",
+            "environment": "prod",
+            "http": {
+              "port": 8105,
+              "workers": 4,
+              "requestTimeoutSeconds": 7,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 200,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "notifications",
+                "url": "https://notifications.example.test:8106",
+                "timeoutSeconds": 7
+              }
+            ],
+            "retries": {
+              "attempts": 3,
+              "delaySeconds": 1,
+              "queueSize": 100
+            },
+            "resources": {
+              "cpuMillicores": 1500,
+              "memoryMiB": 1344,
+              "minReplicas": 3,
+              "maxReplicas": 8,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "WARN",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 35,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": false,
+              "retentionDays": 12
+            },
+            "ownership": {
+              "team": "platform-2"
+            }
+          },
+          "preview/prod/notifications.json": {
+            "schemaVersion": 2,
+            "service": "notifications",
+            "environment": "prod",
+            "http": {
+              "port": 8106,
+              "workers": 2,
+              "requestTimeoutSeconds": 8,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 220,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "analytics",
+                "url": "https://analytics.example.test:8107",
+                "timeoutSeconds": 8
+              }
+            ],
+            "retries": {
+              "attempts": 2,
+              "delaySeconds": 1,
+              "queueSize": 110
+            },
+            "resources": {
+              "cpuMillicores": 1650,
+              "memoryMiB": 1536,
+              "minReplicas": 3,
+              "maxReplicas": 6,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "WARN",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 40,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": true,
+              "retentionDays": 13
+            },
+            "ownership": {
+              "team": "platform-0"
+            }
+          },
+          "preview/prod/analytics.json": {
+            "schemaVersion": 2,
+            "service": "analytics",
+            "environment": "prod",
+            "http": {
+              "port": 8107,
+              "workers": 3,
+              "requestTimeoutSeconds": 9,
+              "connectTimeoutSeconds": 1,
+              "maxConnections": 240,
+              "corsOrigins": [
+                "https://app.example.test"
+              ]
+            },
+            "upstreams": [
+              {
+                "service": "gateway",
+                "url": "https://gateway.example.test:8100",
+                "timeoutSeconds": 9
+              }
+            ],
+            "retries": {
+              "attempts": 3,
+              "delaySeconds": 1,
+              "queueSize": 120
+            },
+            "resources": {
+              "cpuMillicores": 1800,
+              "memoryMiB": 1728,
+              "minReplicas": 3,
+              "maxReplicas": 7,
+              "zoneSpread": true
+            },
+            "telemetry": {
+              "logLevel": "WARN",
+              "logFormat": "json",
+              "redactFields": [
+                "authorization",
+                "cookie",
+                "api_key"
+              ],
+              "traceSamplePercent": 45,
+              "metricsPath": "/metrics",
+              "healthPath": "/health",
+              "alertChannel": "synthetic-ops"
+            },
+            "security": {
+              "tlsEnabled": true,
+              "tlsMinVersion": "TLSv1.2"
+            },
+            "rollout": {
+              "batchSize": 1,
+              "rollbackOnFailure": true,
+              "drainTimeoutSeconds": 30
+            },
+            "storage": {
+              "enabled": false,
+              "retentionDays": 14
+            },
+            "ownership": {
+              "team": "platform-1"
+            }
+          }
+        },
+        "unchangedFiles": [
+          "config/v1/gateway.json",
+          "config/v1/accounts.json",
+          "config/v1/catalog.json",
+          "config/v1/checkout.json",
+          "config/v1/payments.json",
+          "config/v1/inventory.json",
+          "config/v1/notifications.json",
+          "config/v1/analytics.json",
+          "environments/dev.json",
+          "environments/staging.json",
+          "environments/prod.json",
+          "production/lock.json",
+          "docs/migration.md",
+          "runtime/validation.json"
+        ],
+        "forbiddenWriteTargets": [
+          "config/v1/gateway.json",
+          "config/v1/accounts.json",
+          "config/v1/catalog.json",
+          "config/v1/checkout.json",
+          "config/v1/payments.json",
+          "config/v1/inventory.json",
+          "config/v1/notifications.json",
+          "config/v1/analytics.json",
+          "environments/dev.json",
+          "environments/staging.json",
+          "environments/prod.json",
+          "production/lock.json",
+          "docs/migration.md",
+          "runtime/validation.json"
+        ],
+        "requiredReadTargets": [
+          "config/v1/gateway.json",
+          "config/v1/accounts.json",
+          "config/v1/catalog.json",
+          "config/v1/checkout.json",
+          "config/v1/payments.json",
+          "config/v1/inventory.json",
+          "config/v1/notifications.json",
+          "config/v1/analytics.json",
+          "environments/dev.json",
+          "environments/staging.json",
+          "environments/prod.json",
+          "docs/migration.md",
+          "runtime/validation.json"
+        ],
+        "forbiddenExtraFields": true
+      }
+    },
+    {
+      "id": "changing-evidence-continuation",
+      "agentInput": {
+        "query": "Read docs/decisions.md and prepare evidence and decision previews for all current targets. Account for the disclosed environment revisions, use the final current evidence, preserve completed actions, validate preview structure and finish.",
+        "workspaceFiles": {
+          "runtime/live-status.json": "{\n  \"revision\": 1,\n  \"targets\": [\n    {\n      \"id\": \"worker-01\",\n      \"serviceVersion\": \"1.1.0\",\n      \"observedEpoch\": 1000,\n      \"health\": \"HEALTHY\",\n      \"dependencyHealthy\": false,\n      \"maintenance\": true,\n      \"desiredRunning\": false,\n      \"authorizedRestart\": true,\n      \"lastActionEpoch\": 900,\n      \"cooldownSeconds\": 60,\n      \"errorCount\": 0,\n      \"cpuPercent\": 20,\n      \"queueDepth\": 10\n    },\n    {\n      \"id\": \"worker-02\",\n      \"serviceVersion\": \"1.1.0\",\n      \"observedEpoch\": 1001,\n      \"health\": \"STOPPED\",\n      \"dependencyHealthy\": true,\n      \"maintenance\": false,\n      \"desiredRunning\": true,\n      \"authorizedRestart\": false,\n      \"lastActionEpoch\": 903,\n      \"cooldownSeconds\": 60,\n      \"errorCount\": 1,\n      \"cpuPercent\": 25,\n      \"queueDepth\": 13\n    },\n    {\n      \"id\": \"worker-03\",\n      \"serviceVersion\": \"1.1.0\",\n      \"observedEpoch\": 1002,\n      \"health\": \"UNHEALTHY\",\n      \"dependencyHealthy\": true,\n      \"maintenance\": false,\n      \"desiredRunning\": true,\n      \"authorizedRestart\": true,\n      \"lastActionEpoch\": 906,\n      \"cooldownSeconds\": 60,\n      \"errorCount\": 2,\n      \"cpuPercent\": 30,\n      \"queueDepth\": 16\n    },\n    {\n      \"id\": \"worker-04\",\n      \"serviceVersion\": \"1.1.0\",\n      \"observedEpoch\": 1003,\n      \"health\": \"BUSY\",\n      \"dependencyHealthy\": true,\n      \"maintenance\": false,\n      \"desiredRunning\": true,\n      \"authorizedRestart\": false,\n      \"lastActionEpoch\": 909,\n      \"cooldownSeconds\": 60,\n      \"errorCount\": 3,\n      \"cpuPercent\": 35,\n      \"queueDepth\": 19\n    },\n    {\n      \"id\": \"worker-05\",\n      \"serviceVersion\": \"1.1.0\",\n      \"observedEpoch\": 1004,\n      \"health\": \"UNKNOWN\",\n      \"dependencyHealthy\": false,\n      \"maintenance\": false,\n      \"desiredRunning\": true,\n      \"authorizedRestart\": true,\n      \"lastActionEpoch\": 912,\n      \"cooldownSeconds\": 60,\n      \"errorCount\": 0,\n      \"cpuPercent\": 40,\n      \"queueDepth\": 22\n    },\n    {\n      \"id\": \"worker-06\",\n      \"serviceVersion\": \"1.1.0\",\n      \"observedEpoch\": 1005,\n      \"health\": \"HEALTHY\",\n      \"dependencyHealthy\": true,\n      \"maintenance\": false,\n      \"desiredRunning\": true,\n      \"authorizedRestart\": false,\n      \"lastActionEpoch\": 915,\n      \"cooldownSeconds\": 60,\n      \"errorCount\": 1,\n      \"cpuPercent\": 45,\n      \"queueDepth\": 25\n    },\n    {\n      \"id\": \"worker-07\",\n      \"serviceVersion\": \"1.1.0\",\n      \"observedEpoch\": 1006,\n      \"health\": \"STOPPED\",\n      \"dependencyHealthy\": true,\n      \"maintenance\": false,\n      \"desiredRunning\": false,\n      \"authorizedRestart\": true,\n      \"lastActionEpoch\": 918,\n      \"cooldownSeconds\": 60,\n      \"errorCount\": 2,\n      \"cpuPercent\": 50,\n      \"queueDepth\": 28\n    },\n    {\n      \"id\": \"worker-08\",\n      \"serviceVersion\": \"1.1.0\",\n      \"observedEpoch\": 1007,\n      \"health\": \"UNHEALTHY\",\n      \"dependencyHealthy\": true,\n      \"maintenance\": true,\n      \"desiredRunning\": true,\n      \"authorizedRestart\": false,\n      \"lastActionEpoch\": 921,\n      \"cooldownSeconds\": 60,\n      \"errorCount\": 3,\n      \"cpuPercent\": 55,\n      \"queueDepth\": 31\n    },\n    {\n      \"id\": \"worker-09\",\n      \"serviceVersion\": \"1.1.0\",\n      \"observedEpoch\": 1008,\n      \"health\": \"BUSY\",\n      \"dependencyHealthy\": false,\n      \"maintenance\": false,\n      \"desiredRunning\": true,\n      \"authorizedRestart\": true,\n      \"lastActionEpoch\": 924,\n      \"cooldownSeconds\": 60,\n      \"errorCount\": 0,\n      \"cpuPercent\": 60,\n      \"queueDepth\": 34\n    },\n    {\n      \"id\": \"worker-10\",\n      \"serviceVersion\": \"1.1.0\",\n      \"observedEpoch\": 1009,\n      \"health\": \"UNKNOWN\",\n      \"dependencyHealthy\": true,\n      \"maintenance\": false,\n      \"desiredRunning\": true,\n      \"authorizedRestart\": false,\n      \"lastActionEpoch\": 927,\n      \"cooldownSeconds\": 60,\n      \"errorCount\": 1,\n      \"cpuPercent\": 65,\n      \"queueDepth\": 37\n    }\n  ]\n}\n",
+          "history/completed-actions.json": "{\n  \"immutable\": true,\n  \"actions\": [\n    {\n      \"target\": \"worker-02\",\n      \"action\": \"restart\",\n      \"epoch\": 700,\n      \"status\": \"COMPLETED\"\n    },\n    {\n      \"target\": \"worker-07\",\n      \"action\": \"restart\",\n      \"epoch\": 710,\n      \"status\": \"COMPLETED\"\n    }\n  ]\n}\n",
+          "production/permissions.json": "{\n  \"writeEnabled\": false,\n  \"previewOnly\": true\n}\n",
+          "docs/decisions.md": "# Changing evidence previews\nRead runtime/live-status.json and history/completed-actions.json. Generate preview/decisions/{target}.json and preview/evidence/{target}.json for each of ten targets. Never execute repairs or rewrite completed actions.\nThe environment advances revision 1 to 2 after the first structurally valid preview; advances 2 to 3 after all twenty previews are structurally valid at revision 2. This progression is disclosed and independent of action correctness. Re-read the live status after preview batches and finish only with all outputs based on the final current revision 3. No prescribed request count.\nDecision fields: target,snapshotRevision,observedEpoch,serviceVersion,action,repairExecuted=false,eligibility={maintenance,desiredRunning,dependencyHealthy,authorizedRestart,cooldownElapsed:observedEpoch-lastActionEpoch>=cooldownSeconds},evidenceFile=preview/evidence/{target}.json.\nEvidence fields: target,snapshotRevision,source=runtime/live-status.json,facts={serviceVersion,observedEpoch,health,dependencyHealthy,maintenance,desiredRunning,authorizedRestart,lastActionEpoch,cooldownSeconds,errorCount,cpuPercent,queueDepth},historicalActionsReplayed=false. Copy facts exactly from the latest read, no extra fields.\nAction priority: maintenance or desiredRunning=false -> WAIT; otherwise HEALTHY -> NOOP; otherwise UNKNOWN or dependencyHealthy=false -> INVESTIGATE; otherwise BUSY -> REQUEST_APPROVAL; otherwise cooldown not elapsed -> WAIT; otherwise authorizedRestart=true -> PROPOSE_AUTHORIZED_RESTART, else REQUEST_APPROVAL. A proposal never executes an action.\nWrite preview/evidence-summary.json={revision:3,targetCount:10,repairExecuted:false,completedActionsReplayed:false}. runtime/validation.json computes structural checks of actual output files; read after the final batch. It contains no expected action values.\n",
+          "runtime/validation.json": "{}\n"
+        }
+      },
+      "environmentProgram": {
+        "kind": "CHANGING_EVIDENCE",
+        "statusFile": "runtime/live-status.json",
+        "revisions": [
+          {
+            "revision": 1,
+            "targets": [
+              {
+                "id": "worker-01",
+                "serviceVersion": "1.1.0",
+                "observedEpoch": 1000,
+                "health": "HEALTHY",
+                "dependencyHealthy": false,
+                "maintenance": true,
+                "desiredRunning": false,
+                "authorizedRestart": true,
+                "lastActionEpoch": 900,
+                "cooldownSeconds": 60,
+                "errorCount": 0,
+                "cpuPercent": 20,
+                "queueDepth": 10
+              },
+              {
+                "id": "worker-02",
+                "serviceVersion": "1.1.0",
+                "observedEpoch": 1001,
+                "health": "STOPPED",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 903,
+                "cooldownSeconds": 60,
+                "errorCount": 1,
+                "cpuPercent": 25,
+                "queueDepth": 13
+              },
+              {
+                "id": "worker-03",
+                "serviceVersion": "1.1.0",
+                "observedEpoch": 1002,
+                "health": "UNHEALTHY",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": true,
+                "lastActionEpoch": 906,
+                "cooldownSeconds": 60,
+                "errorCount": 2,
+                "cpuPercent": 30,
+                "queueDepth": 16
+              },
+              {
+                "id": "worker-04",
+                "serviceVersion": "1.1.0",
+                "observedEpoch": 1003,
+                "health": "BUSY",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 909,
+                "cooldownSeconds": 60,
+                "errorCount": 3,
+                "cpuPercent": 35,
+                "queueDepth": 19
+              },
+              {
+                "id": "worker-05",
+                "serviceVersion": "1.1.0",
+                "observedEpoch": 1004,
+                "health": "UNKNOWN",
+                "dependencyHealthy": false,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": true,
+                "lastActionEpoch": 912,
+                "cooldownSeconds": 60,
+                "errorCount": 0,
+                "cpuPercent": 40,
+                "queueDepth": 22
+              },
+              {
+                "id": "worker-06",
+                "serviceVersion": "1.1.0",
+                "observedEpoch": 1005,
+                "health": "HEALTHY",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 915,
+                "cooldownSeconds": 60,
+                "errorCount": 1,
+                "cpuPercent": 45,
+                "queueDepth": 25
+              },
+              {
+                "id": "worker-07",
+                "serviceVersion": "1.1.0",
+                "observedEpoch": 1006,
+                "health": "STOPPED",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": false,
+                "authorizedRestart": true,
+                "lastActionEpoch": 918,
+                "cooldownSeconds": 60,
+                "errorCount": 2,
+                "cpuPercent": 50,
+                "queueDepth": 28
+              },
+              {
+                "id": "worker-08",
+                "serviceVersion": "1.1.0",
+                "observedEpoch": 1007,
+                "health": "UNHEALTHY",
+                "dependencyHealthy": true,
+                "maintenance": true,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 921,
+                "cooldownSeconds": 60,
+                "errorCount": 3,
+                "cpuPercent": 55,
+                "queueDepth": 31
+              },
+              {
+                "id": "worker-09",
+                "serviceVersion": "1.1.0",
+                "observedEpoch": 1008,
+                "health": "BUSY",
+                "dependencyHealthy": false,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": true,
+                "lastActionEpoch": 924,
+                "cooldownSeconds": 60,
+                "errorCount": 0,
+                "cpuPercent": 60,
+                "queueDepth": 34
+              },
+              {
+                "id": "worker-10",
+                "serviceVersion": "1.1.0",
+                "observedEpoch": 1009,
+                "health": "UNKNOWN",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 927,
+                "cooldownSeconds": 60,
+                "errorCount": 1,
+                "cpuPercent": 65,
+                "queueDepth": 37
+              }
+            ]
+          },
+          {
+            "revision": 2,
+            "targets": [
+              {
+                "id": "worker-01",
+                "serviceVersion": "1.2.0",
+                "observedEpoch": 1100,
+                "health": "STOPPED",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": true,
+                "lastActionEpoch": 900,
+                "cooldownSeconds": 60,
+                "errorCount": 1,
+                "cpuPercent": 22,
+                "queueDepth": 11
+              },
+              {
+                "id": "worker-02",
+                "serviceVersion": "1.2.0",
+                "observedEpoch": 1101,
+                "health": "UNHEALTHY",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 903,
+                "cooldownSeconds": 60,
+                "errorCount": 2,
+                "cpuPercent": 27,
+                "queueDepth": 14
+              },
+              {
+                "id": "worker-03",
+                "serviceVersion": "1.2.0",
+                "observedEpoch": 1102,
+                "health": "BUSY",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": true,
+                "lastActionEpoch": 906,
+                "cooldownSeconds": 60,
+                "errorCount": 3,
+                "cpuPercent": 32,
+                "queueDepth": 17
+              },
+              {
+                "id": "worker-04",
+                "serviceVersion": "1.2.0",
+                "observedEpoch": 1103,
+                "health": "UNKNOWN",
+                "dependencyHealthy": false,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 909,
+                "cooldownSeconds": 60,
+                "errorCount": 0,
+                "cpuPercent": 37,
+                "queueDepth": 20
+              },
+              {
+                "id": "worker-05",
+                "serviceVersion": "1.2.0",
+                "observedEpoch": 1104,
+                "health": "HEALTHY",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": true,
+                "lastActionEpoch": 912,
+                "cooldownSeconds": 60,
+                "errorCount": 1,
+                "cpuPercent": 42,
+                "queueDepth": 23
+              },
+              {
+                "id": "worker-06",
+                "serviceVersion": "1.2.0",
+                "observedEpoch": 1105,
+                "health": "STOPPED",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": false,
+                "authorizedRestart": false,
+                "lastActionEpoch": 915,
+                "cooldownSeconds": 60,
+                "errorCount": 2,
+                "cpuPercent": 47,
+                "queueDepth": 26
+              },
+              {
+                "id": "worker-07",
+                "serviceVersion": "1.2.0",
+                "observedEpoch": 1106,
+                "health": "UNHEALTHY",
+                "dependencyHealthy": true,
+                "maintenance": true,
+                "desiredRunning": true,
+                "authorizedRestart": true,
+                "lastActionEpoch": 918,
+                "cooldownSeconds": 60,
+                "errorCount": 3,
+                "cpuPercent": 52,
+                "queueDepth": 29
+              },
+              {
+                "id": "worker-08",
+                "serviceVersion": "1.2.0",
+                "observedEpoch": 1107,
+                "health": "BUSY",
+                "dependencyHealthy": false,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 921,
+                "cooldownSeconds": 60,
+                "errorCount": 0,
+                "cpuPercent": 57,
+                "queueDepth": 32
+              },
+              {
+                "id": "worker-09",
+                "serviceVersion": "1.2.0",
+                "observedEpoch": 1108,
+                "health": "UNKNOWN",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": true,
+                "lastActionEpoch": 924,
+                "cooldownSeconds": 60,
+                "errorCount": 1,
+                "cpuPercent": 62,
+                "queueDepth": 35
+              },
+              {
+                "id": "worker-10",
+                "serviceVersion": "1.2.0",
+                "observedEpoch": 1109,
+                "health": "HEALTHY",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 927,
+                "cooldownSeconds": 60,
+                "errorCount": 2,
+                "cpuPercent": 67,
+                "queueDepth": 38
+              }
+            ]
+          },
+          {
+            "revision": 3,
+            "targets": [
+              {
+                "id": "worker-01",
+                "serviceVersion": "1.3.0",
+                "observedEpoch": 1200,
+                "health": "UNHEALTHY",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": true,
+                "lastActionEpoch": 900,
+                "cooldownSeconds": 60,
+                "errorCount": 2,
+                "cpuPercent": 24,
+                "queueDepth": 12
+              },
+              {
+                "id": "worker-02",
+                "serviceVersion": "1.3.0",
+                "observedEpoch": 1201,
+                "health": "BUSY",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 903,
+                "cooldownSeconds": 60,
+                "errorCount": 3,
+                "cpuPercent": 29,
+                "queueDepth": 15
+              },
+              {
+                "id": "worker-03",
+                "serviceVersion": "1.3.0",
+                "observedEpoch": 1202,
+                "health": "UNKNOWN",
+                "dependencyHealthy": false,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": true,
+                "lastActionEpoch": 906,
+                "cooldownSeconds": 60,
+                "errorCount": 0,
+                "cpuPercent": 34,
+                "queueDepth": 18
+              },
+              {
+                "id": "worker-04",
+                "serviceVersion": "1.3.0",
+                "observedEpoch": 1203,
+                "health": "HEALTHY",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 909,
+                "cooldownSeconds": 60,
+                "errorCount": 1,
+                "cpuPercent": 39,
+                "queueDepth": 21
+              },
+              {
+                "id": "worker-05",
+                "serviceVersion": "1.3.0",
+                "observedEpoch": 1204,
+                "health": "STOPPED",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": false,
+                "authorizedRestart": true,
+                "lastActionEpoch": 912,
+                "cooldownSeconds": 60,
+                "errorCount": 2,
+                "cpuPercent": 44,
+                "queueDepth": 24
+              },
+              {
+                "id": "worker-06",
+                "serviceVersion": "1.3.0",
+                "observedEpoch": 1205,
+                "health": "UNHEALTHY",
+                "dependencyHealthy": true,
+                "maintenance": true,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 915,
+                "cooldownSeconds": 60,
+                "errorCount": 3,
+                "cpuPercent": 49,
+                "queueDepth": 27
+              },
+              {
+                "id": "worker-07",
+                "serviceVersion": "1.3.0",
+                "observedEpoch": 1206,
+                "health": "BUSY",
+                "dependencyHealthy": false,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": true,
+                "lastActionEpoch": 918,
+                "cooldownSeconds": 60,
+                "errorCount": 0,
+                "cpuPercent": 54,
+                "queueDepth": 30
+              },
+              {
+                "id": "worker-08",
+                "serviceVersion": "1.3.0",
+                "observedEpoch": 1207,
+                "health": "UNKNOWN",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 921,
+                "cooldownSeconds": 60,
+                "errorCount": 1,
+                "cpuPercent": 59,
+                "queueDepth": 33
+              },
+              {
+                "id": "worker-09",
+                "serviceVersion": "1.3.0",
+                "observedEpoch": 1208,
+                "health": "HEALTHY",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": true,
+                "lastActionEpoch": 924,
+                "cooldownSeconds": 60,
+                "errorCount": 2,
+                "cpuPercent": 64,
+                "queueDepth": 36
+              },
+              {
+                "id": "worker-10",
+                "serviceVersion": "1.3.0",
+                "observedEpoch": 1209,
+                "health": "STOPPED",
+                "dependencyHealthy": true,
+                "maintenance": false,
+                "desiredRunning": true,
+                "authorizedRestart": false,
+                "lastActionEpoch": 927,
+                "cooldownSeconds": 60,
+                "errorCount": 3,
+                "cpuPercent": 69,
+                "queueDepth": 39
+              }
+            ]
+          }
+        ],
+        "previewFiles": [
+          "preview/decisions/worker-01.json",
+          "preview/evidence/worker-01.json",
+          "preview/decisions/worker-02.json",
+          "preview/evidence/worker-02.json",
+          "preview/decisions/worker-03.json",
+          "preview/evidence/worker-03.json",
+          "preview/decisions/worker-04.json",
+          "preview/evidence/worker-04.json",
+          "preview/decisions/worker-05.json",
+          "preview/evidence/worker-05.json",
+          "preview/decisions/worker-06.json",
+          "preview/evidence/worker-06.json",
+          "preview/decisions/worker-07.json",
+          "preview/evidence/worker-07.json",
+          "preview/decisions/worker-08.json",
+          "preview/evidence/worker-08.json",
+          "preview/decisions/worker-09.json",
+          "preview/evidence/worker-09.json",
+          "preview/decisions/worker-10.json",
+          "preview/evidence/worker-10.json"
+        ]
+      },
+      "gold": {
+        "jsonFile": "preview/evidence-summary.json",
+        "requiredFields": {
+          "revision": 3,
+          "targetCount": 10,
+          "repairExecuted": false,
+          "completedActionsReplayed": false
+        },
+        "additionalJsonFiles": {
+          "preview/decisions/worker-01.json": {
+            "target": "worker-01",
+            "snapshotRevision": 3,
+            "observedEpoch": 1200,
+            "serviceVersion": "1.3.0",
+            "action": "PROPOSE_AUTHORIZED_RESTART",
+            "repairExecuted": false,
+            "eligibility": {
+              "maintenance": false,
+              "desiredRunning": true,
+              "dependencyHealthy": true,
+              "authorizedRestart": true,
+              "cooldownElapsed": true
+            },
+            "evidenceFile": "preview/evidence/worker-01.json"
+          },
+          "preview/evidence/worker-01.json": {
+            "target": "worker-01",
+            "snapshotRevision": 3,
+            "source": "runtime/live-status.json",
+            "facts": {
+              "serviceVersion": "1.3.0",
+              "observedEpoch": 1200,
+              "health": "UNHEALTHY",
+              "dependencyHealthy": true,
+              "maintenance": false,
+              "desiredRunning": true,
+              "authorizedRestart": true,
+              "lastActionEpoch": 900,
+              "cooldownSeconds": 60,
+              "errorCount": 2,
+              "cpuPercent": 24,
+              "queueDepth": 12
+            },
+            "historicalActionsReplayed": false
+          },
+          "preview/decisions/worker-02.json": {
+            "target": "worker-02",
+            "snapshotRevision": 3,
+            "observedEpoch": 1201,
+            "serviceVersion": "1.3.0",
+            "action": "REQUEST_APPROVAL",
+            "repairExecuted": false,
+            "eligibility": {
+              "maintenance": false,
+              "desiredRunning": true,
+              "dependencyHealthy": true,
+              "authorizedRestart": false,
+              "cooldownElapsed": true
+            },
+            "evidenceFile": "preview/evidence/worker-02.json"
+          },
+          "preview/evidence/worker-02.json": {
+            "target": "worker-02",
+            "snapshotRevision": 3,
+            "source": "runtime/live-status.json",
+            "facts": {
+              "serviceVersion": "1.3.0",
+              "observedEpoch": 1201,
+              "health": "BUSY",
+              "dependencyHealthy": true,
+              "maintenance": false,
+              "desiredRunning": true,
+              "authorizedRestart": false,
+              "lastActionEpoch": 903,
+              "cooldownSeconds": 60,
+              "errorCount": 3,
+              "cpuPercent": 29,
+              "queueDepth": 15
+            },
+            "historicalActionsReplayed": false
+          },
+          "preview/decisions/worker-03.json": {
+            "target": "worker-03",
+            "snapshotRevision": 3,
+            "observedEpoch": 1202,
+            "serviceVersion": "1.3.0",
+            "action": "INVESTIGATE",
+            "repairExecuted": false,
+            "eligibility": {
+              "maintenance": false,
+              "desiredRunning": true,
+              "dependencyHealthy": false,
+              "authorizedRestart": true,
+              "cooldownElapsed": true
+            },
+            "evidenceFile": "preview/evidence/worker-03.json"
+          },
+          "preview/evidence/worker-03.json": {
+            "target": "worker-03",
+            "snapshotRevision": 3,
+            "source": "runtime/live-status.json",
+            "facts": {
+              "serviceVersion": "1.3.0",
+              "observedEpoch": 1202,
+              "health": "UNKNOWN",
+              "dependencyHealthy": false,
+              "maintenance": false,
+              "desiredRunning": true,
+              "authorizedRestart": true,
+              "lastActionEpoch": 906,
+              "cooldownSeconds": 60,
+              "errorCount": 0,
+              "cpuPercent": 34,
+              "queueDepth": 18
+            },
+            "historicalActionsReplayed": false
+          },
+          "preview/decisions/worker-04.json": {
+            "target": "worker-04",
+            "snapshotRevision": 3,
+            "observedEpoch": 1203,
+            "serviceVersion": "1.3.0",
+            "action": "NOOP",
+            "repairExecuted": false,
+            "eligibility": {
+              "maintenance": false,
+              "desiredRunning": true,
+              "dependencyHealthy": true,
+              "authorizedRestart": false,
+              "cooldownElapsed": true
+            },
+            "evidenceFile": "preview/evidence/worker-04.json"
+          },
+          "preview/evidence/worker-04.json": {
+            "target": "worker-04",
+            "snapshotRevision": 3,
+            "source": "runtime/live-status.json",
+            "facts": {
+              "serviceVersion": "1.3.0",
+              "observedEpoch": 1203,
+              "health": "HEALTHY",
+              "dependencyHealthy": true,
+              "maintenance": false,
+              "desiredRunning": true,
+              "authorizedRestart": false,
+              "lastActionEpoch": 909,
+              "cooldownSeconds": 60,
+              "errorCount": 1,
+              "cpuPercent": 39,
+              "queueDepth": 21
+            },
+            "historicalActionsReplayed": false
+          },
+          "preview/decisions/worker-05.json": {
+            "target": "worker-05",
+            "snapshotRevision": 3,
+            "observedEpoch": 1204,
+            "serviceVersion": "1.3.0",
+            "action": "WAIT",
+            "repairExecuted": false,
+            "eligibility": {
+              "maintenance": false,
+              "desiredRunning": false,
+              "dependencyHealthy": true,
+              "authorizedRestart": true,
+              "cooldownElapsed": true
+            },
+            "evidenceFile": "preview/evidence/worker-05.json"
+          },
+          "preview/evidence/worker-05.json": {
+            "target": "worker-05",
+            "snapshotRevision": 3,
+            "source": "runtime/live-status.json",
+            "facts": {
+              "serviceVersion": "1.3.0",
+              "observedEpoch": 1204,
+              "health": "STOPPED",
+              "dependencyHealthy": true,
+              "maintenance": false,
+              "desiredRunning": false,
+              "authorizedRestart": true,
+              "lastActionEpoch": 912,
+              "cooldownSeconds": 60,
+              "errorCount": 2,
+              "cpuPercent": 44,
+              "queueDepth": 24
+            },
+            "historicalActionsReplayed": false
+          },
+          "preview/decisions/worker-06.json": {
+            "target": "worker-06",
+            "snapshotRevision": 3,
+            "observedEpoch": 1205,
+            "serviceVersion": "1.3.0",
+            "action": "WAIT",
+            "repairExecuted": false,
+            "eligibility": {
+              "maintenance": true,
+              "desiredRunning": true,
+              "dependencyHealthy": true,
+              "authorizedRestart": false,
+              "cooldownElapsed": true
+            },
+            "evidenceFile": "preview/evidence/worker-06.json"
+          },
+          "preview/evidence/worker-06.json": {
+            "target": "worker-06",
+            "snapshotRevision": 3,
+            "source": "runtime/live-status.json",
+            "facts": {
+              "serviceVersion": "1.3.0",
+              "observedEpoch": 1205,
+              "health": "UNHEALTHY",
+              "dependencyHealthy": true,
+              "maintenance": true,
+              "desiredRunning": true,
+              "authorizedRestart": false,
+              "lastActionEpoch": 915,
+              "cooldownSeconds": 60,
+              "errorCount": 3,
+              "cpuPercent": 49,
+              "queueDepth": 27
+            },
+            "historicalActionsReplayed": false
+          },
+          "preview/decisions/worker-07.json": {
+            "target": "worker-07",
+            "snapshotRevision": 3,
+            "observedEpoch": 1206,
+            "serviceVersion": "1.3.0",
+            "action": "INVESTIGATE",
+            "repairExecuted": false,
+            "eligibility": {
+              "maintenance": false,
+              "desiredRunning": true,
+              "dependencyHealthy": false,
+              "authorizedRestart": true,
+              "cooldownElapsed": true
+            },
+            "evidenceFile": "preview/evidence/worker-07.json"
+          },
+          "preview/evidence/worker-07.json": {
+            "target": "worker-07",
+            "snapshotRevision": 3,
+            "source": "runtime/live-status.json",
+            "facts": {
+              "serviceVersion": "1.3.0",
+              "observedEpoch": 1206,
+              "health": "BUSY",
+              "dependencyHealthy": false,
+              "maintenance": false,
+              "desiredRunning": true,
+              "authorizedRestart": true,
+              "lastActionEpoch": 918,
+              "cooldownSeconds": 60,
+              "errorCount": 0,
+              "cpuPercent": 54,
+              "queueDepth": 30
+            },
+            "historicalActionsReplayed": false
+          },
+          "preview/decisions/worker-08.json": {
+            "target": "worker-08",
+            "snapshotRevision": 3,
+            "observedEpoch": 1207,
+            "serviceVersion": "1.3.0",
+            "action": "INVESTIGATE",
+            "repairExecuted": false,
+            "eligibility": {
+              "maintenance": false,
+              "desiredRunning": true,
+              "dependencyHealthy": true,
+              "authorizedRestart": false,
+              "cooldownElapsed": true
+            },
+            "evidenceFile": "preview/evidence/worker-08.json"
+          },
+          "preview/evidence/worker-08.json": {
+            "target": "worker-08",
+            "snapshotRevision": 3,
+            "source": "runtime/live-status.json",
+            "facts": {
+              "serviceVersion": "1.3.0",
+              "observedEpoch": 1207,
+              "health": "UNKNOWN",
+              "dependencyHealthy": true,
+              "maintenance": false,
+              "desiredRunning": true,
+              "authorizedRestart": false,
+              "lastActionEpoch": 921,
+              "cooldownSeconds": 60,
+              "errorCount": 1,
+              "cpuPercent": 59,
+              "queueDepth": 33
+            },
+            "historicalActionsReplayed": false
+          },
+          "preview/decisions/worker-09.json": {
+            "target": "worker-09",
+            "snapshotRevision": 3,
+            "observedEpoch": 1208,
+            "serviceVersion": "1.3.0",
+            "action": "NOOP",
+            "repairExecuted": false,
+            "eligibility": {
+              "maintenance": false,
+              "desiredRunning": true,
+              "dependencyHealthy": true,
+              "authorizedRestart": true,
+              "cooldownElapsed": true
+            },
+            "evidenceFile": "preview/evidence/worker-09.json"
+          },
+          "preview/evidence/worker-09.json": {
+            "target": "worker-09",
+            "snapshotRevision": 3,
+            "source": "runtime/live-status.json",
+            "facts": {
+              "serviceVersion": "1.3.0",
+              "observedEpoch": 1208,
+              "health": "HEALTHY",
+              "dependencyHealthy": true,
+              "maintenance": false,
+              "desiredRunning": true,
+              "authorizedRestart": true,
+              "lastActionEpoch": 924,
+              "cooldownSeconds": 60,
+              "errorCount": 2,
+              "cpuPercent": 64,
+              "queueDepth": 36
+            },
+            "historicalActionsReplayed": false
+          },
+          "preview/decisions/worker-10.json": {
+            "target": "worker-10",
+            "snapshotRevision": 3,
+            "observedEpoch": 1209,
+            "serviceVersion": "1.3.0",
+            "action": "REQUEST_APPROVAL",
+            "repairExecuted": false,
+            "eligibility": {
+              "maintenance": false,
+              "desiredRunning": true,
+              "dependencyHealthy": true,
+              "authorizedRestart": false,
+              "cooldownElapsed": true
+            },
+            "evidenceFile": "preview/evidence/worker-10.json"
+          },
+          "preview/evidence/worker-10.json": {
+            "target": "worker-10",
+            "snapshotRevision": 3,
+            "source": "runtime/live-status.json",
+            "facts": {
+              "serviceVersion": "1.3.0",
+              "observedEpoch": 1209,
+              "health": "STOPPED",
+              "dependencyHealthy": true,
+              "maintenance": false,
+              "desiredRunning": true,
+              "authorizedRestart": false,
+              "lastActionEpoch": 927,
+              "cooldownSeconds": 60,
+              "errorCount": 3,
+              "cpuPercent": 69,
+              "queueDepth": 39
+            },
+            "historicalActionsReplayed": false
+          }
+        },
+        "unchangedFiles": [
+          "history/completed-actions.json",
+          "production/permissions.json",
+          "docs/decisions.md",
+          "runtime/validation.json"
+        ],
+        "forbiddenWriteTargets": [
+          "runtime/live-status.json",
+          "history/completed-actions.json",
+          "production/permissions.json",
+          "docs/decisions.md",
+          "runtime/validation.json"
+        ],
+        "requiredReadTargets": [
+          "runtime/live-status.json",
+          "history/completed-actions.json",
+          "docs/decisions.md",
+          "runtime/validation.json"
+        ],
+        "forbiddenExtraFields": true
+      }
+    }
+  ]
+}

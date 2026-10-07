@@ -63,6 +63,15 @@ Input adapter
   -> Output adapter
 ```
 
+### 动作验证策略
+
+`VerificationMode` 必须按可信 Action Contract 分流。`DETERMINISTIC` 现场重新读取并检查全部声明断言，不创建模型复查；只有断言通过才允许 verified success。`WORKFLOW` 仍由隔离的只读验证链承担，模型结论不具判定权威；`MANUAL_REQUIRED` 保持待人工状态。文件内容校验只证明动作写入了声明内容，不代表任务答案正确或服务已恢复。 普通 ASK/AUTO 的收尾指引要求依据用户明确指定的规则与最新读取证据核对内容、条件优先级和默认值；这不是机械语义判定，也不让模型自述或结构校验升级为业务完成。Run 的 COMPLETED 仍仅表示运行正常结束，任务正确性由应用/评测的独立合同判断。跨根的实际模型验证调用仍共享显式评测预算，副作用 Attempt、目标锁、未知结果和恢复扫描沿用原合同。
+
+
+普通 ReAct 提供单次运行的可选 `TaskCompletionCheck`：仅可信调用方注入有界、本地、只读验收条件，返回类型化 ACCEPT/RETRY/REJECT；不调用模型、工具写入或读取评测 Gold。没有验收合同的旧入口行为兼容。普通文本结束与工具 COMPLETE 都经过已配置的验收；RETRY 最多续接两次，下一轮仍进入既有 ContextPipeline、取消、deadline 与所有共享预算。回调异常、空结果、明确拒绝或纠正耗尽不得进入 COMPLETED；仅返回有界错误码。验收反馈为临时运行数据，不持久化、不转交其他 Run，也不授予工具权限。PLAN_EXECUTE 不接受该入口，不能默默跳过验收。回调由可信应用实现，接口本身不沙箱化回调或自动证明任意自然语言任务正确；应用仍负责只读实现、声明规则和现场独立读取。
+
+原生来源导航按最终模型上下文中的 TOOL 调用 ID 与返回文本哈希标注 PRESENT/MISSING，优先展示缺失引用。标签只表达历史原文的可见性，不证明文件完整、规则成立或当前新鲜度。最新失败读取撤销旧成功引用；导航不缓存或恢复原文。可见性变化最多经过一次额外 ContextPipeline 重建并重新计入预算；重建后再次变化则 fail closed，不能发送错误标签或绕过预算。
+
 ### AgentRuntime
 
 Agent runtime 管理一次任务的生命周期，只负责：
@@ -182,6 +191,8 @@ engine 消费统一 `ModelResponse`，不直接消费 OpenAI/Anthropic DTO。它
 - Tool definitions/results 和预算策略。
 
 输出 `ModelContext` 以及可解释的预算报告。每个片段需标明 source、lifecycle、priority、token count、是否允许 compact 和是否允许持久化。
+
+候选压缩管线对最近USER明确引用的文件，选取其后至多2个路径的最新read返回，保留所在原工具交换；被选返回4096字符、完整交换连同同批其他返回及调用参数等字符开销8192为上限。原角色/调用ID不变，工具文字不成为审批或已确认事实；越界或占位返回按普通策略处理，不回填更早原文。L2/T3/L3共享同一保留集合，全部成本进入原预算，无法容纳仍失败关闭。自动锚点清理只识别SYSTEM派生消息，不能按相同文本前缀删除USER/TOOL数据。合同见docs/context-memory-file-checkpoint.md。
 
 ### 持久化边界
 

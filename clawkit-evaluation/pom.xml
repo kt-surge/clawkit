@@ -16,6 +16,21 @@
     <dependencies>
         <dependency>
             <groupId>com.clawkit</groupId>
+            <artifactId>clawkit-context</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.clawkit</groupId>
+            <artifactId>clawkit-memory</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.clawkit</groupId>
+            <artifactId>clawkit-reliability</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.clawkit</groupId>
             <artifactId>clawkit-ops-delivery</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -79,6 +94,39 @@
     </dependencies>
 
     <profiles>
+        <profile>
+            <id>context-memory-full</id>
+            <build><plugins><plugin>
+                <groupId>org.codehaus.mojo</groupId><artifactId>exec-maven-plugin</artifactId><version>3.4.1</version>
+                <configuration><mainClass>com.clawkit.evaluation.context.ContextMemoryFull</mainClass></configuration>
+                <executions><execution><id>context-memory-full-preparation</id><phase>verify</phase><goals><goal>java</goal></goals></execution></executions>
+            </plugin></plugins></build>
+        </profile>
+        <profile>
+            <id>context-memory-frozen</id>
+            <build><plugins><plugin>
+                <groupId>org.codehaus.mojo</groupId><artifactId>exec-maven-plugin</artifactId><version>3.4.1</version>
+                <configuration><mainClass>com.clawkit.evaluation.context.ContextMemoryFrozen</mainClass></configuration>
+                <executions><execution><id>context-memory-frozen-preparation</id><phase>verify</phase><goals><goal>java</goal></goals></execution></executions>
+            </plugin></plugins></build>
+        </profile>
+
+        <profile>
+            <id>context-memory-continuation</id>
+            <build><plugins><plugin>
+                <groupId>org.codehaus.mojo</groupId><artifactId>exec-maven-plugin</artifactId><version>3.4.1</version>
+                <configuration><mainClass>com.clawkit.evaluation.context.ContextMemoryContinuation</mainClass></configuration>
+                <executions><execution><id>context-memory-development-preparation</id><phase>verify</phase><goals><goal>java</goal></goals></execution></executions>
+            </plugin></plugins></build>
+        </profile>
+        <profile>
+            <id>context-memory-replay</id>
+            <build><plugins><plugin>
+                <groupId>org.codehaus.mojo</groupId><artifactId>exec-maven-plugin</artifactId><version>3.4.1</version>
+                <configuration><mainClass>com.clawkit.evaluation.context.ContextMemoryReplay</mainClass></configuration>
+                <executions><execution><id>offline-context-memory-replay</id><phase>verify</phase><goals><goal>java</goal></goals></execution></executions>
+            </plugin></plugins></build>
+        </profile>
         <profile>
             <id>intelligence-evaluation</id>
             <build><plugins><plugin>

@@ -43,6 +43,11 @@ final class AnchorSnapshotPlanner {
     }
 
     Plan prepare(List<Message> rawMessages, CompactionHint requestedHint) {
+        return prepare(rawMessages, requestedHint, adaptivePolicy.anchorBudgetTokens(budgetPolicy));
+    }
+
+    Plan prepare(List<Message> rawMessages, CompactionHint requestedHint, int budget) {
+        if (budget < 1) throw new IllegalArgumentException("positive anchor budget required");
         CompactionHint hint = requestedHint != null ? requestedHint : CompactionHint.GENERAL;
         List<CompactionAnchor> merged = merge(hint.anchors(), legacyAnchors(rawMessages));
         if (merged.isEmpty()) {
@@ -58,7 +63,6 @@ final class AnchorSnapshotPlanner {
             return failedPlan(hint, required);
         }
 
-        int budget = adaptivePolicy.anchorBudgetTokens(budgetPolicy);
         AnchorSnapshot requiredSnapshot = render(hint, required);
         if (tokenizer.countTokens(requiredSnapshot.renderedText()) > budget) {
             return failedPlan(hint, required);
@@ -111,13 +115,43 @@ final class AnchorSnapshotPlanner {
     }
 
     private List<CompactionAnchor> legacyAnchors(List<Message> messages) {
-        return extractor.extract(messages).stream().map(this::legacyAnchor).toList();
+        var byId = new LinkedHashMap<String, CompactionAnchor>();
+        for (Message message : messages) {
+            for (Constraint constraint : extractor.extract(List.of(message))) {
+                CompactionAnchor candidate = legacyAnchor(constraint, message.role());
+                CompactionAnchor current = byId.get(candidate.id());
+                // A low-trust copy cannot replace a user constraint, regardless of message order.
+                if (current == null || provenanceRank(candidate) < provenanceRank(current)) {
+                    byId.put(candidate.id(), candidate);
+                }
+            }
+        }
+        return List.copyOf(byId.values());
     }
 
-    private CompactionAnchor legacyAnchor(Constraint constraint) {
+    private CompactionAnchor legacyAnchor(Constraint constraint, com.clawkit.tools.schema.Role role) {
         String text = constraint.text();
-        return new CompactionAnchor("legacy-" + shortHash(text), AnchorKind.USER_CONSTRAINT,
-            text, null, true, CompactionAnchor.CONFIRMED, AnchorProvenance.USER, Instant.EPOCH);
+        String id = "legacy-" + shortHash(text);
+        return switch (role) {
+            case USER -> new CompactionAnchor(id, AnchorKind.USER_CONSTRAINT, text, null, true,
+                CompactionAnchor.CONFIRMED, AnchorProvenance.USER, Instant.EPOCH);
+            case TOOL -> new CompactionAnchor(id, AnchorKind.EVIDENCE, text, null, false,
+                CompactionAnchor.OPEN, AnchorProvenance.TOOL_EVIDENCE, Instant.EPOCH);
+            case ASSISTANT -> new CompactionAnchor(id, AnchorKind.OPEN_HYPOTHESIS, text, null, false,
+                CompactionAnchor.OPEN, AnchorProvenance.MODEL_DERIVED, Instant.EPOCH);
+            // System fragments are already protected. Regex text alone does not establish workflow facts.
+            case SYSTEM -> new CompactionAnchor(id, AnchorKind.EVIDENCE, text, null, false,
+                CompactionAnchor.OPEN, AnchorProvenance.WORKFLOW_STATE, Instant.EPOCH);
+        };
+    }
+
+    private int provenanceRank(CompactionAnchor anchor) {
+        return switch (anchor.provenance()) {
+            case USER -> 0;
+            case WORKFLOW_STATE -> 1;
+            case TOOL_EVIDENCE -> 2;
+            case MODEL_DERIVED -> 3;
+        };
     }
 
     private Comparator<CompactionAnchor> anchorOrder() {

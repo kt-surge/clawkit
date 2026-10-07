@@ -74,4 +74,45 @@ class GlobToolTest {
         assertInstanceOf(Result.Err.class, r);
         assertEquals("T-002", ((Result.Err<String>) r).error().errorCode());
     }
+
+    @Test
+    void recursivePatternsIncludeRootAndNestedFiles() throws IOException {
+        Path workDir = Files.createTempDirectory("clawkit-glob-root");
+        Files.writeString(workDir.resolve("current-health.json"), "{\"healthy\":true}");
+        Files.createDirectories(workDir.resolve("snapshots"));
+        Files.writeString(workDir.resolve("snapshots/current-health.json"), "{}");
+        Files.writeString(workDir.resolve("schema.sql"), "-- accepted");
+        GlobTool tool = new GlobTool(workDir);
+        for (String pattern : new String[] {"**/current-health.json", "**/*.json", "**/*"}) {
+            Result<String> result = tool.execute("{\"pattern\":\"" + pattern + "\"}");
+            assertInstanceOf(Result.Ok.class, result);
+            String output = ((Result.Ok<String>) result).data();
+            assertTrue(output.contains("  current-health.json\n"), pattern + " must include the root file");
+            assertTrue(output.contains("  snapshots/current-health.json\n"), pattern + " must include nested files");
+        }
+    }
+
+    @Test
+    void recursiveSegmentCanMatchZeroDirectoriesInsidePattern() throws IOException {
+        Path workDir = Files.createTempDirectory("clawkit-glob-segment");
+        Files.createDirectories(workDir.resolve("src/deep"));
+        Files.createDirectories(workDir.resolve("other"));
+        Files.createFile(workDir.resolve("src/Config.java"));
+        Files.createFile(workDir.resolve("src/deep/Config.java"));
+        Files.createFile(workDir.resolve("other/Config.java"));
+        Result<String> result = new GlobTool(workDir).execute("{\"pattern\":\"src/**/Config.java\"}");
+        assertInstanceOf(Result.Ok.class, result);
+        String output = ((Result.Ok<String>) result).data();
+        assertTrue(output.contains("  src/Config.java\n"));
+        assertTrue(output.contains("  src/deep/Config.java\n"));
+        assertFalse(output.contains("other/Config.java"));
+    }
+
+    @Test
+    void invalidGlobReturnsToolError() throws IOException {
+        Path workDir = Files.createTempDirectory("clawkit-glob-invalid");
+        Result<String> result = new GlobTool(workDir).execute("{\"pattern\":\"[unclosed\"}");
+        assertInstanceOf(Result.Err.class, result);
+        assertEquals("T-002", ((Result.Err<String>) result).error().errorCode());
+    }
 }

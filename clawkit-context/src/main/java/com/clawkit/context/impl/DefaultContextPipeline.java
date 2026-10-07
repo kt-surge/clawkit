@@ -84,7 +84,12 @@ public class DefaultContextPipeline implements ContextPipeline {
             .map(Constraint::text).toList();
 
         // PA-3: snapshot from unmasked input, then inject exactly one canonical sidecar.
-        AnchorSnapshotPlanner.Plan anchorPlan = anchorPlanner.prepare(raw, request.hint());
+        int anchorTokens = adaptivePolicy.anchorBudgetTokens(budgetPolicy);
+        if (request.hint().profile() == CompactionProfile.GENERAL && request.runTokenBudgetRemaining() < budgetPolicy.contextWindow()) {
+            int proportional = (int)Math.floor(adaptivePolicy.targetTokens(budgetPolicy, request) * adaptivePolicy.anchorBudgetRatio());
+            anchorTokens = Math.max(1, Math.min(anchorTokens, proportional));
+        }
+        AnchorSnapshotPlanner.Plan anchorPlan = anchorPlanner.prepare(raw, request.hint(), anchorTokens);
         List<Message> messages = new ArrayList<>(raw);
         var beforeReport = analyzer.analyze(messages, toolDefTokens, java.util.Map.of());
         var decisionReport = anchorPlan.snapshot().renderedText().isBlank()
@@ -103,7 +108,9 @@ public class DefaultContextPipeline implements ContextPipeline {
         appliedRules.add("l1-deterministic");
         ContextBudgetReport currentReport = analyzer.analyze(
             messages, toolDefTokens, java.util.Map.of());
-        if (selected == CompactionLevel.L1_DETERMINISTIC
+        boolean constrainedGeneral = request.hint().profile() == CompactionProfile.GENERAL
+            && request.runTokenBudgetRemaining() < budgetPolicy.contextWindow();
+        if ((selected == CompactionLevel.L1_DETERMINISTIC && !constrainedGeneral)
             || adaptivePolicy.withinTarget(currentReport, budgetPolicy, request)) {
             return result(messages, beforeReport, currentReport, legacyConstraints, appliedRules,
                 originalMessages, true, request, anchorPlan, List.of(),
@@ -119,6 +126,7 @@ public class DefaultContextPipeline implements ContextPipeline {
         messages = insertCanonicalSnapshot(messages, anchorPlan.snapshot());
 
         List<TurnGroup> evictedGroups = List.of();
+        List<TurnGroup> budgetDiscards = List.of();
         if (MessageMasker.shouldMask(request.turnCount())) {
             MessageMasker.MaskedContext masked = MessageMasker.mask(messages, request.turnCount());
             messages = masked.messages();
@@ -130,6 +138,17 @@ public class DefaultContextPipeline implements ContextPipeline {
                 CompactionLevel.L2_EXTRACTIVE));
         messages = insertCanonicalSnapshot(extractive.messages(), anchorPlan.snapshot());
         appliedRules.addAll(extractive.appliedRules());
+        if (constrainedGeneral) {
+            int messageTarget = Math.max(0, adaptivePolicy.targetTokens(budgetPolicy, request)
+                - toolDefTokens - request.reservedOutputTokens() - request.safetyMarginTokens());
+            int nextNumber = evictedGroups.stream().mapToInt(TurnGroup::turnNumber).max().orElse(0) + 1;
+            var trimmed = trimOldExchanges(messages, messageTarget, nextNumber);
+            messages = new ArrayList<>(trimmed.messages()); budgetDiscards = trimmed.removed();
+            if (!budgetDiscards.isEmpty()) {
+                var combined = new ArrayList<>(evictedGroups); combined.addAll(budgetDiscards); evictedGroups = List.copyOf(combined);
+                appliedRules.add("l2-budget-exchange-eviction");
+            }
+        }
         currentReport = analyzer.analyze(messages, toolDefTokens, java.util.Map.of());
         selected = CompactionLevel.L2_EXTRACTIVE;
 
@@ -152,9 +171,58 @@ public class DefaultContextPipeline implements ContextPipeline {
 
         String failureCode = verifyFailure(messages, anchorPlan.snapshot(), currentReport, request);
         CompactionLevel finalLevel = failureCode == null ? selected : CompactionLevel.L4_FAILED;
-        return result(messages, beforeReport, currentReport, legacyConstraints, appliedRules,
+        return markBudgetDiscards(result(messages, beforeReport, currentReport, legacyConstraints, appliedRules,
             originalMessages, true, request, anchorPlan, evictedGroups,
-            finalLevel, failureCode, started);
+            finalLevel, failureCode, started), budgetDiscards);
+    }
+
+    private record ExchangeTrim(List<Message> messages, List<TurnGroup> removed) {}
+
+    private ExchangeTrim trimOldExchanges(List<Message> messages, int messageTarget, int nextNumber) {
+        var layout = ExchangeLayout.inspect(messages);
+        if (!layout.valid()) return new ExchangeTrim(List.copyOf(messages), List.of());
+        int recentBoundary = layout.recentBoundary(3);
+        var dropped = new java.util.HashSet<Integer>();
+        var removed = new ArrayList<TurnGroup>();
+        var remaining = new ArrayList<>(messages);
+        for (var group : layout.groups()) {
+            if (tokenizer.countTokens(remaining) <= messageTarget || group.start() >= recentBoundary) break;
+            boolean protectedGroup = false;
+            for (int i = group.start(); i < group.end(); i++) {
+                if (messages.get(i).role() == com.clawkit.tools.schema.Role.USER
+                    || layout.protectedTaskSource(i) || i >= recentBoundary) { protectedGroup = true; break; }
+            }
+            if (protectedGroup) continue;
+            var retired = new ArrayList<Message>();
+            boolean hasToolExchange = false;
+            for (int i = group.start(); i < group.end(); i++) {
+                var message = messages.get(i);
+                if (message.role() == com.clawkit.tools.schema.Role.SYSTEM) continue;
+                retired.add(message);
+                hasToolExchange |= message.role() == com.clawkit.tools.schema.Role.ASSISTANT
+                    && message.toolCalls() != null && !message.toolCalls().isEmpty();
+            }
+            if (!hasToolExchange) continue;
+            for (int i = group.start(); i < group.end(); i++)
+                if (messages.get(i).role() != com.clawkit.tools.schema.Role.SYSTEM) dropped.add(i);
+            removed.add(new TurnGroup(nextNumber++, List.copyOf(retired)));
+            remaining.clear();
+            for (int i = 0; i < messages.size(); i++) if (!dropped.contains(i)) remaining.add(messages.get(i));
+        }
+        return new ExchangeTrim(List.copyOf(remaining), List.copyOf(removed));
+    }
+
+    private CompactionResult markBudgetDiscards(CompactionResult result, List<TurnGroup> budgetDiscards) {
+        if (budgetDiscards.isEmpty()) return result;
+        var numbers = budgetDiscards.stream().map(TurnGroup::turnNumber).collect(java.util.stream.Collectors.toSet());
+        var audit = result.audit();
+        var ranges = audit.discardedRanges().stream().map(range -> numbers.contains(range.fromTurn())
+            ? new DiscardedTurnRange(range.fromTurn(), range.toTurn(), range.messageCount(), range.roles(),
+                "LOW_RUN_BUDGET_COMPLETE_EXCHANGE") : range).toList();
+        var revised = new CompactionAudit(audit.profile(), audit.retainedAnchorIds(), audit.lostRequiredAnchorIds(),
+            ranges, audit.evictedGroups(), audit.durationMs(), audit.failureCode(), audit.level(), audit.decisionReason());
+        return new CompactionResult(result.messages(), result.beforeReport(), result.afterReport(), result.retainedConstraints(),
+            result.appliedRules(), result.beforeMessages(), result.afterMessages(), result.compacted(), revised);
     }
 
     private CompactionResult result(
@@ -180,8 +248,10 @@ public class DefaultContextPipeline implements ContextPipeline {
             request.hint().profile().name(), anchorPlan.retainedIds(), lost,
             discardedRanges(evictedGroups), evictedGroups.size(), durationMs, failureCode,
             level, decisionReason(level, failureCode));
+        List<String> actualRetained = retainedConstraints.stream().filter(text -> messages.stream()
+            .anyMatch(message -> message.content() != null && message.content().contains(text))).toList();
         return new CompactionResult(List.copyOf(messages), beforeReport, afterReport,
-            retainedConstraints, List.copyOf(appliedRules), beforeMessages, messages.size(),
+            actualRetained, List.copyOf(appliedRules), beforeMessages, messages.size(),
             compacted, audit);
     }
 
@@ -204,7 +274,7 @@ public class DefaultContextPipeline implements ContextPipeline {
     private List<Message> removeDerivedAnchorMessages(List<Message> messages) {
         return messages.stream().filter(message -> {
             String content = message.content();
-            return content == null
+            return message.role() != com.clawkit.tools.schema.Role.SYSTEM || content == null
                 || (!content.startsWith("[Runtime][Compaction Anchors]")
                     && !content.startsWith("[Preserved Constraints]"));
         }).toList();

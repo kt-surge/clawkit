@@ -45,16 +45,10 @@ public final class MessageMasker {
             return new MaskedContext(List.of(), 0, 0, 0, 0);
         }
 
-        // 1. 扫描消息列表，按 USER 消息分配轮次编号
-        int[] turnMap = new int[messages.size()];
-        int turn = 0;
-        for (int i = 0; i < messages.size(); i++) {
-            if (messages.get(i).role() == Role.USER) {
-                turn++;
-            }
-            turnMap[i] = turn;
-        }
-        int totalTurns = turn;
+        var layout = ExchangeLayout.inspect(messages);
+        // Never split an incomplete or malformed tool graph. The provider boundary handles its refusal.
+        if (!layout.valid()) return new MaskedContext(List.copyOf(messages), messages.size(), 0, 0, 0, List.of());
+        int totalTurns = layout.count();
 
         // 2. 按 Tier 处理每条消息
         List<Message> result = new ArrayList<>(messages.size());
@@ -63,17 +57,18 @@ public final class MessageMasker {
 
         for (int i = 0; i < messages.size(); i++) {
             Message msg = messages.get(i);
-            int msgTurn = turnMap[i];
+            int msgTurn = layout.groupOf(i);
 
             if (msg.role() == Role.SYSTEM) {
                 result.add(msg);
                 continue;
             }
 
-            int tier = classifyTier(msgTurn, totalTurns);
+            int tier = layout.protectedUser(i) || layout.protectedTaskSource(i)
+                ? 0 : classifyTier(msgTurn, totalTurns);
 
             switch (tier) {
-                case 0 -> { t0++; result.add(handleTier0(msg)); }
+                case 0 -> { t0++; result.add(layout.protectedTaskSource(i) ? msg : handleTier0(msg)); }
                 case 1 -> { t1++; result.add(handleTier1(msg)); }
                 case 2 -> { t2++; result.add(handleTier2(msg)); }
                 case 3 -> { t3++; evictionGroups.computeIfAbsent(msgTurn, k -> new ArrayList<>()).add(msg); }
@@ -98,21 +93,13 @@ public final class MessageMasker {
         return 3;
     }
 
-    // ── Tier0: 全保留（仅对特大 TOOL 掐头去尾） ──
+    // ── Tier0: 保留近期工具返回；工具输出上限与上下文预算负责限制大小 ──
 
     private static Message handleTier0(Message msg) {
         if (msg.role() == Role.TOOL) {
             if (msg.content() == null || msg.content().isBlank())
                 return new Message(Role.TOOL, "[tool output — empty]", null, msg.toolCallId());
-            if (msg.content().length() > 1000) {
-                String content = msg.content();
-                int len = content.length();
-                return new Message(Role.TOOL,
-                    content.substring(0, 500)
-                    + "\n…[truncated " + (len - 1000) + " bytes]…\n"
-                    + content.substring(len - 500),
-                    null, msg.toolCallId(), msg.reasoningContent());
-            }
+
         }
         return msg;
     }

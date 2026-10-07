@@ -61,6 +61,38 @@ class VerificationIsolationTest {
     }
 
     @Test
+    void deterministicModeRereadsTheFileWithoutStartingAModelReview() throws Exception {
+        Path file = dir.resolve("deterministic.txt");
+        Files.writeString(file, "expected");
+        String hash = Digests.sha256Hex("expected".getBytes(StandardCharsets.UTF_8));
+        var descriptor = new ActionDescriptor("file.write", "file:" + file, "d1",
+            ToolRiskLevel.HIGH, Reversibility.COMPENSATABLE, ActionReliability.idempotentSetter(),
+            VerificationMode.DETERMINISTIC, List.of(), List.of("file-sha256:" + file + ":" + hash), "", "");
+        var gateway = new SpyGateway();
+        var launcher = new VerificationRunLauncher(new AgentRuntimeDependencies(gateway, null,
+            new ToolRegistry(), 128_000, null), dir.toString());
+        assertThat(launcher.verify(attempt(descriptor)).deterministicPassed()).isTrue();
+        Files.writeString(file, "changed after action");
+        assertThat(launcher.verify(attempt(descriptor)).deterministicPassed()).isFalse();
+        assertThat(gateway.requests).isEmpty();
+    }
+
+    @Test
+    void manualModeDoesNotAutomaticallyVerifyAMatchingFile() throws Exception {
+        Path file = dir.resolve("manual.txt");
+        Files.writeString(file, "expected");
+        String hash = Digests.sha256Hex("expected".getBytes(StandardCharsets.UTF_8));
+        var descriptor = new ActionDescriptor("custom.manual", "file:" + file, "d1",
+            ToolRiskLevel.HIGH, Reversibility.COMPENSATABLE, ActionReliability.idempotentSetter(),
+            VerificationMode.MANUAL_REQUIRED, List.of(), List.of("file-sha256:" + file + ":" + hash), "", "");
+        var gateway = new SpyGateway();
+        var launcher = new VerificationRunLauncher(new AgentRuntimeDependencies(gateway, null,
+            new ToolRegistry(), 128_000, null), dir.toString());
+        assertThat(launcher.verify(attempt(descriptor)).deterministicPassed()).isFalse();
+        assertThat(gateway.requests).isEmpty();
+    }
+
+    @Test
     void verificationRunIsIsolatedFromRemediationContext() throws Exception {
         // 修复动作产物：文件 hash 匹配 expected effect
         Path file = dir.resolve("fixed.txt");

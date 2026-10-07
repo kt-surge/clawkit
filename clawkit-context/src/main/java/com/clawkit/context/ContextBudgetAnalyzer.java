@@ -64,8 +64,7 @@ public class ContextBudgetAnalyzer {
         for (var msg : messages) {
             messageCount++;
             var section = classify(msg);
-            String content = msg.content();
-            int tokens = content != null ? tokenizer.countTokens(content) : 0;
+            int tokens = tokenizer.countTokens(List.of(msg));
             sections.merge(section, tokens, Integer::sum);
         }
 

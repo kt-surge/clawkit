@@ -185,6 +185,15 @@ public class AgentEngine implements AgentLoop {
                 + "- 都失败时告知用户用真实浏览器打开";
         };
 
+        if (permissionMode != PermissionMode.PLAN) {
+            prompt += "\n\n## 任务收尾核对\n"
+                + "对于依赖规则、条件分支或现场证据的任务，结束前按用户明确指定的规则和最新读取的证据"
+                + "核对输出内容，检查条件优先级、默认值和例外。\n"
+                + "工具成功只证明对应操作完成；格式或结构校验不证明字段值或判断正确。\n"
+                + "提议、预览、模拟与实际执行的动作必须区分。未核验的条件保持未确认，"
+                + "收尾时说明完成项、验证依据和未确认项。\n";
+        }
+
         if (permissionMode != PermissionMode.PLAN && enableSubAgents) {
             prompt += "\n\n## Task Delegation\n\n"
                 + "You have access to a `task` tool for delegating self-contained "
@@ -217,6 +226,12 @@ public class AgentEngine implements AgentLoop {
     }
 
     private static final int MAX_TURNS = 50;
+    private static final int MAX_OUTPUT_RECOVERIES = 2;
+    private static final String OUTPUT_RECOVERY_HINT =
+        "[Runtime][Output Recovery] The previous response was cut off by the output limit and rejected. "
+        + "No tool calls from that response were executed. Continue from completed tool results; "
+        + "do not repeat completed actions. Keep explanations short, use compact JSON, "
+        + "and propose at most two small tool calls per response.";
     private static final int DEAD_LOOP_THRESHOLD = 3;
     private static final int PROGRESS_REMINDER_INTERVAL = 10;
     private static final List<ToolDefinition> EMPTY_TOOLS = Collections.emptyList();
@@ -362,6 +377,17 @@ public class AgentEngine implements AgentLoop {
 
     /** PRODUCT-2: parameterized run with tool scope isolation. */
     public String run(String userPrompt, com.clawkit.tools.RunToolScope toolScope) {
+        return run(userPrompt, toolScope, com.clawkit.engine.TaskCompletionCheck.NONE);
+    }
+
+    /** Caller-owned, local read-only acceptance for this ordinary ReAct run only. */
+    public String run(String userPrompt, com.clawkit.tools.RunToolScope toolScope,
+                      com.clawkit.engine.TaskCompletionCheck completionCheck) {
+        java.util.Objects.requireNonNull(completionCheck, "completionCheck");
+        if (completionCheck != com.clawkit.engine.TaskCompletionCheck.NONE
+            && executionMode == ExecutionMode.PLAN_EXECUTE) {
+            return "[A-011] 当前任务验收入口仅支持普通 ReAct，未启动计划执行。";
+        }
         log.info("[Engine] 引擎启动, scope={}, 工作区: {}, 思考模式: {}, 执行模式: {}",
             toolScope, workDir, thinkingMode, executionMode);
 
@@ -408,6 +434,15 @@ public class AgentEngine implements AgentLoop {
         List<Message> contextHistory = new ArrayList<>(session.messages());
 
         int turnCount = 0;
+        int outputRecoveries = 0;
+        var completionGuard = new TaskCompletionGuard(completionCheck);
+        List<Message> completionHints = new ArrayList<>();
+        List<Message> outputRecoveryHints = new ArrayList<>();
+        FileTaskCheckpoint fileCheckpoint = new FileTaskCheckpoint();
+        ReadBatchRepeatTracker readBatchRepeats = new ReadBatchRepeatTracker();
+        Message repeatReadHint = null;
+        Message fileCheckpointHint = null;
+        boolean checkpointActivated = false;
         lastRunTurns = 0;
         fireState(AgentState.IDLE, 0);
 
@@ -426,6 +461,16 @@ public class AgentEngine implements AgentLoop {
             fireEvent(new TurnStartedPayload(), turnCount);
 
             // === 运行时事件注入 ===
+
+            if (repeatReadHint != null) {
+                ephemeralContext.runtime().remove(repeatReadHint);
+                repeatReadHint = null;
+            }
+            String repeatWarning = readBatchRepeats.takeWarning();
+            if (repeatWarning != null) {
+                repeatReadHint = Message.system(repeatWarning);
+                ephemeralContext.runtime().add(repeatReadHint);
+            }
 
             // 第1层: 死循环检测 — 连续3轮相同工具+相同参数
             if (recentCallSignatures.size() >= DEAD_LOOP_THRESHOLD) {
@@ -475,7 +520,20 @@ public class AgentEngine implements AgentLoop {
             ephemeralContext.memory().addAll(internalTools.workingMemoryContext());
 
             // Phase 3b: 组装 ModelContext（ContextPipeline 唯一入口）
+            if (fileCheckpointHint != null) {
+                ephemeralContext.runtime().remove(fileCheckpointHint);
+                fileCheckpointHint = null;
+            }
             var ctx = context.build(buildContextRequest());
+            checkpointActivated |= ctx.budgetReport().status() != ContextBudgetReport.BudgetStatus.OK
+                || ctx.messages().stream().anyMatch(message -> message.content() != null
+                    && message.content().startsWith("[Conversation Summary]"));
+            if (checkpointActivated && !fileCheckpoint.isEmpty()) {
+                fileCheckpointHint = Message.system(fileCheckpoint.render(context.contextWindow(), ctx.messages()));
+                ephemeralContext.runtime().add(fileCheckpointHint);
+                // Include navigation before compaction so its full input cost shares the ordinary budget.
+                ctx = context.build(buildContextRequest());
+            }
             List<Message> modelContext = new ArrayList<>(ctx.messages());
 
             // P1-A7：always-on 由 ContextPipeline 唯一编排，不在 Pipeline 外重复调用
@@ -484,60 +542,79 @@ public class AgentEngine implements AgentLoop {
 
             // Phase 2: 上下文掩码 + 预算分析 + compact（ContextPipeline 聚合）
             int toolDefTokens = estimateToolTokens();
-            CompactionResult cr = context.compact(modelContext, toolDefTokens, turnCount, hint,
-                activeControl().tokenBudget().remaining());
-            modelContext = new ArrayList<>(cr.messages());
+            // A source can disappear while the raw report is OK (reserves also drive compaction).
+            // Rebuild at most once, after recording/persisting the first result; every pass is budgeted.
+            for (int contextPass = 0; contextPass < 2; contextPass++) {
+                CompactionResult cr = context.compact(modelContext, toolDefTokens, turnCount, hint,
+                    activeControl().tokenBudget().remaining());
+                modelContext = new ArrayList<>(cr.messages());
 
-            if (cr.compacted()) {
-                fireEvent(new CompactTriggeredPayload(), turnCount);
-                var audit = cr.audit() != null ? cr.audit() : CompactionAudit.EMPTY;
-                var beforeSections = new java.util.LinkedHashMap<String, Integer>();
-                cr.beforeReport().sections().forEach((k, v) -> beforeSections.put(k.name(), v));
-                var afterSections = new java.util.LinkedHashMap<String, Integer>();
-                cr.afterReport().sections().forEach((k, v) -> afterSections.put(k.name(), v));
-                var discardedRanges = audit.discardedRanges().stream()
-                    .map(range -> range.fromTurn() + "-" + range.toTurn()
-                        + ":messages=" + range.messageCount()
-                        + ":roles=" + String.join(",", range.roles())
-                        + ":reason=" + range.reason())
-                    .toList();
-                boolean compactFailed = audit.failed()
-                    || cr.afterReport().status() == ContextBudgetReport.BudgetStatus.HARD_LIMIT;
-                String compactFailureCode = audit.failureCode() != null
-                    ? audit.failureCode()
-                    : compactFailed ? "COMPACT_HARD_LIMIT" : null;
-                fireEvent(new CompactCompletedPayload(
-                    cr.beforeMessages(), cr.afterMessages(),
-                    cr.beforeReport().totalTokens(), cr.afterReport().totalTokens(),
-                    cr.beforeReport().status().name(), cr.afterReport().status().name(),
-                    beforeSections, afterSections,
-                    audit.evictedGroups(), cr.appliedRules(), audit.durationMs(),
-                    compactFailed, compactFailureCode,
-                    audit.profile(), audit.retainedAnchorIds(),
-                    audit.lostRequiredAnchorIds(), discardedRanges,
-                    compactFailureCode, audit.level().name(), audit.decisionReason()), turnCount);
-                log.info("[Engine] compact: {} → {} msgs, {} → {} tokens",
-                    cr.beforeMessages(), cr.afterMessages(),
-                    cr.beforeReport().totalTokens(), cr.afterReport().totalTokens());
-                if (compactFailed) {
-                    log.warn("[Engine] compact fail-closed: {}", compactFailureCode);
-                    completeRun(RunStatus.COMPACT_FAILED, compactFailureCode,
-                        "compact failed: " + compactFailureCode);
-                    return String.format(
-                        "上下文压缩失败（%s，%d / %d tokens），未调用主任务模型。",
-                        compactFailureCode, cr.afterReport().totalTokens(),
-                        context.policy().contextWindow());
+                if (cr.compacted()) {
+                    fireEvent(new CompactTriggeredPayload(), turnCount);
+                    var audit = cr.audit() != null ? cr.audit() : CompactionAudit.EMPTY;
+                    var beforeSections = new java.util.LinkedHashMap<String, Integer>();
+                    cr.beforeReport().sections().forEach((k, v) -> beforeSections.put(k.name(), v));
+                    var afterSections = new java.util.LinkedHashMap<String, Integer>();
+                    cr.afterReport().sections().forEach((k, v) -> afterSections.put(k.name(), v));
+                    var discardedRanges = audit.discardedRanges().stream()
+                        .map(range -> range.fromTurn() + "-" + range.toTurn()
+                            + ":messages=" + range.messageCount()
+                            + ":roles=" + String.join(",", range.roles())
+                            + ":reason=" + range.reason())
+                        .toList();
+                    boolean compactFailed = audit.failed()
+                        || cr.afterReport().status() == ContextBudgetReport.BudgetStatus.HARD_LIMIT;
+                    String compactFailureCode = audit.failureCode() != null
+                        ? audit.failureCode()
+                        : compactFailed ? "COMPACT_HARD_LIMIT" : null;
+                    fireEvent(new CompactCompletedPayload(
+                        cr.beforeMessages(), cr.afterMessages(),
+                        cr.beforeReport().totalTokens(), cr.afterReport().totalTokens(),
+                        cr.beforeReport().status().name(), cr.afterReport().status().name(),
+                        beforeSections, afterSections,
+                        audit.evictedGroups(), cr.appliedRules(), audit.durationMs(),
+                        compactFailed, compactFailureCode,
+                        audit.profile(), audit.retainedAnchorIds(),
+                        audit.lostRequiredAnchorIds(), discardedRanges,
+                        compactFailureCode, audit.level().name(), audit.decisionReason()), turnCount);
+                    log.info("[Engine] compact: {} → {} msgs, {} → {} tokens",
+                        cr.beforeMessages(), cr.afterMessages(),
+                        cr.beforeReport().totalTokens(), cr.afterReport().totalTokens());
+                    if (compactFailed) {
+                        log.warn("[Engine] compact fail-closed: {}", compactFailureCode);
+                        completeRun(RunStatus.COMPACT_FAILED, compactFailureCode,
+                            "compact failed: " + compactFailureCode);
+                        return String.format(
+                            "上下文压缩失败（%s，%d / %d tokens），未调用主任务模型。",
+                            compactFailureCode, cr.afterReport().totalTokens(),
+                            context.policy().contextWindow());
+                    }
+                    session.replace(filterPersistable(modelContext));
                 }
-                session.replace(filterPersistable(modelContext));
-            }
 
-            if (context.lastReport().status() == ContextBudgetReport.BudgetStatus.HARD_LIMIT) {
-                log.warn("[Engine] compact 后仍超 95% 硬限制");
-                completeRun(RunStatus.COMPACT_FAILED,
-                    "A-001", "compact 后仍超 95% 硬限制");
-                return String.format(
-                    "上下文过大（%d / %d tokens），compact 后仍超 95%% 硬限制。",
-                    context.lastReport().totalTokens(), context.policy().contextWindow());
+                if (context.lastReport().status() == ContextBudgetReport.BudgetStatus.HARD_LIMIT) {
+                    log.warn("[Engine] compact 后仍超 95% 硬限制");
+                    completeRun(RunStatus.COMPACT_FAILED,
+                        "A-001", "compact 后仍超 95% 硬限制");
+                    return String.format(
+                        "上下文过大（%d / %d tokens），compact 后仍超 95%% 硬限制。",
+                        context.lastReport().totalTokens(), context.policy().contextWindow());
+                }
+                if (fileCheckpoint.isEmpty() || (fileCheckpointHint == null
+                    && !fileCheckpoint.hasMissingRead(modelContext))) break;
+                String checkpointText = fileCheckpoint.render(context.contextWindow(), modelContext);
+                if (fileCheckpointHint != null && checkpointText.equals(fileCheckpointHint.content())) break;
+                if (contextPass == 1) {
+                    completeRun(RunStatus.COMPACT_FAILED, "SOURCE_VISIBILITY_UNSTABLE",
+                        "Source visibility changed again after the bounded context rebuild");
+                    return "上下文来源可见性在预算重建后再次变化，已停止调用主任务模型。";
+                }
+                checkpointActivated = true;
+                if (fileCheckpointHint != null) ephemeralContext.runtime().remove(fileCheckpointHint);
+                fileCheckpointHint = Message.system(checkpointText);
+                ephemeralContext.runtime().add(fileCheckpointHint);
+                ctx = context.build(buildContextRequest());
+                modelContext = new ArrayList<>(ctx.messages());
             }
             contextHistory = modelContext;
 
@@ -624,6 +701,18 @@ public class AgentEngine implements AgentLoop {
             try {
                 responseMsg = callProvider(phase2Context, availableTools, turnCount, RunPhase.REACT);
             } catch (LLMException e) {
+                // A paid, typed length rejection is not an executable assistant/tool message.
+                // The next ordinary turn re-enters cancellation, deadline and shared budget gates.
+                if (outputRecoveries < MAX_OUTPUT_RECOVERIES && canRecoverOutputTruncation(e)) {
+                    outputRecoveries++;
+                    if (outputRecoveryHints.isEmpty()) {
+                        Message outputHint = Message.system(OUTPUT_RECOVERY_HINT);
+                        outputRecoveryHints.add(outputHint);
+                        ephemeralContext.runtime().add(outputHint);
+                    }
+                    log.warn("[Engine] 输出截断，缩小下一轮输出（恢复 {}/{}）", outputRecoveries, MAX_OUTPUT_RECOVERIES);
+                    continue;
+                }
                 fireState(AgentState.ERROR, turnCount, Map.of("error", e.getMessage()));
                 log.error("[Engine] LLM 调用失败 (A-002): {}", e.getMessage());
                 completeRun(RunStatus.LLM_ERROR, "A-002", e.getMessage());
@@ -643,6 +732,20 @@ public class AgentEngine implements AgentLoop {
 
             // 退出条件：没有工具调用（V3.7 增强：检测所有 todo 是否完成）
             if (responseMsg.toolCalls() == null || responseMsg.toolCalls().isEmpty()) {
+                var acceptance = completionGuard.evaluate(currentRunId, turnCount, responseMsg.content(), control);
+                if (!acceptance.accepted()) {
+                    session.replace(filterPersistable(contextHistory));
+                    if (!acceptance.retry()) {
+                        completeRun(RunStatus.UNKNOWN_ERROR, acceptance.code(), "Declared task acceptance did not pass");
+                        return "[A-011] 任务验收未通过（" + acceptance.code() + "），已停止自动纠正。";
+                    }
+                    ephemeralContext.runtime().removeAll(completionHints);
+                    completionHints.clear();
+                    Message acceptanceHint = Message.system(acceptance.hint());
+                    completionHints.add(acceptanceHint);
+                    ephemeralContext.runtime().add(acceptanceHint);
+                    continue;
+                }
                 fireState(AgentState.REPLYING, turnCount);
                 if (allTodosCompleted()) {
                     log.info("[Engine] 所有子目标完成，任务结束。");
@@ -680,7 +783,10 @@ public class AgentEngine implements AgentLoop {
             var batchResult = toolCallExecutor.executeBatch(calls, execCtx);
             for (ToolExecutionResult result : batchResult.results()) {
                 fireToolEnd(result);
+                calls.stream().filter(call -> call.id().equals(result.toolCallId())).findFirst()
+                    .ifPresent(call -> fileCheckpoint.observe(call, result, execCtx.turnNumber()));
             }
+            readBatchRepeats.observe(calls, batchResult.results());
             // P1-G2：结果未知/部分执行不是"确定失败"——注入结构化安全警告（ephemeral）
             for (ToolExecutionResult result : batchResult.results()) {
                 var certainty = result.effectCertainty();
@@ -718,6 +824,20 @@ public class AgentEngine implements AgentLoop {
             }
             session.replace(filterPersistable(contextHistory));
             if (batchResult.loopDecision() == ToolLoopDecision.COMPLETE) {
+                var acceptance = completionGuard.evaluate(currentRunId, turnCount, batchResult.finalOutput(), control);
+                if (!acceptance.accepted()) {
+                    session.replace(filterPersistable(contextHistory));
+                    if (!acceptance.retry()) {
+                        completeRun(RunStatus.UNKNOWN_ERROR, acceptance.code(), "Declared task acceptance did not pass");
+                        return "[A-011] 任务验收未通过（" + acceptance.code() + "），已停止自动纠正。";
+                    }
+                    ephemeralContext.runtime().removeAll(completionHints);
+                    completionHints.clear();
+                    Message acceptanceHint = Message.system(acceptance.hint());
+                    completionHints.add(acceptanceHint);
+                    ephemeralContext.runtime().add(acceptanceHint);
+                    continue;
+                }
                 fireState(AgentState.REPLYING, turnCount);
                 lastRunTurns = turnCount;
                 completeRun(RunStatus.COMPLETED, null, null);
@@ -752,6 +872,10 @@ public class AgentEngine implements AgentLoop {
                 e.getMessage() != null ? e.getMessage() : "Unexpected error");
             throw e;
         } finally {
+            ephemeralContext.runtime().removeAll(outputRecoveryHints);
+            ephemeralContext.runtime().removeAll(completionHints);
+            if (repeatReadHint != null) ephemeralContext.runtime().remove(repeatReadHint);
+            if (fileCheckpointHint != null) ephemeralContext.runtime().remove(fileCheckpointHint);
             if (permissionMode != PermissionMode.PLAN) {
                 try {
                     // 取消后不再发起记忆提取的模型调用；预算/deadline 停止也在此兜底
@@ -771,6 +895,15 @@ public class AgentEngine implements AgentLoop {
                 currentControl = null;
             }
         }
+    }
+
+    private static boolean canRecoverOutputTruncation(LLMException failure) {
+        var rejected = failure.rejectedResponse();
+        if (rejected == null || !"OUTPUT_TRUNCATED".equals(rejected.phase())) return false;
+        var usage = rejected.usage();
+        return usage != null && usage.source() == com.clawkit.provider.UsageSource.ACTUAL
+            && usage.totalTokens() > 0
+            && (long) usage.totalTokens() == (long) usage.promptTokens() + usage.completionTokens();
     }
 
     private boolean allReadOnly(List<ToolCall> calls) {
@@ -1002,8 +1135,10 @@ public class AgentEngine implements AgentLoop {
         var launcher = new VerificationRunLauncher(runtimeDeps, workDir);
         return new com.clawkit.reliability.gate.SideEffectGate(coordinator, attempt -> {
             var result = launcher.verify(attempt);
-            String evidence = result.deterministicDetail()
-                + "; independent model review: " + result.modelConclusion();
+            String evidence = attempt.descriptor().verificationMode()
+                == com.clawkit.tools.action.VerificationMode.DETERMINISTIC
+                ? result.deterministicDetail()
+                : result.deterministicDetail() + "; independent model review: " + result.modelConclusion();
             return new com.clawkit.reliability.gate.SideEffectGate.VerificationOutcome(
                 result.deterministicPassed(), evidence);
         });

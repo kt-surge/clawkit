@@ -32,8 +32,6 @@ public class LadderedCompactor implements ContextManager {
     // ── 压缩参数 ──
     private static final int MAX_LINE_LENGTH = 300;
     private static final int RECENT_TURNS = 3;
-    private static final int HEAD_TAIL_THRESHOLD = 1000;
-    private static final int HEAD_TAIL_KEEP = 500;
 
     // ── Map-Reduce 压缩参数 ──
     private static final int MAP_BATCH_SIZE = 5;
@@ -182,9 +180,10 @@ public class LadderedCompactor implements ContextManager {
     private List<Message> applyAlwaysOnRulesImpl(List<Message> messages, int recentBoundary,
                                                   Map<String, String> toolNameIndex) {
         List<Message> result = new ArrayList<>(messages.size());
+        var layout = ExchangeLayout.inspect(messages);
         for (int i = 0; i < messages.size(); i++) {
             Message msg = messages.get(i);
-            boolean inProtectionZone = i >= recentBoundary || msg.role() == Role.SYSTEM;
+            boolean inProtectionZone = i >= recentBoundary || msg.role() == Role.SYSTEM || layout.protectedUser(i) || layout.protectedTaskSource(i);
 
             if (inProtectionZone) {
                 result.add(applyProtectionZoneRules(msg));
@@ -196,9 +195,8 @@ public class LadderedCompactor implements ContextManager {
     }
 
     private Message applyProtectionZoneRules(Message msg) {
-        if (msg.role() == Role.TOOL && msg.content() != null && msg.content().length() > HEAD_TAIL_THRESHOLD) {
-            return headTailTruncate(msg);
-        }
+        // Recent native tool results must remain complete, including structured evidence.
+        // Tool output policies bound the result; the context budget fails closed if it cannot fit.
         return msg;
     }
 
@@ -215,9 +213,10 @@ public class LadderedCompactor implements ContextManager {
 
     private List<Message> applyPressureRules(List<Message> messages, int recentBoundary) {
         List<Message> result = new ArrayList<>(messages.size());
+        var layout = ExchangeLayout.inspect(messages);
         for (int i = 0; i < messages.size(); i++) {
             Message msg = messages.get(i);
-            boolean inProtectionZone = i >= recentBoundary || msg.role() == Role.SYSTEM;
+            boolean inProtectionZone = i >= recentBoundary || msg.role() == Role.SYSTEM || layout.protectedUser(i) || layout.protectedTaskSource(i);
 
             if (inProtectionZone) {
                 result.add(msg);
@@ -267,30 +266,10 @@ public class LadderedCompactor implements ContextManager {
             null, msg.toolCallId(), msg.reasoningContent());
     }
 
-    private Message headTailTruncate(Message msg) {
-        String content = msg.content();
-        int len = content.length();
-        int truncated = len - HEAD_TAIL_KEEP * 2;
-        if (truncated <= 0) return msg;
-        String newContent = content.substring(0, HEAD_TAIL_KEEP)
-            + "\n…[truncated " + truncated + " bytes]…\n"
-            + content.substring(len - HEAD_TAIL_KEEP);
-        return new Message(Role.TOOL, newContent, null, msg.toolCallId(), msg.reasoningContent());
-    }
-
     // === 保护区边界 ===
 
     private int findRecentTurnsBoundary(List<Message> messages) {
-        int userCount = 0;
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            if (messages.get(i).role() == Role.USER) {
-                userCount++;
-                if (userCount >= RECENT_TURNS) {
-                    return i;
-                }
-            }
-        }
-        return 0;
+        return ExchangeLayout.inspect(messages).recentBoundary(RECENT_TURNS);
     }
 
     // === L3: LLM 摘要 ===
@@ -300,9 +279,10 @@ public class LadderedCompactor implements ContextManager {
         if (recentBoundary == 0) return null;
 
         List<Message> oldMessages = new ArrayList<>();
+        var layout = ExchangeLayout.inspect(messages);
         for (int i = 0; i < recentBoundary; i++) {
             Message msg = messages.get(i);
-            if (msg.role() == Role.SYSTEM) continue;
+            if (msg.role() == Role.SYSTEM || layout.protectedUser(i) || layout.protectedTaskSource(i)) continue;
             oldMessages.add(msg);
         }
         if (oldMessages.isEmpty()) return null;
@@ -322,15 +302,9 @@ public class LadderedCompactor implements ContextManager {
 
         if (summary == null || summary.isBlank()) return null;
 
-        List<Message> result = new ArrayList<>();
-        for (Message msg : messages) {
-            if (msg.role() == Role.SYSTEM) {
-                result.add(msg);
-                break;
-            }
-        }
+        List<Message> result = summaryPrefix(messages, recentBoundary);
         result.add(Message.system("[Conversation Summary] " + summary.strip()));
-        result.addAll(messages.subList(recentBoundary, messages.size()));
+        result.addAll(messages.subList(recentBoundary, messages.size()).stream().filter(message -> message.role() != Role.SYSTEM).toList());
         return result;
     }
 
@@ -387,32 +361,33 @@ public class LadderedCompactor implements ContextManager {
 
         if (finalSummary == null || finalSummary.isBlank()) return null;
 
-        List<Message> result = new ArrayList<>();
-        for (Message msg : messages) {
-            if (msg.role() == Role.SYSTEM) result.add(msg);
-        }
+        List<Message> result = summaryPrefix(messages, recentBoundary);
         result.add(Message.system("[Conversation Summary] " + finalSummary));
-        result.addAll(messages.subList(recentBoundary, messages.size()));
+        result.addAll(messages.subList(recentBoundary, messages.size()).stream().filter(message -> message.role() != Role.SYSTEM).toList());
+        return result;
+    }
+
+    private List<Message> summaryPrefix(List<Message> messages, int boundary) {
+        var result = new ArrayList<Message>(); var layout = ExchangeLayout.inspect(messages);
+        messages.stream().filter(message -> message.role() == Role.SYSTEM).forEach(result::add);
+        for (int i = 0; i < boundary; i++) if ((layout.protectedUser(i) || layout.protectedTaskSource(i))
+            && messages.get(i).role() != Role.SYSTEM) result.add(messages.get(i));
         return result;
     }
 
     private List<TurnGroup> groupVisibleOldTurns(List<Message> messages, int recentBoundary,
                                                   int firstTurnNumber) {
-        List<TurnGroup> groups = new ArrayList<>();
-        List<Message> current = new ArrayList<>();
-        int turn = firstTurnNumber - 1;
-        for (int i = 0; i < recentBoundary; i++) {
-            Message message = messages.get(i);
-            if (message.role() == Role.SYSTEM) continue;
-            if (message.role() == Role.USER && !current.isEmpty()) {
-                groups.add(new TurnGroup(turn, List.copyOf(current)));
-                current.clear();
+        var groups = new ArrayList<TurnGroup>(); var layout = ExchangeLayout.inspect(messages);
+        int number = firstTurnNumber;
+        for (var span : layout.groups()) {
+            if (span.end() > recentBoundary) break;
+            var group = new ArrayList<Message>();
+            for (int i = span.start(); i < span.end(); i++) {
+                var message = messages.get(i);
+                if (message.role() != Role.SYSTEM && !layout.protectedUser(i) && !layout.protectedTaskSource(i)) group.add(message);
             }
-            if (message.role() == Role.USER) turn++;
-            current.add(message);
+            if (!group.isEmpty()) groups.add(new TurnGroup(number++, List.copyOf(group)));
         }
-        if (!current.isEmpty()) groups.add(new TurnGroup(Math.max(firstTurnNumber, turn),
-            List.copyOf(current)));
         return groups;
     }
 

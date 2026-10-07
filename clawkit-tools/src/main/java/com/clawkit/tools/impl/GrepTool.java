@@ -15,7 +15,6 @@ import java.time.Duration;
 import java.util.Set;
 import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
@@ -122,9 +121,13 @@ public class GrepTool implements Tool {
 
         // 3. 构建文件过滤 Matcher
         JsonNode globNode = argsNode.get("glob");
-        final PathMatcher fileMatcher = (globNode != null && !globNode.asText().isEmpty())
-            ? FileSystems.getDefault().getPathMatcher("glob:" + globNode.asText())
-            : null;
+        final PathMatcher fileMatcher;
+        try {
+            fileMatcher = (globNode != null && !globNode.asText().isEmpty())
+                ? WorkspaceGlobMatcher.compile(globNode.asText()) : null;
+        } catch (PatternSyntaxException e) {
+            return new Result.Err<>(new Result.ErrorInfo("T-002", "glob 模式语法错误: " + e.getMessage()));
+        }
 
         // 4. 收集候选文件
         List<Path> candidateFiles;

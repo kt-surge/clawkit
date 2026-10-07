@@ -14,6 +14,9 @@ import org.junit.jupiter.api.Test;
 
 class AbstractImChannelTest {
 
+    @org.junit.jupiter.api.io.TempDir
+    java.nio.file.Path testWorkspace;
+
     private TestChannel channel;
     private AgentEngine engine;
     private String lastIncomingUserId;
@@ -62,7 +65,7 @@ class AbstractImChannelTest {
     @BeforeEach
     void setUp() {
         // Create a minimal engine (no provider needed for tryAcquire/release pattern)
-        engine = new AgentEngine(null, new ToolRegistry(), "/tmp",
+        engine = new AgentEngine(null, new ToolRegistry(), testWorkspace.toString(),
             com.clawkit.engine.ThinkingMode.OFF, null, null, null);
         channel = new TestChannel();
         channel.setEngine(engine);

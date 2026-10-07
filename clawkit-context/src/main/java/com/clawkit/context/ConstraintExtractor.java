@@ -10,9 +10,14 @@ import java.util.regex.Pattern;
  */
 public class ConstraintExtractor {
 
-    // 文件路径（跨平台）
+    // Preserve complete relative paths; a URI slash must not become an absolute-path suffix.
     private static final Pattern FILE_PATH = Pattern.compile(
-        "(?:[A-Za-z]:[/\\\\][\\w./\\\\-]+|/[\\w./-]+)", Pattern.MULTILINE);
+        "(?<![\\p{L}\\p{N}_:/\\\\.-])(?:"
+        + "[A-Za-z]:[/\\\\][\\p{L}\\p{N}_./\\\\-]+"
+        + "|(?:[\\p{L}\\p{N}_.-]+[/\\\\])+[\\p{L}\\p{N}_-]+(?:\\.[\\p{L}\\p{N}_-]+)+"
+        + "|\\.{1,2}[/\\\\][\\p{L}\\p{N}_.-]+(?:[/\\\\][\\p{L}\\p{N}_.-]+)*"
+        + "|/[\\p{L}\\p{N}_.-]+(?:[/\\\\][\\p{L}\\p{N}_.-]+)*"
+        + ")(?<![.])", Pattern.MULTILINE);
 
     // clawkit 错误码格式: [X]-NNN
     private static final Pattern ERROR_CODE = Pattern.compile("\\b[A-Z]-\\d{3}\\b");

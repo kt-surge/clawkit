@@ -100,4 +100,28 @@ class GrepToolTest {
         assertInstanceOf(Result.Err.class, r);
         assertEquals("T-002", ((Result.Err<String>) r).error().errorCode());
     }
+
+    @Test
+    void recursiveGlobFilterIncludesRootFiles() throws IOException {
+        Path workDir = Files.createTempDirectory("clawkit-grep-root");
+        Files.writeString(workDir.resolve("current-health.json"), "healthy=true");
+        Files.createDirectories(workDir.resolve("snapshots"));
+        Files.writeString(workDir.resolve("snapshots/current-health.json"), "healthy=true");
+        Files.writeString(workDir.resolve("notes.txt"), "healthy=true");
+        Result<String> result = new GrepTool(workDir).execute("{\"pattern\":\"healthy\",\"glob\":\"**/*.json\"}");
+        assertInstanceOf(Result.Ok.class, result);
+        String output = ((Result.Ok<String>) result).data();
+        assertTrue(output.contains("current-health.json:1:"));
+        assertTrue(output.contains("snapshots/current-health.json:1:"));
+        assertEquals(2, output.lines().filter(line -> line.contains("healthy=true")).count());
+        assertFalse(output.contains("notes.txt"));
+    }
+
+    @Test
+    void invalidGlobFilterReturnsToolError() throws IOException {
+        Path workDir = Files.createTempDirectory("clawkit-grep-invalid");
+        Result<String> result = new GrepTool(workDir).execute("{\"pattern\":\"healthy\",\"glob\":\"[unclosed\"}");
+        assertInstanceOf(Result.Err.class, result);
+        assertEquals("T-002", ((Result.Err<String>) result).error().errorCode());
+    }
 }

@@ -47,7 +47,7 @@ class MessageMaskerTest {
         // turns 1-8 (old, should be Tier1), turn 9 (recent, Tier0)
         for (int t = 1; t <= 9; t++) {
             msgs.add(Message.user("turn " + t));
-            msgs.add(Message.assistant("thinking"));
+            msgs.add(toolAssistant("thinking", "tc" + t));
             msgs.add(Message.toolResult("tc" + t, "x".repeat(600))); // >=500B
         }
 
@@ -71,7 +71,7 @@ class MessageMaskerTest {
         msgs.add(Message.system("system"));
         for (int t = 1; t <= 9; t++) {
             msgs.add(Message.user("turn " + t));
-            msgs.add(Message.assistant("ok"));
+            msgs.add(toolAssistant("ok", "tc" + t));
             msgs.add(Message.toolResult("tc" + t, "small output")); // <500B
         }
 
@@ -142,7 +142,6 @@ class MessageMaskerTest {
         for (int t = 1; t <= 25; t++) {
             msgs.add(Message.user("turn " + t));
             msgs.add(Message.assistant("x".repeat(200)));
-            msgs.add(Message.toolResult("tc" + t, "ok"));
         }
 
         var result = MessageMasker.mask(msgs, 25);
@@ -162,7 +161,7 @@ class MessageMaskerTest {
         msgs.add(Message.system("system"));
         for (int t = 1; t <= 15; t++) {
             msgs.add(Message.user("turn " + t));
-            msgs.add(Message.assistant("ok"));
+            msgs.add(toolAssistant("ok", "tc" + t));
             msgs.add(Message.toolResult("tc" + t, "")); // empty
         }
 
@@ -213,7 +212,7 @@ class MessageMaskerTest {
         msgs.add(Message.system("system"));
         for (int t = 1; t <= 30; t++) {
             msgs.add(Message.user("turn " + t));
-            msgs.add(Message.assistant("ok"));
+            msgs.add(toolAssistant("ok", "tc" + t));
             msgs.add(Message.toolResult("tc" + t, "output"));
         }
 
@@ -231,12 +230,16 @@ class MessageMaskerTest {
 
     // ─── helpers ───────────────────────────────────────────────────────
 
+    private static Message toolAssistant(String content, String id) {
+        return Message.assistantWithTools(content, List.of(new ToolCall(id, "read", null)), null);
+    }
+
     private static List<Message> buildLinearSession(int nTurns) {
         List<Message> msgs = new ArrayList<>();
         msgs.add(Message.system("system"));
         for (int t = 1; t <= nTurns; t++) {
             msgs.add(Message.user("turn " + t));
-            msgs.add(Message.assistant("thinking turn " + t));
+            msgs.add(toolAssistant("thinking turn " + t, "tc" + t));
             msgs.add(Message.toolResult("tc" + t, "output " + t));
         }
         return msgs;

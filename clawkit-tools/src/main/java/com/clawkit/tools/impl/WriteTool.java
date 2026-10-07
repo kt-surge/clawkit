@@ -142,6 +142,34 @@ public class WriteTool implements Tool {
         );
     }
 
+    /** The native overwrite precheck refuses before invoking any legacy execution or mutation. */
+    @Override
+    public com.clawkit.tools.ToolExecutionResult execute(com.clawkit.tools.ToolExecutionRequest request) {
+        java.time.Instant start = java.time.Instant.now();
+        JsonNode args = request.arguments();
+        if (args != null && args.get("path") != null && !args.get("path").asText().isEmpty()
+            && args.get("content") != null && !args.path("overwrite").asBoolean(false)) {
+            try {
+                Path resolved = pathPolicy.resolve(args.get("path").asText(), true);
+                if (Files.isRegularFile(resolved)) {
+                    long size = Files.size(resolved);
+                    if (size > 0) {
+                        String message = "文件已存在且非空（" + size + " bytes）。请设置 overwrite=true 以确认覆盖。";
+                        return com.clawkit.tools.ToolExecutionResult.error(
+                            request.toolCallId(), request.toolName(), "OVERWRITE_REQUIRED", message,
+                            java.time.Duration.between(start, java.time.Instant.now()).toMillis(), metadata())
+                            .withReliability(com.clawkit.tools.action.EffectCertainty.NO_EFFECT_CONFIRMED,
+                                com.clawkit.tools.action.FailureClass.LOCAL_ERROR_NO_EFFECT, null);
+                    }
+                }
+            } catch (IOException | WorkspacePathPolicy.PathEscapeException ignored) {
+                // Inconclusive precheck: retain the ordinary execution and its conservative error contract.
+            }
+        }
+        // Never reclassify execution errors by their code or text: mutations may already have happened.
+        return Tool.super.execute(request);
+    }
+
     @Override
     public Result<String> execute(String arguments) {
         // 1. 解析参数

@@ -155,30 +155,17 @@ class LadderedCompactorTest {
         assertThat(last.content()).contains("tool output 10");
     }
 
-    // === 保护区：TOOL >1000 字符掐头去尾 ===
-
+    // Recent structured evidence must survive both masking and always-on cleanup byte-for-byte.
     @Test
-    void shouldHeadTailTruncateLargeProtectionZoneTool() {
-        String longContent = "HEAD:" + "A".repeat(600) + ":MIDDLE:" + "B".repeat(600) + ":TAIL";
-        List<Message> messages = new ArrayList<>();
-        messages.add(Message.system("You are an assistant."));
-        messages.add(Message.user("read file"));
-        messages.add(Message.assistant("reading..."));
-        messages.add(Message.toolResult("call_1", longContent));
-
-        List<Message> result = compactor.compact(messages, MAX_TOKENS);
-
-        Message toolMsg = result.stream()
-            .filter(m -> m.role() == Role.TOOL)
-            .findFirst().orElseThrow();
-
-        assertThat(toolMsg.content()).startsWith("HEAD:");
-        assertThat(toolMsg.content()).contains("…[truncated");
-        assertThat(toolMsg.content()).endsWith(":TAIL");
-        // 头部保留前 500 字符
-        assertThat(toolMsg.content().substring(0, 500)).isEqualTo(longContent.substring(0, 500));
-        // 尾部保留后 500 字符
-        assertThat(toolMsg.content()).endsWith(longContent.substring(longContent.length() - 500));
+    void shouldPreserveLargeRecentToolEvidence() {
+        String content = "{\"head\":\"" + "A".repeat(600) + "\",\"middleFact\":\"do-not-replay\",\"tail\":\"" + "B".repeat(600) + "\"}";
+        var messages = List.of(Message.system("rules"), Message.user("read status"),
+            Message.assistantWithTools(List.of(new com.clawkit.tools.schema.ToolCall("status", "read", null))),
+            Message.toolResult("status", content));
+        var masked = MessageMasker.mask(messages, 2).messages();
+        var result = compactor.applyAlwaysOnRules(masked);
+        assertThat(result).containsExactlyElementsOf(messages);
+        assertThat(result.getLast().content()).isEqualTo(content);
     }
 
     // === 保护区：TOOL ≤1000 字符不动 ===

@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Set;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
@@ -22,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
+import java.util.regex.PatternSyntaxException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +39,7 @@ public class GlobTool implements Tool {
           "properties": {
             "pattern": {
               "type": "string",
-              "description": "文件名的 glob 模式，如 '**/*.java'、'src/**/*Test*'。* 匹配任意字符(不跨目录)，** 递归匹配任意层级。"
+              "description": "文件名的 glob 模式，如 '**/*.java'、'src/**/*Test*'。* 匹配任意字符(不跨目录)，** 递归匹配零层或多层目录，如 **/*.json 包含根目录文件。"
             }
           },
           "required": ["pattern"]
@@ -101,7 +101,12 @@ public class GlobTool implements Tool {
 
         // 2. 遍历工作区，收集匹配项
         List<String> matches = new ArrayList<>();
-        PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
+        PathMatcher matcher;
+        try {
+            matcher = WorkspaceGlobMatcher.compile(pattern);
+        } catch (PatternSyntaxException e) {
+            return new Result.Err<>(new Result.ErrorInfo("T-002", "glob 模式语法错误: " + e.getMessage()));
+        }
 
         try (Stream<Path> stream = Files.walk(workDir)) {
             var it = stream.iterator();
